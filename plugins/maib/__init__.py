@@ -1,9 +1,7 @@
-import requests
-
-from nonebot import on_startswith, on_regex
+from nonebot import on_regex
 from nonebot.plugin import PluginMetadata
-from nonebot.rule import to_me
 
+from .adx_download import handle_download
 
 # from .config import Config
 
@@ -19,4 +17,6 @@ __plugin_meta__ = PluginMetadata(
 
 adx_download = on_regex(r"下载谱面\s*([0-9]+)", priority=5)
 
-
+@adx_download.handle()
+async def _(bot, event):
+    await handle_download(bot, event)
