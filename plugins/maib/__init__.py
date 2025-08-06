@@ -19,4 +19,5 @@ adx_download = on_regex(r"下载谱面\s*([0-9]+)", priority=5)
 
 @adx_download.handle()
 async def _(bot, event, matcher):
+    """处理命令: 下载谱面11568"""
     await handle_download(bot, event, matcher)

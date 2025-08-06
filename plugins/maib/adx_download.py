@@ -6,12 +6,11 @@ import zipfile
 
 from nonebot import logger
 from nonebot.adapters.onebot.v11 import Event, Bot
-from nonebot.params import CommandArg
-
-from . import adx_download
+from nonebot.exception import FinishedException
 
 
 async def handle_download(bot: Bot, event: Event, matcher):
+    """捕获消息，下载谱面文件并上传至群文件"""
     msg = str(event.get_message())
     logger.info(f"收到消息: {msg}")
     # 提取数字
@@ -52,32 +51,34 @@ async def handle_download(bot: Bot, event: Event, matcher):
                         break
             # 上传到QQ群文件
             group_id = event.group_id if hasattr(event, "group_id") else None
-            logger.info(f"group_id: {group_id}")
+            logger.debug(f"group_id: {group_id}")
             if not group_id:
-                logger.info("未检测到group_id，非群聊环境")
+                logger.debug("未检测到group_id，非群聊环境")
                 await matcher.finish("只能在群聊中使用该命令。")
-            logger.info("开始上传群文件")
+            logger.debug("开始上传群文件")
             await bot.call_api(
                 "upload_group_file",
                 group_id=group_id,
                 file=tmp_path,
                 name=f"{song_id}.zip"
             )
-            logger.info("上传群文件成功")
+            logger.debug("上传群文件成功")
             if maidata_title:
                 await matcher.finish(f"曲目[{song_id}]({maidata_title}) 已上传到群文件：{song_id}.zip")
             else:
                 await matcher.finish(f"曲目[{song_id}]已上传到群文件：{song_id}.zip")
         except Exception as e:
+            if isinstance(e, FinishedException):
+                raise
             logger.info(f"发生异常: {e}")
             await matcher.finish(f"下载或上传失败：{e}")
         finally:
             if os.path.exists(tmp_path):
                 try:
                     os.remove(tmp_path)
-                    logger.info(f"已删除临时文件: {tmp_path}")
+                    logger.debug(f"已删除临时文件: {tmp_path}")
                 except Exception as e:
                     logger.info(f"删除临时文件失败: {e}")
     else:
-        logger.info("未识别到谱面ID")
+        logger.debug("未识别到谱面ID")
         await matcher.finish("未识别到谱面ID，请检查格式。")
