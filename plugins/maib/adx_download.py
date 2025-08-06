@@ -26,14 +26,14 @@ async def handle_download(bot: Bot, event: Event, matcher):
         tmp_path = os.path.join(tmp_dir, f"{song_id}.zip")
         logger.info(f"临时文件路径: {tmp_path}")
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(follow_redirects=True) as client:
                 logger.info("开始请求下载文件")
                 resp = await client.get(url)
                 logger.info(f"HTTP状态码: {resp.status_code}")
                 resp.raise_for_status()
                 with open(tmp_path, "wb") as f:
                     f.write(resp.content)
-                logger.info(f"文件已写入: {tmp_path}, 大小: {os.path.getsize(tmp_path)} bytes")
+                logger.info(f"文件已写��: {tmp_path}, 大小: {os.path.getsize(tmp_path)} bytes")
             # 解压并读取maidata.txt第一行
             maidata_title = None
             logger.info("开始解压zip文件")
