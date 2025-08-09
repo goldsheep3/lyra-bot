@@ -11,7 +11,6 @@ __plugin_meta__ = PluginMetadata(
     usage="发送「今日运势」「运势」「抽签」「签到」「打卡」即可获得今日专属运势。",
 )
 
-# 主要运势定义与权重分配，每个有多个描述
 MAIN_FORTUNES = [
     {
         "title": "大吉",
@@ -116,11 +115,12 @@ async def handle_today_fortune(matcher: Matcher, event: MessageEvent):
     main_fortune, main_desc = get_main_fortune(user_id, today)
     special_results = get_special_fortunes(user_id, today)
 
-    message_text = [
-        MessageSegment.text(f"小梨来啦！你今天的运势是：【{main_fortune['title']}】！"),
-        MessageSegment.text(main_desc),
-        MessageSegment.text(""),
-        MessageSegment.text("今日你的特别运势是："),
+    # 构造带换行的文本内容
+    lines = [
+        f"小梨来啦！你今天的运势是：【{main_fortune['title']}】！",
+        main_desc,
+        "",
+        "今日你的特别运势是："
     ]
     for i in range(0, len(SPECIAL_FORTUNES), 2):
         left = f"{SPECIAL_FORTUNES[i]}  {special_results[i]}"
@@ -128,9 +128,11 @@ async def handle_today_fortune(matcher: Matcher, event: MessageEvent):
             right = f"{SPECIAL_FORTUNES[i+1]}  {special_results[i+1]}"
         else:
             right = ""
-        message_text.append(MessageSegment.text(f"{left}  |  {right}"))
-    message_text.append(MessageSegment.text(""))
-    message_text.append(MessageSegment.text("无论运势如何，小梨都在陪着你呢！"))
+        lines.append(f"{left}  |  {right}")
+    lines.append("")
+    lines.append("无论运势如何，小梨都在陪着你呢！")
     # todo 持久化数据-打卡签到累计
-    # message_text.append(MessageSegment.text(f"你已经在小梨这里打卡运势{day}天啦。"))
-    await matcher.finish(Message(message_text))
+    # lines.append(f"你已经在小梨这里打卡运势{day}天啦。")
+
+    # 用 MessageSegment.text 一次性发送完整内容
+    await matcher.finish(MessageSegment.text('\n'.join(lines)))
