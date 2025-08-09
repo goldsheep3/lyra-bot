@@ -39,6 +39,8 @@ async def handle_download(bot: Bot, event: Event, matcher):
                 logger.info(f"开始请求下载文件 {song_id}.zip")
                 resp = await client.get(url)
                 logger.info(f"{song_id}.zip HTTP状态码: {resp.status_code}")
+                if resp.status_code == 404:
+                    raise httpx.HTTPStatusError
                 resp.raise_for_status()
                 with open(tmp_path, "wb") as f:
                     f.write(resp.content)
@@ -76,8 +78,11 @@ async def handle_download(bot: Bot, event: Event, matcher):
             if isinstance(e, FinishedException):
                 logger.info("发生 FinishedException 异常，可能是上传成功后触发的异常，无需特殊处理")
                 raise
+            if isinstance(e, httpx.ConnectTimeout):
+                logger.info("发生 httpx.HTTPStatusError 异常，大概是谱面不存在")
+                await matcher.finish(f"lyra没有成功下载到id{song_id}的谱面……真的有这首歌吗？")
             logger.warning(f"发生未知异常: {e}")
-            await matcher.finish(f"lyra没有成功下载到id{song_id}的谱面……真的有这首歌吗？")
+            await matcher.finish(f"小梨不知道怎么回事，下载不到id{song_id}的谱面……果咩纳塞QAQ")
         finally:
             if os.path.exists(tmp_path):
                 try:

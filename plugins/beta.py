@@ -1,4 +1,4 @@
-from nonebot import on_startswith
+from nonebot.plugin.on import on_keyword
 from nonebot.rule import to_me
 from nonebot.plugin import PluginMetadata
 from nonebot.matcher import Matcher
@@ -10,8 +10,8 @@ __plugin_meta__ = PluginMetadata(
     usage="Send 'b' to trigger the beta feature.",
 )
 
-beta_pa = on_startswith("b", rule=to_me(), priority=2, block=True)
+beta_pa = on_keyword({"莱茵", "lyra", "小梨"}, rule=to_me(), priority=2, block=True)
 
 @beta_pa.handle()
 async def rebirth_handler(matcher: Matcher, event: MessageEvent):
-    await matcher.finish(Message([MessageSegment.text('啪！')]))
+    await matcher.finish(Message([MessageSegment.text('叫小梨有什么事情嘛？')]))
