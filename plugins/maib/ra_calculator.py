@@ -69,6 +69,6 @@ async def calculate_score(event: Event, matcher):
             # 若完成率低于表最低值，因子为0
             if rate < RATE_FACTOR_TABLE[-1][0]:
                 factor = 0.0
-            score = int(difficulty * rate * factor)
-            await matcher.finish(f'定数 {difficulty} 的完成率 {rate} 对应的ra为 {score}')
+            dxrating = int(difficulty * rate * factor)
+            await matcher.finish(f'小梨算出来咯！\n{difficulty}*{rate} -> ra {dxrating}')
     return None
