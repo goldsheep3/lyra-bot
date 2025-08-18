@@ -2,6 +2,7 @@ from nonebot import on_regex
 from nonebot.plugin import PluginMetadata
 
 from .adx_download import handle_download
+from .ra_calculator import calculate_score
 
 # from .config import Config
 
@@ -21,3 +22,10 @@ adx_download = on_regex(r"下载谱面\s*([0-9]+)", priority=5)
 async def _(bot, event, matcher):
     """处理命令: 下载谱面11568"""
     await handle_download(bot, event, matcher)
+
+ra_calculator = on_regex(r"ra\s+(\S+)(?:\s+(\S+))?", priority=5)
+
+@ra_calculator.handle()
+async def _(event, matcher):
+    """处理命令: ra 13.2 100.1000 或 ra help"""
+    await calculate_score(event, matcher)
