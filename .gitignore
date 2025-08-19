@@ -1,2 +1,4 @@
 .venv/
 plugins/__pycache__/
+
+*.pyc

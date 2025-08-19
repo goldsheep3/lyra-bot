@@ -3,6 +3,7 @@ from nonebot.plugin import PluginMetadata
 
 from .adx_download import handle_download
 from .ra_calculator import calculate_score
+from .what_card import jtjk
 
 # from .config import Config
 
@@ -29,3 +30,11 @@ ra_calculator = on_regex(r"ra\s+(\S+)(?:\s+(\S+))?", priority=5)
 async def _(event, matcher):
     """处理命令: ra 13.2 100.1000 或 ra help"""
     await calculate_score(event, matcher)
+
+what_card = on_regex(r"[\.。]?\s*(cc|北|百|万)\s*(几|[+-]?([1-9]?\d))", priority=5)
+
+@what_card.handle()
+async def _(event, matcher):
+    """处理命令: cc几 或 。北3"""
+    await jtjk(event, matcher)
+    

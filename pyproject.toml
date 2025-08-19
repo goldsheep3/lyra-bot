@@ -10,7 +10,7 @@ adapters = [
     { name = "OneBot V11", module_name = "nonebot.adapters.onebot.v11" }
 ]
 plugins = [
-#     "nonebot_plugin_localstore"
+    "nonebot_plugin_localstore"
 ]
 plugin_dirs = [
     "plugins"
