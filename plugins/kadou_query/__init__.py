@@ -1,7 +1,7 @@
 from nonebot import on_regex
 from nonebot.plugin import PluginMetadata
 
-import plugin_help as p_help
+# import plugin_help as p_help
 import utils as dt
 from radar import radar
 from cmd_query import cmd_query_all
@@ -23,13 +23,13 @@ GROUP_BLOCKLIST = id_data.get_blacklist()
 # SOURCE_BOT = list()
 
 
-on_help = on_regex(r"^[.。]\s*机厅\s*几")
-
-@on_help.handle()
-async def _(event):
-    """处理 .机厅几 帮助命令"""
-    if (event.group_id in GROUP_WHITELIST.keys()) and (event.group_id not in GROUP_BLOCKLIST):
-        await p_help.plugin_help(event)
+# on_help = on_regex(r"^[.。]\s*机厅\s*几")
+#
+# @on_help.handle()
+# async def _(event):
+#     """处理 .机厅几 帮助命令"""
+#     if (event.group_id in GROUP_WHITELIST.keys()) and (event.group_id not in GROUP_BLOCKLIST):
+#         await p_help.plugin_help(event)
 
 
 on_radar = on_regex(r"^[.。 ]\s*([^\s\d]+)\s*(几|([1-9]?\d)|\+\s*([1-9]?\d)|-\s*([1-9]?\d))")
