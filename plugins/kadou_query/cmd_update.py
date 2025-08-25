@@ -2,17 +2,17 @@ from datetime import datetime
 
 from nonebot import logger
 
-import utils as dt
+from .utils import IDData, RadarData
 
 
 async def _card_update(group_id, jt_code, card_number, sender_name, adjust: bool):
 
     city_code = '""'
     try:
-        city_code = dt.IDData().is_whitelisted(group_id)
-        rd = await dt.RadarData().get_data()
-        cs = await dt.RadarData().get_csjt(city_code)
-        jt = await dt.RadarData().get_csjt(city_code, jt_code)
+        city_code = IDData().is_whitelisted(group_id)
+        rd = await RadarData().get_data()
+        cs = await RadarData().get_csjt(city_code)
+        jt = await RadarData().get_csjt(city_code, jt_code)
     except (KeyError, ValueError):
         logger.info(f"城市/机厅不存在。city_code: {city_code}, jt_code: {jt_code}")
         return None
@@ -43,12 +43,12 @@ async def _card_update(group_id, jt_code, card_number, sender_name, adjust: bool
         cs[jt_code] = jt
         rd[city_code] = cs
         logger.debug(f"更新数据成功。radar_data: {rd}")
-        await dt.RadarData().set_data(rd)
+        await RadarData().set_data(rd)
 
-        jt_new: dict = await dt.RadarData().get_csjt(city_code, jt_code)
+        jt_new: dict = await RadarData().get_csjt(city_code, jt_code)
 
     except (KeyError, ValueError):
-        logger.info(f"发生Key/ValueError，信息有误。radar_data: {dt.RadarData().get_data()}")
+        logger.info(f"发生Key/ValueError，信息有误。radar_data: {RadarData().get_data()}")
         return None
 
     return f"Cryrin收到啦! {city_code}-{jt_new['name']} 现在 {jt_new['card']} 卡。"

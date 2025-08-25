@@ -1,7 +1,7 @@
 import re
 
-from cmd_query import cmd_query
-from cmd_update import cmd_update, cmd_adjust
+from .cmd_query import cmd_query
+from .cmd_update import cmd_update, cmd_adjust
 
 
 async def radar(event):

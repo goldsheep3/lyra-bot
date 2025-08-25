@@ -2,15 +2,15 @@ from datetime import datetime
 
 from nonebot import logger
 
-import utils as dt
+from .utils import IDData, RadarData, mask_group_id, mask_user_name
 
 
 async def cmd_query(group_id, jt_code):
 
     city_code = '""'
     try:
-        city_code = dt.IDData().is_whitelisted(group_id)
-        jt = await dt.RadarData().get_csjt(city_code, jt_code)
+        city_code = IDData().is_whitelisted(group_id)
+        jt = await RadarData().get_csjt(city_code, jt_code)
     except (KeyError, ValueError):
         logger.info(f"城市/机厅不存在。city_code: {city_code}, jt_code: {jt_code}")
         return None
@@ -18,8 +18,8 @@ async def cmd_query(group_id, jt_code):
     try:
         now_datetime = datetime.now()
         now_day = now_datetime.day
-        from_group = dt.mask_group_id(jt['from'].get('group'))
-        from_user = dt.mask_user_name(jt['from'].get('user'))
+        from_group = mask_group_id(jt['from'].get('group'))
+        from_user = mask_user_name(jt['from'].get('user'))
         if now_day == jt['day']:
             return f"Cryrin提醒您: {city_code}-{jt['name']} 可能 {jt['card']} 卡" + \
                 f"(更新时间:{jt['time']}, 来自{from_group}的{from_user})。"
@@ -31,4 +31,3 @@ async def cmd_query(group_id, jt_code):
 
 async def cmd_query_all(group_id):
     ...
-

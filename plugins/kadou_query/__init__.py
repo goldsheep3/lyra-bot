@@ -2,9 +2,9 @@ from nonebot import on_regex
 from nonebot.plugin import PluginMetadata
 
 # import plugin_help as p_help
-import utils as dt
-from radar import radar
-from cmd_query import cmd_query_all
+from .utils import IDData
+from .radar import radar
+from .cmd_query import cmd_query_all
 
 
 __plugin_meta__ = PluginMetadata(
@@ -15,7 +15,7 @@ __plugin_meta__ = PluginMetadata(
 )
 
 
-id_data = dt.IDData()
+id_data = IDData()
 # 群组权限常量
 GROUP_WHITELIST = id_data.get_whitelist()
 GROUP_BLOCKLIST = id_data.get_blacklist()
