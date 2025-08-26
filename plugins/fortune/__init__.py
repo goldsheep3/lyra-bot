@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from nonebot.internal.matcher import Matcher
 from nonebot.plugin import on_regex, PluginMetadata
 from nonebot.adapters.onebot.v11 import MessageEvent, MessageSegment
 from nonebot import logger
@@ -19,7 +20,7 @@ __plugin_meta__ = PluginMetadata(
 on_fortune = on_regex(r"^(今日运势|运势|抽签|签到|打卡)$", block=True)
 
 @on_fortune.handle()
-async def _(event: MessageEvent):
+async def _(event: MessageEvent, matcher: Matcher):
     user_id = event.user_id
     today = datetime.now()
     try:
@@ -29,4 +30,4 @@ async def _(event: MessageEvent):
     except Exception as e:
         logger.error(f"生成运势时发生错误。{e}")
         return
-    await event.finish(MessageSegment.text(output))
+    await matcher.finish(MessageSegment.text(output))
