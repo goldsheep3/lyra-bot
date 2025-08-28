@@ -109,5 +109,5 @@ async def calculate_score(event: Event, matcher):
             dxrating = int(difficulty * rate * factor)
             # 格式化完成率为四位小数
             rate_fmt = f"{rate:.4f}"
-            await matcher.finish(f'小梨算出来咯！\n{difficulty}*{rate_fmt} -> ra {dxrating}')
+            await matcher.finish(f'小梨算出来咯！\n定数{difficulty}*{rate_fmt}% -> Rating: {dxrating}')
     return None
