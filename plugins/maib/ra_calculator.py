@@ -30,9 +30,38 @@ RATE_FACTOR_TABLE: List[Tuple[float, float]] = [
     (10.0000, 0.016),
 ]
 
+# 完成率别名映射表
+rate_alias_map = {
+    "鸟加": 100.5,
+    "鸟家": 100.5,
+    "sss+": 100.5,
+    "3s+": 100.5,
+    "鸟": 100.0,
+    "sss": 100.0,
+    "3s": 100.0,
+    "ss+": 99.5,
+    "2s+": 99.5,
+    "ss": 99.0,
+    "2s": 99.0,
+    "s+": 98.0,
+    "s": 97.0,
+    "aaa": 94.0,
+    "3a": 94.0,
+    "aa": 90.0,
+    "2a": 90.0,
+    "a": 80.0,
+    "bbb": 75.0,
+    "3b": 75.0,
+    "bb": 70.0,
+    "2b": 70.0,
+    "b": 60.0,
+    "c": 50.0,
+    "d": 0.0,
+}
+
 
 async def calculate_score(event: Event, matcher):
-    """捕获消息，下载谱面文件并上传至群文件"""
+    """捕获消息，计算 dx rating"""
 
     msg = str(event.get_message())
     logger.info(f"收到消息: {msg}")
@@ -55,9 +84,17 @@ async def calculate_score(event: Event, matcher):
             # 提取难度和完成率
             try:
                 difficulty = float(match.group(1))
-                rate = float(match.group(2))
+                rate_str = match.group(2)
+                try:
+                    rate = float(rate_str)
+                except ValueError:
+                    # 尝试用别名映射
+                    rate = rate_alias_map.get(rate_str.lower())
+                    if rate is None:
+                        await matcher.finish(f"这样的数字小梨算不出来的啊qwq\nError: 完成率参数不支持")
+                        return None
             except ValueError:
-                await matcher.finish("这样的数字小梨算不出来的啊qwq\nError: 难度和完成率必须是数字")
+                await matcher.finish("这样的数字小梨算不出来的啊qwq\nError: 难度和完成率必须是数字或支持的文本别名")
                 return None
             logger.info(f"提取到难度: {difficulty}, 完成率: {rate}")
             # 计算
@@ -70,5 +107,7 @@ async def calculate_score(event: Event, matcher):
             if rate < RATE_FACTOR_TABLE[-1][0]:
                 factor = 0.0
             dxrating = int(difficulty * rate * factor)
-            await matcher.finish(f'小梨算出来咯！\n{difficulty}*{rate} -> ra {dxrating}')
+            # 格式化完成率为四位小数
+            rate_fmt = f"{rate:.4f}"
+            await matcher.finish(f'小梨算出来咯！\n{difficulty}*{rate_fmt} -> ra {dxrating}')
     return None

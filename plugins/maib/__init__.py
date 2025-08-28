@@ -27,5 +27,5 @@ ra_calculator = on_regex(r"ra\s+(\S+)(?:\s+(\S+))?", priority=5)
 
 @ra_calculator.handle()
 async def _(event, matcher):
-    """处理命令: ra 13.2 100.1000 或 ra help"""
+    """处理命令: ra 13.2 100.1000 或 ra 13.2 鸟加 或 ra help"""
     await calculate_score(event, matcher)
