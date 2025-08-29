@@ -23,7 +23,7 @@ async def _(bot, event, matcher):
     """处理命令: 下载谱面11568"""
     await handle_download(bot, event, matcher)
 
-ra_calculator = on_regex(r"ra\s+(\S+)(?:\s+(\S+))?", priority=5)
+ra_calculator = on_regex(r"ra\s+(?:(id\d+)([绿黄红紫白])?|(\d+(?:\.\d+)?))\s+(\S+)", priority=5)
 
 @ra_calculator.handle()
 async def _(event, matcher):
