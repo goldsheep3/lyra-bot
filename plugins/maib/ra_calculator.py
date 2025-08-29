@@ -203,9 +203,11 @@ async def calculate_score(event: Event, matcher):
     color_names = ["绿", "黄", "红", "紫", "白"]
     if title and chart_color_idx is not None:
         await matcher.finish((
-            "小梨算出来咯！\n"
-            f"{title}{'DX' if is_dx else 'SD'}的{color_names[chart_color_idx]}谱数据：\n"
+            f"小梨算出来[{'DX' if is_dx else 'SD'}]{title} 的{color_names[chart_color_idx]}谱数据咯！\n"
             f"定数{difficulty}*{rate_fmt}% -> Rating: {dxrating}"
         ))
-    await matcher.finish(f'小梨算出来咯！\n定数{difficulty}*{rate_fmt}% -> Rating: {dxrating}')
+    await matcher.finish((
+        "小梨算出来咯！\n"
+        f"定数{difficulty}*{rate_fmt}% -> Rating: {dxrating}"
+    ))
     return None
