@@ -78,11 +78,11 @@ async def fetch_chart_level(chart_id: int, is_dx: bool, color_index: Optional[in
     except Exception as e:
         logger.error(f"谱面 API 请求失败: {e}")
         return None
-    difficulties = data.get("difficulties", [])
-    if not difficulties:
-        logger.error("API 返回无 difficulties 字段")
+    difficulties = data.get("difficulties", {})
+    if not isinstance(difficulties, dict):
+        logger.error("API difficulties 字段格式异常")
         return None
-    diff_list = [d for d in difficulties if d.get("type") == ("dx" if is_dx else "standard")]
+    diff_list = difficulties.get("dx" if is_dx else "standard", [])
     if not diff_list:
         logger.error("API 返回无对应类型难度")
         return None
@@ -209,4 +209,3 @@ async def calculate_score(event: Event, matcher):
         ))
     await matcher.finish(f'小梨算出来咯！\n定数{difficulty}*{rate_fmt}% -> Rating: {dxrating}')
     return None
-
