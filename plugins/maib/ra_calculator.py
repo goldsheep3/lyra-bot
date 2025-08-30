@@ -92,7 +92,7 @@ async def fetch_chart_level(chart_id: int, is_dx: bool, color_index: Optional[in
             if d.get("difficulty") == color_index:
                 return float(d.get("level_value", 0)), data.get("title", "Unknown Song Name"), color_index
         logger.error("未找到指定颜色难度")
-        return None
+        return -2.0, "", -1
     # 自动识别：优先白谱（4），否则紫谱（3），不会出现其他情况
     for idx in [4, 3]:
         for d in diff_list:
@@ -170,6 +170,9 @@ async def calculate_score(event: Event, matcher):
                 if result is None:
                     await matcher.finish("这样的数字小梨算不出来的啊qwq\nError: 谱面定数获取失败，请联系管理员查看后台")
                     return None
+                elif result[0] == -2.0:
+                    # 谱面错误
+                    await matcher.finish(f"😡小梨生气了！这首歌根本就没有{chart_color}谱！")
                 difficulty, title, chart_color_idx = result
                 logger.info(f"API获取定数: {difficulty}, 完成率: {rate}, 难度颜色: {chart_color_idx}")
             else:
