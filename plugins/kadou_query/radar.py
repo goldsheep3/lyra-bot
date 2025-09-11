@@ -14,7 +14,7 @@ async def radar(event):
         r"-\s*([1-9]?\d)"                # 2.4 减少
         r")"
     )
-    m = pattern.match(event.message)
+    m = pattern.match(str(event.message))
     if not m:
         return None
     group_id = event.group_id
@@ -43,4 +43,3 @@ async def radar(event):
         return None
 
     return result
-    

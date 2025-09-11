@@ -15,10 +15,10 @@ __plugin_meta__ = PluginMetadata(
 )
 
 
-id_data = IDData()
-# 群组权限常量
-GROUP_WHITELIST = id_data.get_whitelist()
-GROUP_BLOCKLIST = id_data.get_blacklist()
+# id_data = IDData()
+# 群组权限常量（请在 handler 内部异步获取）
+# GROUP_WHITELIST = await id_data.get_whitelist()
+# GROUP_BLOCKLIST = await id_data.get_blacklist()
 # 外部机器人QQ号常量
 # SOURCE_BOT = list()
 
@@ -32,24 +32,28 @@ GROUP_BLOCKLIST = id_data.get_blacklist()
 #         await p_help.plugin_help(event)
 
 
-on_radar = on_regex(r"^[.。 ]\s*([^\s\d]+)\s*(几|([1-9]?\d)|\+\s*([1-9]?\d)|-\s*([1-9]?\d))")
+# on_radar = on_regex(r"^[.。 ]\s*([^\s\d]+)\s*(几|([1-9]?\d)|\+\s*([1-9]?\d)|-\s*([1-9]?\d))")
+#
+# @on_radar.handle()
+# async def _(event):
+#     """处理 .xx几 查询/修改命令"""
+#     group_whitelist = await id_data.get_whitelist()
+#     group_blacklist = await id_data.get_blacklist()
+#     if (event.group_id not in group_blacklist) and (event.group_id in group_whitelist.keys()):
+#         output = await radar(event)  # 使用 radar 进行分配
+#         await event.finish(output)
 
-@on_radar.handle()
-async def _(event):
-    """处理 .xx几 查询/修改命令"""
-    if (event.group_id not in GROUP_BLOCKLIST) and (event.group_id in GROUP_WHITELIST.keys()):
-        output = await radar(event)  # 使用 radar 进行分配
-        await event.finish(output)
 
-
-on_radar_all = on_regex(r"^[.。/]\s*j")
-
-@on_radar_all.handle()
-async def _(event):
-    """处理 .j 集体查询指令"""
-    if (event.group_id not in GROUP_BLOCKLIST) and (event.group_id in GROUP_WHITELIST.keys()):
-        output = await cmd_query_all(event.group_id)
-        await event.finish(output)
+# on_radar_all = on_regex(r"^[.。/]\s*j")
+#
+# @on_radar_all.handle()
+# async def _(event):
+#     """处理 .j 集体查询指令"""
+#     group_whitelist = await id_data.get_whitelist()
+#     group_blacklist = await id_data.get_blacklist()
+#     if (event.group_id not in group_blacklist) and (event.group_id in group_whitelist.keys()):
+#         output = await cmd_query_all(event.group_id)
+#         await event.finish(output)
 
 
 # on_listen = on_regex(r"")

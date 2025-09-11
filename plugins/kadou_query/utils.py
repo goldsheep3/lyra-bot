@@ -53,11 +53,13 @@ class IDData(_UtilsData):
     def __init__(self):
         super().__init__(ID_DATA_FILENAME, ID_DATA_DEFAULT)
 
-    def get_whitelist(self):
-        return self.data.get_data().get('group_whitelist', {})
+    async def get_whitelist(self):
+        data = await self.get_data()
+        return data.get('group_whitelist', {})
 
-    def get_blacklist(self):
-        return self.data.get_data().get('group_blacklist', [])
+    async def get_blacklist(self):
+        data = await self.get_data()
+        return data.get('group_blacklist', [])
 
     def is_whitelisted(self, group_id: int) -> str | None:
         wl = self.get_whitelist()
