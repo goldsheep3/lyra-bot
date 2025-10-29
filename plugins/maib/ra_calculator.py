@@ -1,64 +1,12 @@
 import re
 import httpx
-from typing import List, Tuple, Optional
+from typing import Tuple, Optional
 
 from nonebot import logger
 from nonebot.adapters.onebot.v11 import Event
 
-# 表格数据，完成率从高到低排序
-RATE_FACTOR_TABLE: List[Tuple[float, float]] = [
-    (100.5000, 0.224),
-    (100.4999, 0.222),
-    (100.0000, 0.216),
-    (99.9999, 0.214),
-    (99.5000, 0.211),
-    (99.0000, 0.208),
-    (98.9999, 0.206),
-    (98.0000, 0.203),
-    (97.0000, 0.200),
-    (96.9999, 0.176),
-    (94.0000, 0.168),
-    (90.0000, 0.152),
-    (80.0000, 0.136),
-    (79.9999, 0.128),
-    (75.0000, 0.120),
-    (70.0000, 0.112),
-    (60.0000, 0.096),
-    (50.0000, 0.080),
-    (40.0000, 0.064),
-    (30.0000, 0.048),
-    (20.0000, 0.032),
-    (10.0000, 0.016),
-]
-
-# 完成率别名映射表
-rate_alias_map = {
-    "鸟加": 100.5,
-    "鸟家": 100.5,
-    "sss+": 100.5,
-    "3s+": 100.5,
-    "鸟": 100.0,
-    "sss": 100.0,
-    "3s": 100.0,
-    "ss+": 99.5,
-    "2s+": 99.5,
-    "ss": 99.0,
-    "2s": 99.0,
-    "s+": 98.0,
-    "s": 97.0,
-    "aaa": 94.0,
-    "3a": 94.0,
-    "aa": 90.0,
-    "2a": 90.0,
-    "a": 80.0,
-    "bbb": 75.0,
-    "3b": 75.0,
-    "bb": 70.0,
-    "2b": 70.0,
-    "b": 60.0,
-    "c": 50.0,
-    "d": 0.0,
-}
+from .utils import RATE_FACTOR_TABLE
+from .utils import RATE_ALIAS_MAP
 
 
 async def fetch_chart_level(chart_id: int, is_dx: bool, color_index: Optional[int]) -> Optional[Tuple[float, str, int]]:
@@ -161,7 +109,7 @@ async def calculate_score(event: Event, matcher):
                 try:
                     rate = float(rate_str)
                 except ValueError:
-                    rate = rate_alias_map.get(rate_str.lower())
+                    rate = RATE_ALIAS_MAP.get(rate_str.lower())
                     if rate is None:
                         await matcher.finish(f"这样的数字小梨算不出来的啊qwq\nError: 完成率参数不支持")
                         return None
@@ -188,7 +136,7 @@ async def calculate_score(event: Event, matcher):
     try:
         rate = float(rate_str)
     except ValueError:
-        rate = rate_alias_map.get(rate_str.lower())
+        rate = RATE_ALIAS_MAP.get(rate_str.lower())
         if rate is None:
             await matcher.finish(
                 f"这样的数字小梨算不出来的啊qwq\nError: 完成率参数不支持"

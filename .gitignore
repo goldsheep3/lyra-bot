@@ -5,3 +5,6 @@ plugins/__pycache__/
 
 # 隐藏隐私token
 .env.prod
+
+# 开发中
+plugins/reincamate/
