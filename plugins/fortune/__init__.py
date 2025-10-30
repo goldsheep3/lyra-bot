@@ -13,6 +13,7 @@ from nonebot_plugin_localstore import get_plugin_data_file as get_data_file
 from .core import get_fortune, get_fortunes, get_text_index
 from .msg import build_fortune_message
 from .default import sub_fortune_default
+from .history import save_fortune_history
 
 
 __plugin_meta__ = PluginMetadata(
@@ -76,12 +77,6 @@ async def _(event: MessageEvent, matcher: Matcher):
         return
     # 保存运势数据
     history_path = get_data_file("fortune_history.csv")
-    if not history_path.exists():
-        with open(history_path, 'w', encoding='utf-8') as f:
-            f.write("date,group_id,user_id,sub_fortunes\n")
-    # todo
-    with open(history_path, 'a', encoding='utf-8') as f:
-        sub_fortunes_str = ";".join(sub_titles)
-        f.write(f"{today.strftime('%Y%m%d')},{group_id},{user_id},{sub_fortunes_str}\n")
+    save_fortune_history(history_path, today, group_id, user_id, list(sub_titles), logger)
     # 发送消息
     await matcher.finish(MessageSegment.text(output))

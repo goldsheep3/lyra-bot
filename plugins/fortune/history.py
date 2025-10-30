@@ -3,7 +3,7 @@ from pathlib import Path
 
 
 def save_fortune_history(
-        history_path: Path, today: datetime, group_id: int, user_id: int, sub_titles: list[str], logger) -> None:
+        history_path: Path, today: datetime, group_id: int, user_id: str, sub_titles: list[str], logger) -> None:
     date_str = today.strftime('%Y%m%d')
     sub_fortunes_str = ";".join(sub_titles)
     new_line = f"{date_str},{group_id},{user_id},{sub_fortunes_str}\n"
@@ -35,4 +35,7 @@ def save_fortune_history(
     if not duplicate_found:
         with open(history_path, 'a', encoding='utf-8') as f:
             f.write(new_line)
+        logger.info(f"已保存运势历史记录`{new_line.strip()}`。")
+    else:
+        logger.info(f"运势历史记录`{new_line.strip()}`已存在。")
             
