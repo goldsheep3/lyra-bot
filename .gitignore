@@ -3,6 +3,9 @@ plugins/__pycache__/
 
 *.pyc
 
+# PyCharm
+.idea/
+
 # 隐藏隐私token
 .env.prod
 
