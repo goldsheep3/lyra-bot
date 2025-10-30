@@ -1,32 +1,34 @@
 from datetime import datetime
+from typing import Dict, Tuple, Optional
 
-from .desc import MAIN_FORTUNE_DESC, SUB_FORTUNE_TITLES
-from .core import _get_daily_seed
+from .core import get_text_index
 
+
+def get_main_desc(main_fortune_desc, main_title:str, user_id: str, date: datetime) -> str:
+    desc_list = main_fortune_desc.get(main_title, [""])
+    main_desc = desc_list[get_text_index(user_id, date, len(desc_list))]
+    return main_desc
 
 def build_fortune_message(
         main_title: str,
-        user_id: int,
-        date: datetime,
-        sub_fortunes: list[str],
+        sub_fortunes: list[tuple[str, str]],
+        main_desc: Optional[str] = None,
+        main_fortune_desc: Optional[Dict[str, Tuple[str, ...]]] = None,
 ) -> str:
-    date_str = date.strftime("%Y%m%d")
-    # 用主运势和 user_id+date 再次生成 seed，分配唯一描述
-    desc_seed = _get_daily_seed(user_id, f"{date_str}_{main_title}")
-    desc_list = MAIN_FORTUNE_DESC.get(main_title, [""])
-    desc_idx = desc_seed % len(desc_list)
-    main_desc = desc_list[desc_idx]
+    if not main_desc and main_fortune_desc is not None:
+        main_desc = get_main_desc(main_fortune_desc, main_title, "", datetime.now())
+    elif not any((main_desc, main_fortune_desc)): return ""
 
     lines = [
         f"小梨来啦！你今天的运势是：【{main_title}】！",
         main_desc,
         "",
-        "今日你的特别运势是："
-        ]
-    for i in range(0, len(SUB_FORTUNE_TITLES), 2):
-        left = f"{SUB_FORTUNE_TITLES[i]}  {sub_fortunes[i]}"
-        if i + 1 < len(SUB_FORTUNE_TITLES):
-            right = f"{SUB_FORTUNE_TITLES[i+1]}  {sub_fortunes[i+1]}"
+        "今日你的特别运势："
+    ]
+    for i in range(0, len(sub_fortunes), 2):
+        left = f"{sub_fortunes[i][0]}  {sub_fortunes[i][1]}"
+        if i + 1 < len(sub_fortunes):
+            right = f"{sub_fortunes[i+1][0]}  {sub_fortunes[i+1][1]}"
         else:
             right = ""
         lines.append(f"{left}{'  |  ' if right else ''}{right}")

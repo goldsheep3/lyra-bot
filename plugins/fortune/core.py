@@ -1,66 +1,57 @@
 from datetime import datetime
-from hashlib import sha256
+from typing import List, Tuple
+from hashlib import md5
 
 
-MAIN_FORTUNE_WEIGHTS = [
-    ("大吉", 6),
-    ("吉", 14),
-    ("中吉", 12),
-    ("小吉", 12),
-    ("平吉", 12),
-    ("小凶", 4),
-    ("凶", 3),
-    ("大凶", 1),
+FORTUNE_WEIGHTS: List[Tuple[int, str]] = [
+    (400, "大吉"),
+    (1000, "吉"),
+    (1600, "中吉"),
+    (2800, "小吉"),
+    (3200, "平吉"),
+    (3600, "小凶"),
+    (3875, "凶"),
+    (4096, "大凶"),
 ]
-SUB_FORTUNE_WEIGHTS = [
-    ("大吉", 2),
-    ("小吉", 3),
-    ("平吉", 2),
-    ("小凶", 1),
-]
-MAX_SUB_FORTUNE_COUNT = 80
 
 
-def _get_daily_seed(user_id: int, date_str: str) -> int:
-    src = f"{user_id}_{date_str}".encode("utf-8")
-    hash_bytes = sha256(src).digest()
-    return int.from_bytes(hash_bytes, 'big')
-
-
-def _fortune_by_weight(idx: int, weights: list[tuple[str, int]]) -> str:
-    acc = 0
-    for name, weight in weights:
-        acc += weight
-        if idx < acc:
+def _calc_fortune(
+        user_id: str,
+        date: str,
+        fortune_name: str
+) -> str:
+    """
+    使用 md5(user_id+date+fortune_name) 的第3~5位十六进制，转十进制后与权重列表判定运势。
+    :param user_id: 用户ID（字符串类型）
+    :param date: 日期字符串 (如"20241029")
+    :param fortune_name: 运势名
+    :return: 运势名字符串
+    """
+    weights = FORTUNE_WEIGHTS
+    src = f"{user_id}_{date}_{fortune_name}".encode("utf-8")
+    hash_hex = md5(src).hexdigest()
+    val_hex = hash_hex[2:5]
+    val_dec = int(val_hex, 16)
+    for limit, name in weights:
+        if val_dec < limit:
             return name
-    return weights[-1][0]
+    return weights[-1][1]
 
-
-def get_main_fortune(user_id: int, date: datetime) -> str:
+def get_fortune(user_id: str, date: datetime, fortune_name: str = "main") -> str:
+    """获取对应运势结果"""
     date_str = date.strftime("%Y%m%d")
-    seed = _get_daily_seed(user_id, date_str)
-    main_idx = seed & 0x3F
-    title = _fortune_by_weight(main_idx, MAIN_FORTUNE_WEIGHTS)
-    return title
+    return _calc_fortune(user_id, date_str, fortune_name)
 
-
-def get_sub_fortune(user_id: int, date: datetime, count: int = 6) -> list[str]:
-    if count > MAX_SUB_FORTUNE_COUNT:
-        raise ValueError(f"小运势数量最大为{MAX_SUB_FORTUNE_COUNT}，当前为{count}")
+def get_fortunes(user_id: str, date: datetime, fortune_names: List[str, ...] | Tuple[str, ...]) -> list[tuple[str, str]]:
+    """获取一组运势结果"""
     date_str = date.strftime("%Y%m%d")
-    seed = _get_daily_seed(user_id, date_str)
-    small_weights_acc = []
-    acc = 0
-    for name, w in SUB_FORTUNE_WEIGHTS:
-        small_weights_acc.append((name, range(acc, acc + w)))
-        acc += w
-    sub_hash = seed
-    result = []
-    for _ in range(count):
-        idx = sub_hash & 0x7
-        for name, r in small_weights_acc:
-            if idx in r:
-                result.append(name)
-                break
-        sub_hash >>= 3
-    return result
+    return [(title, _calc_fortune(user_id, date_str, title)) for title in fortune_names]
+
+def get_text_index(user_id: str, date: datetime, text_count: int) -> int:
+    """获取描述文本的随机索引"""
+    date_str = date.strftime("%Y%m%d")
+    src = f"{user_id}_{date_str}".encode("utf-8")
+    hash_hex = md5(src).hexdigest()
+    val_hex = hash_hex[2:5]
+    val_dec = int(val_hex, 16)
+    return val_dec % text_count
