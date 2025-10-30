@@ -25,19 +25,22 @@ async def _(event: MessageEvent, matcher: Matcher):
     pre_message = match.group(1)
     category = match.group(2)
     
-    food = choice({"吃": FOODS, "喝": DRINKS}.get(category, (-1)))
+    food = choice({"吃": FOODS, "喝": DRINKS}.get(category, ()))
     wine = False
-    if food == -1: return  # 不存在的分类
-    elif food.endswith("⑨"):
+    if not food: return  # 不存在的分类
+    if food.endswith("⑨"):
         wine = True
         food = food[:len(food)-1]
     
     # 内容替换规则
+    to_lyra: bool = any(i in pre_message for i in NICKNAMES)
+    pre_message = pre_message.replace("你", "他")
     pre_message = pre_message.replace("我", "你")
+
     message = choice(MESSAGES).format(food, pre_message)
     if wine:
         message += "\n" + ALCOHOL_NOTICE
-    nicknames = list(NICKNAMES) + ["你"]
-    message = message if not any(i in pre_message for i in nicknames) else SPECIAL_NOTICE
+    if to_lyra:
+        message = SPECIAL_NOTICE
 
     await matcher.finish(MessageSegment.text(message))
