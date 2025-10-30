@@ -74,4 +74,13 @@ async def _(event: MessageEvent, matcher: Matcher):
     except Exception as e:
         logger.error(f"生成运势时发生错误。{e}")
         return
+    # 保存运势数据
+    history_path = get_data_file("fortune_history.csv")
+    if not history_path.exists():
+        with open(history_path, 'w', encoding='utf-8') as f:
+            f.write("date,group_id,user_id,sub_fortunes\n")
+    with open(history_path, 'a', encoding='utf-8') as f:
+        sub_fortunes_str = ";".join(sub_titles)
+        f.write(f"{today.strftime('%Y%m%d')},{group_id},{user_id},{sub_fortunes_str}\n")
+    # 发送消息
     await matcher.finish(MessageSegment.text(output))

@@ -42,7 +42,7 @@ def get_fortune(user_id: str, date: datetime, fortune_name: str = "main") -> str
     date_str = date.strftime("%Y%m%d")
     return _calc_fortune(user_id, date_str, fortune_name)
 
-def get_fortunes(user_id: str, date: datetime, fortune_names: List[str, ...] | Tuple[str, ...]) -> list[tuple[str, str]]:
+def get_fortunes(user_id: str, date: datetime, fortune_names: list[str] | Tuple[str, ...]) -> list[tuple[str, str]]:
     """获取一组运势结果"""
     date_str = date.strftime("%Y%m%d")
     return [(title, _calc_fortune(user_id, date_str, title)) for title in fortune_names]
