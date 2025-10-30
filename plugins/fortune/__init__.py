@@ -79,6 +79,7 @@ async def _(event: MessageEvent, matcher: Matcher):
     if not history_path.exists():
         with open(history_path, 'w', encoding='utf-8') as f:
             f.write("date,group_id,user_id,sub_fortunes\n")
+    # todo
     with open(history_path, 'a', encoding='utf-8') as f:
         sub_fortunes_str = ";".join(sub_titles)
         f.write(f"{today.strftime('%Y%m%d')},{group_id},{user_id},{sub_fortunes_str}\n")
