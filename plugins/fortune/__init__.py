@@ -58,7 +58,7 @@ async def _(event: MessageEvent, matcher: Matcher):
         logger.error(f"生成运势时发生错误。{e}")
         return
     # 保存运势数据
-    history_path = get_data_file("fortune_history.csv")
-    save_fortune_history(history_path, today, group_id, user_id, list(sub_titles), logger)
+    history_path = get_data_file(f"fortune_history_data_{user_id}.csv")
+    save_fortune_history(history_path, today, group_id, list(sub_titles), logger)
     # 发送消息
     await matcher.finish(MessageSegment.text(output))

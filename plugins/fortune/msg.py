@@ -7,7 +7,7 @@ from .core import get_text_index
 def is_ascii(c: str) -> bool: return ord(c) < 128
 
 
-def calc_display_length(s: str) -> int: return sum(1 if is_ascii(c) else 2 for c in s)
+def calc_display_length(s: str) -> int: return sum(1 if is_ascii(c) else 3 for c in s)
 
 
 def format_fortune_lines(sub_fortunes: list[tuple[str, str]]) -> str:
