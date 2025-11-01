@@ -1,4 +1,4 @@
-desc_yml_default = """
+DESC_DEFAULT = """
 大吉:
 - 早安！小梨刚刚拨了一下青音，弦音像昨晚的梦一样灿烂——所以，今天一定是大吉！
 - 考试？抽卡？随便挑！青音替你奏起胜利的小步舞曲。
@@ -26,4 +26,4 @@ desc_yml_default = """
 - 是大凶啊……来和小梨咸鱼一天吧ww
 """
 
-sub_fortune_default = "{}: 舞萌, 中二, 太鼓, PJSK, 雀魂, MC"
+SUB_FORTUNE_DEFAULT = "{}: 舞萌, 中二, 太鼓, PJSK, 雀魂, MC"
