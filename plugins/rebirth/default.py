@@ -1,4 +1,4 @@
-REBIRTH_DATA_CN = """
+REBIRTH_DATA = """
 country:
   - region: 北京
     population: 21893095
