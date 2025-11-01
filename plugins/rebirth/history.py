@@ -56,10 +56,14 @@ class RebirthHistory:
                   city_or_rural: Optional[str]=None,
                   gender: Optional[str]=None) -> int:
         """获取投胎次数，支持按省份、城市/农村、性别筛选统计"""
-        p_idx = (self.province_map[province] if province else slice(None))
-        c_idx = (self.CITY_RURAL_MAP[city_or_rural] if city_or_rural else slice(None))
-        g_idx = (self.GENDER_MAP[gender] if gender else slice(None))
-        return int(self.data[p_idx, c_idx, g_idx].sum())
+        try:
+            p_idx = (self.province_map[province] if province else slice(None))
+            c_idx = (self.CITY_RURAL_MAP[city_or_rural] if city_or_rural else slice(None))
+            g_idx = (self.GENDER_MAP[gender] if gender else slice(None))
+            return int(self.data[p_idx, c_idx, g_idx].sum())
+        except KeyError:
+            # 至少有一个键不存在，总次数一定为 0
+            return 0
 
     def get_total_count(self) -> int:
         """获取总投胎次数"""
