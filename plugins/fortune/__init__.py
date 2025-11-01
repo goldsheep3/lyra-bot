@@ -1,6 +1,5 @@
-import yaml
 from datetime import datetime
-from typing import Dict, Tuple, Optional
+from typing import Dict, List
 
 from nonebot.internal.matcher import Matcher
 from nonebot.plugin import on_regex, PluginMetadata
@@ -14,29 +13,13 @@ from .core import get_fortune, get_fortunes, get_text_index
 from .msg import build_fortune_message
 from .default import sub_fortune_default
 from .history import save_fortune_history
-
+from .lib import load_yaml_data
 
 __plugin_meta__ = PluginMetadata(
     name="简单运势",
     description="一个基于MD5哈希的运势查询插件。",
     usage="发送「今日运势」「运势」「抽签」「签到」「打卡」即可获得今日专属运势。",
 )
-
-
-def load_yaml_data(file_path, default_data=None, logger_=None) -> Optional[dict]:
-    """安全加载YAML数据文件"""
-    try:
-        if file_path.exists():
-            with open(file_path, 'r', encoding='utf-8') as f:
-                return yaml.safe_load(f) or {}
-        else:
-            if logger_:
-                logger_.warning(f"数据文件不存在: {file_path}")
-            return default_data if default_data is not None else {}
-    except Exception as e:
-        if logger_:
-            logger_.error(f"加载数据文件失败 {file_path}: {e}")
-        return default_data if default_data is not None else {}
 
 
 on_fortune = on_regex(r"^(今日运势|运势|抽签|签到|打卡)$", block=True)
@@ -61,8 +44,7 @@ async def _(event: MessageEvent, matcher: Matcher):
         if group_id < 0:
             sub_titles = default_sub_titles
         else:
-            sub_titles_data: Dict[int, Tuple[str]] = load_yaml_data(
-                get_data_file("sub_fortune_titles.yml"), {}, logger)
+            sub_titles_data: Dict[int, List[str]] = load_yaml_data(get_data_file("sub_fortune_titles.yml"), {}, logger)
             sub_titles = sub_titles_data.get(group_id, default_sub_titles)
     except Exception as e:
         logger.error(f"获取本地运势数据时发生错误。{e}")
