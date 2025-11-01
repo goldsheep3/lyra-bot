@@ -83,11 +83,11 @@ async def _(event: MessageEvent, matcher: Matcher):
     # 绘制图片
     img = map_build(
         region_datas={n: user_data.get_count(n) for n in region_names},
-        output_folder_path=get_cache_dir('rebirth_images')
+        output_folder_path=get_cache_dir()
     )
 
     # 发送结果
-    result = f"""投胎成功！
+    result = f""" 投胎成功！
 
 第{user_data.get_total_count()}次投胎，您投胎成了{result_region}{result_location}的{result_gender}孩。"""
 
