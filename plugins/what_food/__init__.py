@@ -5,7 +5,7 @@ from nonebot.internal.matcher import Matcher
 from nonebot.plugin import on_regex, PluginMetadata
 from nonebot.adapters.onebot.v11 import MessageEvent, MessageSegment
 
-from messages import MESSAGES, ALCOHOL_NOTICE
+from .messages import MESSAGES, ALCOHOL_NOTICE, SPECIAL_NOTICE, NICKNAMES
 from .menu import FOODS, DRINKS
 
 __plugin_meta__ = PluginMetadata(
@@ -21,15 +21,26 @@ on_what_food = on_regex(r"^(.*?)([吃喝])什么$", block=True)
 async def _(event: MessageEvent, matcher: Matcher):
     match = re_search(r"^(.*?)([吃喝])什么$", str(event.get_message()))
     if not match: return
+    
+    pre_message = match.group(1)
     category = match.group(2)
-    if category == "吃":
-        food = choice(FOODS)
-        message = choice(MESSAGES).format(food, match.group(1))
-        await matcher.finish(MessageSegment.text(message))
-    elif category == "喝":
-        drink = choice(DRINKS)
-        message = choice(MESSAGES).format(drink, match.group(1))
-        if drink.endswith("⑨"):
-            message = message[:len(message)-1] + "\n" + ALCOHOL_NOTICE
-        await matcher.finish(MessageSegment.text(message))
-    return
+    
+    food = choice({"吃": FOODS, "喝": DRINKS}.get(category, ()))
+    wine = False
+    if not food: return  # 不存在的分类
+    if food.endswith("⑨"):
+        wine = True
+        food = food[:len(food)-1]
+    
+    # 内容替换规则
+    to_lyra: bool = any(i in pre_message for i in NICKNAMES)
+    pre_message = pre_message.replace("你", "他")
+    pre_message = pre_message.replace("我", "你")
+
+    message = choice(MESSAGES).format(food, pre_message)
+    if wine:
+        message += "\n" + ALCOHOL_NOTICE
+    if to_lyra:
+        message = SPECIAL_NOTICE
+
+    await matcher.finish(MessageSegment.text(message))

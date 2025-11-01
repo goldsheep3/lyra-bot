@@ -7,3 +7,8 @@ MESSAGES=(
 
 # 酒精额外提示
 ALCOHOL_NOTICE = "未成年请勿饮酒，成年人也要适量饮酒喔！"
+
+# 对 Bot 的特殊指定提示
+SPECIAL_NOTICE = "不用给小梨推荐啦！小梨的餐点都是莉莉丝阿姐一手包办的~"
+# Bot 昵称表
+NICKNAMES = ("小梨", "Lyra", "莱茵", "Lyrandra", "小莱")
