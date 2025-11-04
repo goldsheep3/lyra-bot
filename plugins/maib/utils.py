@@ -1,4 +1,4 @@
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Literal, Dict
 
 
 # Rating 因子速查表
@@ -27,31 +27,51 @@ RATE_FACTOR_TABLE: List[Tuple[float, float]] = [
     (10.0000, 0.016),
 ]
 
-# 完成率别名映射表
-RATE_ALIAS_MAP: Dict[str, float] = {
-    "鸟加": 100.5,
-    "鸟家": 100.5,
-    "sss+": 100.5,
-    "3s+": 100.5,
-    "鸟": 100.0,
-    "sss": 100.0,
-    "3s": 100.0,
-    "ss+": 99.5,
-    "2s+": 99.5,
-    "ss": 99.0,
-    "2s": 99.0,
-    "s+": 98.0,
-    "s": 97.0,
-    "aaa": 94.0,
-    "3a": 94.0,
-    "aa": 90.0,
-    "2a": 90.0,
-    "a": 80.0,
-    "bbb": 75.0,
-    "3b": 75.0,
-    "bb": 70.0,
-    "2b": 70.0,
-    "b": 60.0,
-    "c": 50.0,
-    "d": 0.0,
-}
+DIFFICULTY_MAP: Dict[int, str] = {1: "蓝", 2: "绿", 3: "黄", 4: "红", 5: "紫", 6: "白"}
+
+# 封装 maipy 和 simai 的难度数值
+class DifficultyVariant:
+    def __init__(self, num: int):
+        self.simai = num
+        self.maipy = num - 2
+
+class ChartDifficulty:
+    # 主要采用 simai 规则的数值表示
+    EASY = DifficultyVariant(1)
+    BASIC = DifficultyVariant(2)
+    ADVANCED = DifficultyVariant(3)
+    EXPERT = DifficultyVariant(4)
+    MASTER = DifficultyVariant(5)
+    Re_MASTER = DifficultyVariant(6)
+
+    EAZ = EASY
+    BAS = BASIC
+    ADV = ADVANCED
+    EXP = EXPERT
+    MAS = MASTER
+    ReM = Re_MASTER
+
+def init_difficulty(level: int, variant: Literal['simai', 'maipy'] = 'simai') -> DifficultyVariant:
+    """根据数值初始化 ChartDifficulty"""
+    index = level - 1 if variant == 'simai' else level + 1  # 0=EASY
+    return [
+        ChartDifficulty.EASY,
+        ChartDifficulty.BASIC,
+        ChartDifficulty.ADVANCED,
+        ChartDifficulty.EXPERT,
+        ChartDifficulty.MASTER,
+        ChartDifficulty.Re_MASTER,
+    ][index]
+
+def init_difficulty_from_text(name: str) -> DifficultyVariant:
+    """根据字符串初始化 ChartDifficulty"""
+    name = name.lower()
+    mapping = {
+        "蓝": ChartDifficulty.EASY,
+        "绿": ChartDifficulty.BASIC,
+        "黄": ChartDifficulty.ADVANCED,
+        "红": ChartDifficulty.EXPERT,
+        "紫": ChartDifficulty.MASTER,
+        "白": ChartDifficulty.Re_MASTER,
+    }
+    return mapping.get(name, ChartDifficulty.MASTER)  # 默认返回 MASTER

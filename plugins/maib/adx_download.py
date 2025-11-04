@@ -68,11 +68,12 @@ class AdxCacheManager:
         try:
             response = httpx.get(url, timeout=10.0)
             response.raise_for_status()
-            data = response.json()  # 尝试下载最新版
+            data: dict = response.json()  # 尝试下载最新版
             if data:
                 # 更新缓存文件
                 with self.short_id_index_path.open("w", encoding="utf-8") as f:
                     json.dump(data, f, ensure_ascii=False, indent=2)
+                self.logger.info("已更新 short_id_index.json 缓存文件")
         except httpx.HTTPError as ex:
             self.logger.warning("未获取到 short_id_index.json 谱面源，尝试使用缓存文件")
             if self.short_id_index_path.exists():
@@ -82,7 +83,7 @@ class AdxCacheManager:
             else:
                 self.logger.error(f"获取谱面源失败，且无缓存文件可用。无法检验谱面有效性。错误信息: {ex}")
                 return
-        self.exist_short_ids = set(int(item['id']) for item in data)
+        self.exist_short_ids = set(int(short_id) for short_id in data.keys())
         self.logger.info(f"已获取 {len(self.exist_short_ids)} 个已知谱面 ID")
 
     def _scan_cache_files(self, recent_index: List[int]):
