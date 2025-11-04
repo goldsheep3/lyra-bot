@@ -8,5 +8,7 @@ plugins/__pycache__/
 
 # 隐藏隐私token
 .env.prod
+.env
 
+# 本地调试连接使用
 frpc/frpc.exe
