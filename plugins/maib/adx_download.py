@@ -43,15 +43,22 @@ class AdxCacheManager:
         self.logger = nb_logger if nb_logger else BadLogger()  # 日志捕获
         self.cache_dir = cache_dir
         self.adx_cache_index_path = cache_dir / "cache_index.json"
-        try:
-            with self.adx_cache_index_path.open("r", encoding="utf-8") as f:
-                r: List[int] = json.load(f)
-        except json.JSONDecodeError:
-            r: List[int] = []
-        except OSError:
-            with self.adx_cache_index_path.open("w", encoding="utf-8") as f:
-                json.dump([], f, ensure_ascii=False, indent=2)
         self.short_id_index_path = cache_dir / "short_id_index.json"
+
+        def _get_adx_cache_index_path():
+            try:
+                with self.adx_cache_index_path.open("r", encoding="utf-8") as file:
+                    result: List[int] = json.load(file)
+            except json.JSONDecodeError:
+                result: List[int] = []
+            except OSError:
+                with self.adx_cache_index_path.open("w", encoding="utf-8") as f:
+                    json.dump([], f, ensure_ascii=False, indent=2)
+                _get_adx_cache_index_path()
+            except Exception as ex:
+                logger.error(f"读取缓存索引文件发生了未经预料的错误: {ex}")
+                result: List[int] = []
+            return result
 
         # short_id -> Path (bga オーバーライド nobga)
         self.bga_map: Dict[int, Path] = {}  # bga 映射
@@ -59,7 +66,7 @@ class AdxCacheManager:
         self.recent_calls: List[int] = []  # 最近调用顺序
         self.exist_short_ids: Set[int] = set()  # 已存在的 short_id 列表
         self.get_json_cache()
-        self._scan_cache_files(r)
+        self._scan_cache_files(_get_adx_cache_index_path())
 
     def get_json_cache(self):
         """通过谱面源 index.json 获取已知谱面 ID 列表。"""
@@ -262,7 +269,7 @@ async def handle_download(bot: Bot, event: Event, matcher: Matcher, short_id: in
         await matcher.finish("现在小梨只能把谱面传到群文件喔qwq")
         return
 
-    await matcher.send(f"id{short_id}是吧，小梨正在翻箱倒柜.gif")
+    await matcher.send(f"想玩id{short_id}是吧，小梨正在翻箱倒柜.gif")
 
     logger.info(f"开始请求下载文件 {short_id}.zip")
     result = await acm.get_file(short_id, False)
