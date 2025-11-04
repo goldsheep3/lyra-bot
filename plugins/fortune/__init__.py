@@ -6,7 +6,6 @@ from nonebot import require, logger
 from nonebot.rule import to_me
 from nonebot.plugin import on_regex, PluginMetadata
 from nonebot.internal.matcher import Matcher
-from nonebot.internal.permission import Permission
 
 from nonebot.adapters.onebot.v11 import MessageEvent, MessageSegment
 from nonebot.adapters.onebot.v11.permission import GROUP_ADMIN, GROUP_OWNER
@@ -71,13 +70,13 @@ async def _(event: MessageEvent, matcher: Matcher):
 
 
 on_fortune_setting = on_regex(r"^运势\s*(\S{2})(?:\s+(\S+))?$",
-                              rule=to_me(), permission=Permission(GROUP_ADMIN, GROUP_OWNER), block=True)
+                              rule=to_me(), permission=GROUP_ADMIN | GROUP_OWNER, block=True)
 
 @on_fortune_setting.handle()
 async def _(event: MessageEvent, matcher: Matcher):
     def wlog(message: str, group: int, user: str, time: datetime):
-        with open(get_data_file("op_edit.log"), 'a', encoding='utf-8') as f:
-            f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] [{str(group)}] {message} (from {user})\n")
+        with open(get_data_file("op_edit.log"), 'a', encoding='utf-8') as file:
+            file.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] [{str(group)}] {message} (from {user})\n")
         logger.info(f"[{str(group)}] {message} (from {user})")
 
     # 获取基本信息
