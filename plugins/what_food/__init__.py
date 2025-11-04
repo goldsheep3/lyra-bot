@@ -79,7 +79,7 @@ async def _(event: MessageEvent, matcher: Matcher):
     pre_message = pre_message.replace("你", "他")
     pre_message = pre_message.replace("我", "你")
 
-    message = choice(MESSAGES).format(food, pre_message)
+    message = choice(MESSAGES).format(food.name, pre_message)
     if wine:
         message += "\n" + ALCOHOL_NOTICE
     if to_lyra:
