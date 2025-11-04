@@ -41,7 +41,7 @@ def init_food_data(fpath, dpath, wpath) -> Tuple[list[Food], list[Drink]]:
     def _init_list(p, d, cls):
         if not p.exists():
             with open(p, "w", encoding="utf-8") as file:
-                yaml.dump(d, file)
+                yaml.dump(list(d), file)
         with open(fpath, "r", encoding="utf-8") as file:
             l = [cls(n) for n in yaml.safe_load(file)]
         return l
