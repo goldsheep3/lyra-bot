@@ -3,7 +3,6 @@ import re
 import maimai_py
 
 from nonebot import on_regex
-from nonebot.exception import FinishedException
 from nonebot.plugin import PluginMetadata
 from nonebot.internal.matcher import Matcher
 from nonebot.adapters.onebot.v11 import Bot, Event
@@ -29,17 +28,17 @@ adx_download = on_regex(r"下载谱面\s*([0-9]+)", priority=5)
 @adx_download.handle()
 async def _(bot: Bot, event: Event, matcher: Matcher):
     """处理命令: 下载谱面11568"""
-    short_id = int(re.search(r"下载谱面\s*([0-9]+)", str(event.get_message())).group())
+    short_id = int(re.search(r"下载谱面\s*([0-9]+)", str(event.get_message())).group(1))
     await handle_download(bot, event, matcher, short_id)
 
 
 ra_calculators = [
     on_regex(r"^ra\s+help", priority=5, block=True),  # 帮助命令
     on_regex(r"^ra\s+(\d+(?:\.\d+)?)\s+(\S+)", priority=4, block=True),  # 定数直接计算
-    on_regex(r"^ra\s+id(\d+)([绿黄红紫白])\s+(\S+)", priority=3, block=True),  # id(加颜色)计算
+    on_regex(r"^ra\s+id(\d+)([绿黄红紫白])?\s+(\S+)", priority=3, block=True),  # id(加颜色)计算
 ]
 
-@ra_calculators[1].handle()
+@ra_calculators[0].handle()
 async def _(event: Event, matcher: Matcher):
     """处理命令: ra help"""
     msg = str(event.get_message())
@@ -65,10 +64,11 @@ async def _(event: Event, matcher: Matcher):
 async def _(event: Event, matcher: Matcher):
     """处理命令: ra id10240红 100.5 或 ra id10240红 鸟加 或 ra help"""
     msg = str(event.get_message())
-    match = re.search(r"^ra\s+id(\d+)([绿黄红紫白])\s+(\S+)", msg)  # id加颜色计算
+    match = re.search(r"^ra\s+id(\d+)([绿黄红紫白])?\s+(\S+)", msg)  # id加颜色计算
     if not match: return
-    song_info = await fetch_chart_level(maipy, int(match.group(1)), init_difficulty_from_text(match.group(2)))
+    difficulty = init_difficulty_from_text(match.group(2)) if match.group(2) else None
+    song_info = await fetch_chart_level(maipy, int(match.group(1)), difficulty)
     if song_info:
-        await calculate_rating(matcher, song_info['level'], match.group(2), song_info)
+        await calculate_rating(matcher, song_info['level'], match.group(3), song_info)
     else:
         await matcher.finish(f"小梨找不到这个谱面qwq\n请确认谱面的id和难度。")

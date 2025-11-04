@@ -192,7 +192,7 @@ class AdxCacheManager:
 
         try:
             self.logger.info(f"正在下载文件 {url} -> {str(file_path)}")
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
                 response = await client.get(url)
                 response.raise_for_status()
                 file_path.write_bytes(response.content)
@@ -306,7 +306,7 @@ async def handle_download(bot: Bot, event: Event, matcher: Matcher, short_id: in
     await bot.call_api(
         "upload_group_file",
         group_id=group_id,
-        file=chart_file_path,
+        file=chart_file_path.as_posix(),
         name=f"{short_id}.zip"
     )
     logger.success(f"{short_id}.zip 上传成功")

@@ -6,33 +6,29 @@ from nonebot.internal.matcher import Matcher
 from .utils import DifficultyVariant, RATE_FACTOR_TABLE, DIFFICULTY_MAP, init_difficulty
 
 
-RATE_ALIAS_MAP: Dict[str, float] = {
-    "鸟加": 100.5,
-    "鸟家": 100.5,
-    "sss+": 100.5,
-    "3s+": 100.5,
-    "鸟": 100.0,
-    "sss": 100.0,
-    "3s": 100.0,
-    "ss+": 99.5,
-    "2s+": 99.5,
-    "ss": 99.0,
-    "2s": 99.0,
-    "s+": 98.0,
-    "s": 97.0,
-    "aaa": 94.0,
-    "3a": 94.0,
-    "aa": 90.0,
-    "2a": 90.0,
-    "a": 80.0,
-    "bbb": 75.0,
-    "3b": 75.0,
-    "bb": 70.0,
-    "2b": 70.0,
-    "b": 60.0,
-    "c": 50.0,
-    "d": 0.0,
-}  # 完成率别名映射表
+# 完成率别名映射
+rate_alias: Dict[float, Tuple[str]] = {
+    101.0000: ("ap+", "理论"),
+    100.7500: ("ap",),
+    100.5000: ("鸟加", "鸟家", "sss+", "3s+"),
+    100.0000: ("鸟", "鸟s", "sss", "3s"),
+     99.5000: ("ss+", "2s+"),
+     99.0000: ("ss", "2s"),
+     98.0000: ("s+", "1s+"),
+     97.0000: ("s", "1s"),
+     94.0000: ("鸟a", "aaa", "3a"),
+     90.0000: ("aa", "2a"),
+     80.0000: ("a", "1a"),
+     75.0000: ("鸟b", "bbb", "3b"),
+     70.0000: ("bb", "2b"),
+     60.0000: ("b", "1b"),
+     50.0000: ("c", "1c"),
+      0.0000: ("d", "1d"),
+}
+rate_alias_map: Dict[str, float] = {}
+for rate_value, aliases in rate_alias.items():
+    for alias in aliases:
+        rate_alias_map[alias.lower()] = rate_value
 
 
 async def fetch_chart_level(maipy, short_id: int, difficult: Optional[DifficultyVariant] = None) -> Optional[dict]:
@@ -44,7 +40,8 @@ async def fetch_chart_level(maipy, short_id: int, difficult: Optional[Difficulty
 
     # maipy 获取阶段
     try:
-        song = await maipy.songs().by_id(maipy_id)
+        songs = await maipy.songs()
+        song = await songs.by_id(maipy_id)
         charts = song.difficulties.sd if chart_tag == "SD" else song.difficulties.dx
         difficult: DifficultyVariant = difficult if difficult else init_difficulty(len(charts) - 1, variant='maipy')
         chart = charts[difficult.maipy]
@@ -66,7 +63,7 @@ def _calculate(level: float, rate_str: str) -> Optional[Tuple[int, float]]:
     try:
         rate = float(rate_str)
     except ValueError:
-        rate = RATE_ALIAS_MAP.get(rate_str.lower())
+        rate = rate_alias_map.get(rate_str.lower())
         if rate is None:
             return None
     factor = 0.0
