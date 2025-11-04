@@ -8,3 +8,5 @@ plugins/__pycache__/
 
 # 隐藏隐私token
 .env.prod
+
+frpc/frpc.exe
