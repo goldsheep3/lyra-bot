@@ -113,6 +113,8 @@ async def _(event: MessageEvent, matcher: Matcher):
     # 读取旧数据，合并新数据，写回文件
     with open(path, "r", encoding="utf-8") as file:
         old_food_list = yaml.safe_load(file) or []
+    # 合并数据：需要去重
+    new_food_list = [f for f in new_food_list if f not in old_food_list]
     newest_food_list = old_food_list + new_food_list
     with open(path, "w", encoding="utf-8") as file:
         yaml.dump(newest_food_list, file)
