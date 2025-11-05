@@ -1,8 +1,7 @@
 import re
-from typing import Tuple
-
 import yaml
 from random import choice
+from typing import Tuple
 
 from nonebot import require
 from nonebot.plugin import on_regex, PluginMetadata
@@ -41,7 +40,7 @@ def init_food_data(fpath, dpath, wpath) -> Tuple[list[Food], list[Drink]]:
     def _init_list(p, d, cls):
         if not p.exists():
             with open(p, "w", encoding="utf-8") as file:
-                yaml.dump(list(d), file)
+                yaml.dump(list(d), file, allow_unicode=True)
         with open(fpath, "r", encoding="utf-8") as file:
             l = [cls(n) for n in yaml.safe_load(file)]
         return l
@@ -117,7 +116,11 @@ async def _(event: MessageEvent, matcher: Matcher):
     new_food_list = [f for f in new_food_list if f not in old_food_list]
     newest_food_list = old_food_list + new_food_list
     with open(path, "w", encoding="utf-8") as file:
-        yaml.dump(newest_food_list, file)
+        yaml.dump(newest_food_list, file, allow_unicode=True)
+
+    # 去重检查
+    if not new_food_list:
+        await matcher.finish("小梨的菜单上已经都有了喔——")
 
     # 刷新内存数据
     global food_list, drink_list
@@ -133,4 +136,4 @@ async def _(event: MessageEvent, matcher: Matcher):
             file.write(f"[{now}] {event.user_id} Add a {log_category}: \"{nf}\" (from group: {event.group_id})\n")
 
     await matcher.finish(
-        f"小梨已经把以下的餐点添加到{('食物' if category == '吃' else '饮品')}列表啦！\n{'；'.join(new_food_list)}。")
+        f"小梨已经把以下的餐点添加到{('食物' if category == '吃' else '饮品')}列表啦！\n{'；'.join(new_food_list)}")
