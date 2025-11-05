@@ -3,7 +3,7 @@ import yaml
 from random import choice
 from typing import Tuple
 
-from nonebot import require
+from nonebot import require, logger
 from nonebot.plugin import on_regex, PluginMetadata
 from nonebot.internal.matcher import Matcher
 
@@ -98,6 +98,7 @@ async def _(event: MessageEvent, matcher: Matcher):
 
     category = match.group(1)
     foods = match.group(2)
+    logger.info(f"Adding new items to {category} list: {foods}")
     foods = (foods
              .replace(",", " ")
              .replace(".", " ")
@@ -120,11 +121,13 @@ async def _(event: MessageEvent, matcher: Matcher):
 
     # 去重检查
     if not new_food_list:
+        logger.info("No new items to add.")
         await matcher.finish("小梨的菜单上已经都有了喔——")
 
     # 刷新内存数据
     global food_list, drink_list
     food_list, drink_list = init_food_data(food_path, drink_path, wine_path)
+    logger.info(f"Added new items to {category} list: {new_food_list}")
 
     # 记录日志
     from datetime import datetime
