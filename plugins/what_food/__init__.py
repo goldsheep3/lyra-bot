@@ -13,7 +13,7 @@ require("nonebot_plugin_localstore")
 from nonebot_plugin_localstore import get_plugin_data_file as get_data_file
 
 from .messages import MESSAGES, ALCOHOL_NOTICE, SPECIAL_NOTICE, NICKNAMES
-from .menu import FOODS, DRINKS, WINES
+from .utils import Food, Drink, Wine, Menu, content_cut
 
 
 __plugin_meta__ = PluginMetadata(
@@ -23,39 +23,13 @@ __plugin_meta__ = PluginMetadata(
 )
 
 
-class Food:
-    is_wine: bool = False
-    def __init__(self, name: str):
-        self.name = name
-
-class Drink(Food):
-    pass
-
-class Wine(Food):
-    is_wine: bool = True
-
-
-# 初始化
-def init_food_data(fpath, dpath, wpath) -> Tuple[list[Food], list[Drink]]:
-    def _init_list(p, d, cls):
-        if not p.exists():
-            with open(p, "w", encoding="utf-8") as file:
-                yaml.dump(list(d), file, allow_unicode=True)
-        with open(fpath, "r", encoding="utf-8") as file:
-            l = [cls(n) for n in yaml.safe_load(file)]
-        return l
-
-    foods: list[Food] = _init_list(fpath, FOODS, Food)
-    drinks: list[Drink] = _init_list(dpath, DRINKS, Drink)
-    wines: list[Wine] = _init_list(wpath, WINES, Wine)
-    drinks += wines  # 酒类加入饮品列表
-    return foods, drinks
-
-history_path = get_data_file("menu_add_history.log")
-food_path = get_data_file("foods.yml")
-drink_path = get_data_file("drinks.yml")
-wine_path = get_data_file("wines.yml")
-food_list, drink_list = init_food_data(food_path, drink_path, wine_path)
+# 初始化菜单数据类
+menu = Menu(
+    foods_path=get_data_file("foods.yml"),
+    drinks_path=get_data_file("drinks.yml"),
+    wines_path=get_data_file("wines.yml"),
+    history_path=get_data_file("menu_add_history.log")
+)
 
 
 on_what_food = on_regex(r"^(.*?)([吃喝])什么$", block=True)
@@ -69,21 +43,17 @@ async def _(event: MessageEvent, matcher: Matcher):
 
     pre_message = match.group(1)
     category = match.group(2)
-
-    food = choice({"吃": food_list, "喝": drink_list}.get(category, ()))
-    wine = food.is_wine
+    foods = menu.get_foods() if category == "吃" else menu.get_drinks()
+    food = choice(foods)
 
     # 内容替换规则
-    to_lyra: bool = any(i in pre_message for i in NICKNAMES)
+    if any(i in pre_message for i in NICKNAMES):
+        await matcher.finish(SPECIAL_NOTICE)
     pre_message = pre_message.replace("你", "他")
     pre_message = pre_message.replace("我", "你")
-
     message = choice(MESSAGES).format(food.name, pre_message)
-    if wine:
+    if food.is_wine:
         message += "\n" + ALCOHOL_NOTICE
-    if to_lyra:
-        message = SPECIAL_NOTICE
-
     await matcher.finish(message)
 
 
@@ -97,47 +67,16 @@ async def _(event: MessageEvent, matcher: Matcher):
     if not match: return
 
     category = match.group(1)
-    foods = match.group(2)
-    logger.info(f"Adding new items to {category} list: {foods}")
-    foods = (foods
-             .replace(",", " ")
-             .replace(".", " ")
-             .replace(";", " ")
-             .replace("，", " ")
-             .replace("。", " ")
-             .replace("；", " "))
+    content = match.group(2)
+    if category == "吃":
+        food_list = [Food(name) for name in content_cut(content)]
+    elif category == "喝":
+        food_list = [Drink(name) for name in content_cut(content)]
+    else: return
 
-    new_food_list = [f for f in foods.split(" ") if f]
-    path = food_path if category == "吃" else drink_path
+    new_food_list = menu.add_foods(food_list, event.user_id, getattr(event, "group_id", -1))
 
-    # 读取旧数据，合并新数据，写回文件
-    with open(path, "r", encoding="utf-8") as file:
-        old_food_list = yaml.safe_load(file) or []
-    # 合并数据：需要去重
-    new_food_list = [f for f in new_food_list if f not in old_food_list]
-    newest_food_list = old_food_list + new_food_list
-    with open(path, "w", encoding="utf-8") as file:
-        yaml.dump(newest_food_list, file, allow_unicode=True)
-
-    # 去重检查
     if not new_food_list:
-        logger.info("No new items to add.")
-        await matcher.finish("小梨的菜单上已经都有了喔——")
-
-    # 刷新内存数据
-    global food_list, drink_list
-    food_list, drink_list = init_food_data(food_path, drink_path, wine_path)
-    logger.info(f"Added new items to {category} list: {new_food_list}")
-
-    # 记录日志
-    from datetime import datetime
-    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    log_category = "Food" if category == "吃" else "Drink"
-    group_id = getattr(event, "group_id", -1)
-    with open(history_path, "a", encoding="utf-8") as file:
-        for nf in new_food_list:
-            # [2004-06-01 12:00:00] 2940119626 Add a Food: "FOOD" (from group: 987654321)
-            file.write(f"[{now}] {event.user_id} Add a {log_category}: \"{nf}\" (from group: {group_id})\n")
-
+        await matcher.finish(f"这些餐点在小梨的菜单上已经都有了喔——")
     await matcher.finish(
-        f"小梨已经把以下的餐点添加到{('食物' if category == '吃' else '饮品')}列表啦！\n{'；'.join(new_food_list)}")
+        f"小梨已经把以下的餐点添加到{('食物' if category == '吃' else '饮品')}列表啦！\n{'；'.join([i.name for i in new_food_list])}")
