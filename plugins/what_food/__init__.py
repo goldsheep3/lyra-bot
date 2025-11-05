@@ -133,10 +133,11 @@ async def _(event: MessageEvent, matcher: Matcher):
     from datetime import datetime
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     log_category = "Food" if category == "吃" else "Drink"
+    group_id = getattr(event, "group_id", -1)
     with open(history_path, "a", encoding="utf-8") as file:
         for nf in new_food_list:
             # [2004-06-01 12:00:00] 2940119626 Add a Food: "FOOD" (from group: 987654321)
-            file.write(f"[{now}] {event.user_id} Add a {log_category}: \"{nf}\" (from group: {event.group_id})\n")
+            file.write(f"[{now}] {event.user_id} Add a {log_category}: \"{nf}\" (from group: {group_id})\n")
 
     await matcher.finish(
         f"小梨已经把以下的餐点添加到{('食物' if category == '吃' else '饮品')}列表啦！\n{'；'.join(new_food_list)}")
