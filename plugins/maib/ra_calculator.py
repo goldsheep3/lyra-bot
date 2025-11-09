@@ -3,7 +3,7 @@ from typing import Tuple, Dict, Optional
 from nonebot import logger
 from nonebot.internal.matcher import Matcher
 
-from .utils import DifficultyVariant, RATE_FACTOR_TABLE, DIFFICULTY_MAP, init_difficulty
+from .utils import DifficultyVariant, DIFFICULTY_MAP, init_difficulty, _ra_calculate
 
 
 # 完成率别名映射
@@ -66,12 +66,7 @@ def _calculate(level: float, rate_str: str) -> Optional[Tuple[int, float]]:
         rate = rate_alias_map.get(rate_str.lower())
         if rate is None:
             return None
-    factor = 0.0
-    for rate_standard, factor in RATE_FACTOR_TABLE:
-        if rate >= rate_standard:
-            factor = factor
-            break
-    d = int(level * rate * factor)
+    d = _ra_calculate(level, rate)
     return d, rate
 
 
@@ -83,6 +78,6 @@ async def calculate_rating(matcher: Matcher, level: float, rate_str: str, song_i
         return
 
     song_text = "" if not song_info else \
-        f"[{song_info['chart']}]{song_info['title']} {DIFFICULTY_MAP[song_info['difficult'].simai]}谱的数据"
+        f"[{song_info['chart']}]{song_info['title']} {DIFFICULTY_MAP[song_info['difficult']]}谱的数据"
 
     await matcher.finish(f"小梨算出来{song_text}咯！\n定数{level}*{result[1]:.4f}% -> Rating: {result[0]}")
