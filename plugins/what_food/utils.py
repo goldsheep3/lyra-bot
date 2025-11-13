@@ -364,8 +364,7 @@ class EatableMenu:
             return False  # 不存在 Superuser
         return user_id in self.super_users
 
-    def add_item(self, item: Eatable, group_id=-1) -> bool:
-        """添加餐点到相应列表"""
+    def _add_item(self, item: Eatable, group_id=-1, score: Literal[1, 2, 3, 4, 5] = 3) -> bool:
         target_set = set([v.name for v in self.menu.values()])  # 转为集合以便判断重复
         old_count = len(target_set)
         target_set.add(item.name)
@@ -377,19 +376,26 @@ class EatableMenu:
             item.num = self._get_max_id() + 1
         self.menu.update({item.num: item})
 
-        # 保存到文件
-        self._save_menu()
         # 记录添加历史
         self._add_history('Add', item, None, item.adder, group_id)
+        self.set_score(item.num, score, item.adder, group_id)  # 初始评分
         self._get_items_with_averages()  # 重排 (item, avg)
         return True  # Successfully added
 
-    def add_items(self, items: list[Eatable], group_id=-1) -> List[Eatable]:
+    def add_item(self, item: Eatable, group_id=-1, score: Literal[1, 2, 3, 4, 5] = 3) -> bool:
+        """添加餐点到相应列表"""
+        if self._add_item(item, group_id, score):
+            self._save_menu()
+            return True
+        return False
+
+    def add_items(self, items: list[Eatable], group_id=-1, score: Literal[1, 2, 3, 4, 5] = 3) -> List[Eatable]:
         """批量添加餐点，返回实际添加的项目列表"""
         added_items = []
         for item in items:
-            if self.add_item(item, group_id):
+            if self._add_item(item, group_id, score):
                 added_items.append(item)
+        self._save_menu()
         return added_items
 
     def get_items(self) -> List[Eatable]:
@@ -425,7 +431,7 @@ class EatableMenu:
             self._add_history('Score', item, score_value, user_id, group_id)
             count += 1
         self._get_items_with_averages()  # 重排 (item, avg)
-        return round(count / len(data), 2)  # 返回的是成功比例100*约数
+        return round(count / len(data), 4)  # 返回的是成功比例100*约数
 
     def set_is_wine(self, item_id: int, is_wine: bool, user_id: int, group_id: int = -1) -> bool:
         """设置指定 ID 餐点的酒精状态"""
@@ -452,10 +458,7 @@ class EatableMenu:
         return None
 
     def get_items_if_no_score(self, user_id: int) -> Optional[List[Eatable]]:
-        """
-        确认该用户未评分的食物及饮品列表
-        使用列表时注意切分。
-        """
+        """确认该用户未评分的食物及饮品列表"""
         if user_id not in self.score.user_id_to_index:
             # 根本未评分，直接返回
             return self.get_items()

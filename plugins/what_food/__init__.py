@@ -71,10 +71,10 @@ async def _(event: MessageEvent, matcher: Matcher):
     await matcher.finish(message)
 
 
-on_this_is_wine = on_regex(r"^([吃喝])这个\s+(.+)\s+((没)?有)酒$", priority=5, block=True)
+on_this_food = on_regex(r"^([吃喝])这个\s+(.+)\s+((没)?有)酒$", priority=5, block=True)
 
 
-@on_this_is_wine.handle()
+@on_this_food.handle()
 async def _(event: MessageEvent, matcher: Matcher):
     """处理命令: 吃这个 xxx 有酒/ 喝这个 xxx 没有酒"""
     user_id, group_id = get_event_info(event)
@@ -87,6 +87,16 @@ async def _(event: MessageEvent, matcher: Matcher):
 
     new_items: List[Eatable] = list()
     exist_items: List[Eatable] = list()
+
+    # 预检查
+    for item_name in item_names:
+        try:
+            int(item_name)
+            await matcher.finish("真的有纯数字的餐点吗（\n使用餐点ID或纯数字餐点名称会导致问题，不可以这么做哦")
+            return
+        except ValueError | TypeError:
+            pass
+
     for item_name in item_names:
         # 查找对应的食物或饮品，如果不存在则直接添加，否则修改酒精属性
         item_id = menu.get_item_id_by_name(item_name)
@@ -107,7 +117,7 @@ async def _(event: MessageEvent, matcher: Matcher):
             new_items.append(item)
     msg: List[str] = list()
     if new_items:
-        msg.append(f"小梨已经把以下的餐点添加到餐点列表，并且标记为{"含有" if is_wine else "不含"}酒精咯！\n"
+        msg.append(f"小梨已经把以下{"含有" if is_wine else "不含"}酒精的餐点添加到餐点列表咯！\n"
                    f"{'；'.join([f"{item_show_id_text(item)}{item.name}" for item in new_items])}")
     if exist_items:
         msg.append(f"小梨已经把以下的餐点标记为{"含有" if is_wine else "不含"}酒精咯！\n"
@@ -121,73 +131,56 @@ async def _(event: MessageEvent, matcher: Matcher):
     await matcher.finish("小梨好像看到了棍母……（\n*意外错误，请检查消息条格式并反馈")
 
 
-on_this_food = on_regex(r"^([吃喝])这个\s+(.+)$", priority=3, block=True)
+on_score = on_regex(r"^好([吃喝])吗\s+(.+?)(?:\s+(-?\d+))?$", priority=3, block=True)
 
 
-@on_this_food.handle()
+@on_score.handle()
 async def _(event: MessageEvent, matcher: Matcher):
-    """处理命令: 吃这个 xxx / 喝这个 xxx"""
-
+    """统一处理：没有分数则查询；有分数则评分（支持 id 或 名称）"""
     user_id, group_id = get_event_info(event)
     matched = matcher.state["_matched"]
-    category, content = matched.groups()
+    category, item_key_str, score_str = matched.groups()
     menu = menu_manager.get_menu(category)
 
-    new_items = [menu.cls(name, user_id, menu.score, False) for name in content_cut(content)]
+    key = item_key_str.strip()
 
-    new_items_ok = menu.add_items(new_items, group_id)
+    # 先尝试把 key 转为 int 来判断是 id 还是名称
+    try:
+        item_id = int(key)
+        item = menu.get_item(item_id)
+    except (ValueError, KeyError):
+        # 不是整数或通过 id 未找到，就按名称查找
+        item = menu.get_item_by_name(key)
+    if item is None:
+        await matcher.finish(f"未找到菜品：{key}")
 
-    if not new_items_ok:
-        await matcher.finish(f"这些餐点在小梨的菜单上已经都有了喔——")
-    await matcher.finish(
-        "小梨已经把以下的餐点添加到餐点列表，并且标记为不含酒精咯！\n" +
-        f"{'；'.join([f"{item_show_id_text(item)}{item.name}" for item in new_items_ok])}")
+    # 如果没有附带分数，走查询分数路径
+    if score_str is None:
+        await matcher.finish(f"据小梨的菜单数据，{item_show_id_text(item)}{item.name} 现在是 {item.get_score():.2f} 分喔！")
+        return
 
-
-on_score_set = on_regex(r"^好([吃喝])吗\s+(\d+)\s+(-?[0-9])$", priority=4, block=True)
-
-
-@on_score_set.handle()
-async def _(event: MessageEvent, matcher: Matcher):
-    """处理命令: 好吃吗 123 4 / 好喝吗 456 -3"""
-    user_id, group_id = get_event_info(event)
-    matched = matcher.state["_matched"]
-    category, item_id_str, score_str = matched.groups()
-    menu = menu_manager.get_menu(category)
-
-    item_id = int(item_id_str)
+    # 有分数，走评分路径
     score = int(score_str)
-    item = menu.get_item(item_id)
-
     if user_id in super_user_int:
-        r = menu.set_score_from_super_user({item_id: score}, user_id, group_id)
+        # superuser 可以提交任意整数分
+        r = menu.set_score_from_super_user({item.num: score}, user_id, group_id)
         if r // 1 == 1:
-            # 成功
-            await matcher.finish(f"小梨已经收到 Superuser Score 数据 ({user_id} -> {score})！\n"
-                                 f"Score: {item_show_id_text(item)}{item.name} -> {item.get_score():.2f}")
+            await matcher.finish(
+                f"小梨已经收到 Superuser Score 数据 ({user_id} -> {score})！\n"
+                f"Score: {item_show_id_text(item)}{item.name} -> {item.get_score():.2f}"
+            )
+        else:
+            await matcher.finish("Superuser Score 提交失败。")
     else:
+        # 普通用户评分限制为 1~5
         if 0 < score < 6:
-            menu.set_score(item_id, cast(Literal[1, 2, 3, 4, 5], score), user_id, group_id)
-            await matcher.finish(f"已经记录评分！你当前为 {item_show_id_text(item)}{item.name} 给出了{score}分的分数。"
-                                 f"目前评分均值在{item.get_score():.2f}")
+            menu.set_score(item.num, cast(Literal[1, 2, 3, 4, 5], score), user_id, group_id)
+            await matcher.finish(
+                f"已经记录评分！你当前为 {item_show_id_text(item)}{item.name} 给出了{score}分的分数。"
+                f"目前评分均值在{item.get_score():.2f}"
+            )
         else:
             await matcher.finish("评分只能用1~5的整数评分哦~")
-
-
-on_score_get = on_regex(r"^好([吃喝])吗\s+(\d+)$", priority=2, block=True)
-
-
-@on_score_get.handle()
-async def _(matcher: Matcher):
-    """处理命令: 好吃吗 123 / 好喝吗 456"""
-    matched = matcher.state["_matched"]
-    category, item_id_str = matched.groups()
-    menu = menu_manager.get_menu(category)
-
-    item_id = int(item_id_str)
-    item = menu.get_item(item_id)
-
-    await matcher.finish(f"据小梨的菜单数据，{item_show_id_text(item)}{item.name} 现在是 {item.get_score():.2f} 分喔！")
 
 
 on_score_filter = on_regex(r"^可以吃\s+(.+)$", priority=1, block=True)
@@ -224,6 +217,7 @@ on_score_rank = on_regex(r"^([吃喝])什么排行榜\s*(\d*)$", priority=10, bl
 @on_score_rank.handle()
 async def _(matcher: Matcher):
     """处理命令: 吃什么排行榜 / 喝什么排行榜2"""
+    return  # 暂时不可用
     matched = matcher.state["_matched"]
     category, page = matched.groups()
     menu = menu_manager.get_menu(category)
@@ -274,5 +268,5 @@ async def _(event: MessageEvent, matcher: Matcher):
             user_id, group_id)
         result = result_food + result_drink
         await matcher.finish("[Superuser] "
-                            f"成功评分率:{result*100:.4f}%。"
+                             f"成功评分率:{result*100:.4f}%。"
                              "检查日志获取详细信息。")
