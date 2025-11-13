@@ -18,6 +18,7 @@ from nonebot.adapters.onebot.v11 import Bot, Event
 class NotExistChart(Exception): pass
 
 
+# noinspection DuplicatedCode
 class BadLogger:
     """在无 nonebot2 日志记录器情况下的占位类"""
     @staticmethod

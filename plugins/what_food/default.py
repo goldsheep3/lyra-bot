@@ -57,3 +57,20 @@ WINES = (
     "啤酒", "红酒", "白酒", "鸡尾酒", "清酒",
     "梅酒", "烧酒", "威士忌", "朗姆酒", "伏特加",
 )
+
+
+food_init_dict = {
+    food[i+1]: {"name": food, "is_wine": False, "adder": -1, "enabled": True}
+    for i, food in enumerate(FOODS)
+}
+
+drink_init_dict = {
+    **{
+        drink[i+1]: {"name": drink, "is_wine": False, "adder": -1, "enabled": True}
+        for i, drink in enumerate(DRINKS)
+    },
+    **{
+        wine_drink[len(DRINKS) + i + 1]: {"name": wine_drink, "is_wine": True, "adder": -1, "enabled": True}
+        for i, wine_drink in enumerate(DRINKS)
+    }
+}

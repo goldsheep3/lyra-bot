@@ -1,44 +1,54 @@
+import csv
 import json
+import random
 import numpy as np
 from pathlib import Path
 from datetime import datetime
-from typing import Literal, List, Optional, Dict, Set, Type, Union
+from typing import Literal, List, Optional, Dict, Set, Type, Tuple
 
-import nonebot
+from .default import food_init_dict, drink_init_dict
 
-nonebot.require("nonebot_plugin_localstore")
-from nonebot_plugin_localstore import get_plugin_data_dir as get_data_dir
-from nonebot_plugin_localstore import get_plugin_cache_dir as get_cache_dir
 
-from .default import FOODS, DRINKS, WINES
+# noinspection DuplicatedCode
+class BadLogger:
+    """在无 nonebot2 日志记录器情况下的占位类"""
+    @staticmethod
+    def critical(msg: str): print("CRITICAL:", msg)
+    @staticmethod
+    def success(msg: str): print("SUCCESS:", msg)
+    @staticmethod
+    def trace(msg: str): print("TRACE:", msg)
+    @staticmethod
+    def debug(msg: str): print("DEBUG:", msg)
+    @staticmethod
+    def info(msg: str): print("INFO:", msg)
+    @staticmethod
+    def warning(msg: str): print("WARNING:", msg)
+    @staticmethod
+    def error(msg: str): print("ERROR:", msg)
 
 
 def content_cut(text: str) -> List[str]:
     """辅助拆分函数"""
-    tags = [",", ".", ";", "，", "。", "；", "/", "、"]
+    tags = [",", ".", "，", "。", "；", "/", "、"]
     for tag in tags:
-        text = text.replace(tag, " ")
-    result = [f.strip() for f in text.split(" ") if f]
+        text = text.replace(tag, ";")
+    result = [f.strip() for f in text.split(";") if f]
     return result
 
 
 class Score:
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, super_users: Optional[Set[int]] = None, nb_logger=BadLogger()):
+        self.logger = nb_logger
+
         self.path = path
         self.data = None
-        self.food_ids = []  # 存储food_id的映射
+        self.item_ids = []  # 存储item_id的映射
         self.user_ids = []  # 存储user_id的映射
-        self.food_id_to_index = {}  # food_id到索引的映射
+        self.item_id_to_index = {}  # item_id到索引的映射
         self.user_id_to_index = {}  # user_id到索引的映射
 
-        self.super_users: Set[int] = set()
-        super_users_str = nonebot.get_driver().config.superusers
-        for user_id_str in super_users_str:
-            try:
-                user_id = int(user_id_str)
-                self.super_users.add(user_id)
-            except ValueError:
-                continue
+        self.super_users: Set[int] = super_users if super_users else set()
 
         if path.exists():
             self._load_from_file()
@@ -49,70 +59,72 @@ class Score:
         self._precompute_super_user_indices()
 
     def _precompute_super_user_indices(self):
-        """预先计算超级用户索引"""
-        self.super_user_indices = np.array([
-            self.user_id_to_index[user_id] for user_id in self.super_users
-            if user_id in self.user_id_to_index
-        ])
-        self.super_user_index_set = set(self.super_user_indices)
+        """预先计算超级用户索引，保证类型一致（整型）"""
+        indices = [self.user_id_to_index[user_id] for user_id in self.super_users if user_id in self.user_id_to_index]
+        if len(indices) == 0:
+            self.super_user_indices = np.array([], dtype=int)
+        else:
+            self.super_user_indices = np.array(indices, dtype=int)
+        # 存为 Python int 的集合，方便成员判断与序列化
+        self.super_user_index_set = set(int(x) for x in self.super_user_indices)
 
     def _load_from_file(self):
         """从.npz文件加载数据"""
         try:
             with np.load(self.path) as npz_file:
                 self.data = npz_file['data']
-                self.food_ids = npz_file['food_ids'].tolist()
+                self.item_ids = npz_file['item_ids'].tolist()
                 self.user_ids = npz_file['user_ids'].tolist()
 
                 # 重建索引映射
-                self.food_id_to_index = {fid: idx for idx, fid in enumerate(self.food_ids)}
+                self.item_id_to_index = {fid: idx for idx, fid in enumerate(self.item_ids)}
                 self.user_id_to_index = {uid: idx for idx, uid in enumerate(self.user_ids)}
 
         except Exception as e:
             raise ValueError(f"加载文件失败: {e}")
 
-    def _ensure_capacity(self, food_id: int, user_id: int):
-        """确保数组有足够的容量来存储指定的food_id和user_id"""
+    def _ensure_capacity(self, item_ids: List[int], user_id: int):
+        """确保数组有足够的容量来存储指定的 item_id 和 user_id。可能同时扩展多个 item_id。"""
         need_resize = False
-        new_shape = list(self.data.shape)
 
-        # 检查是否需要扩展food_id维度
-        if food_id not in self.food_id_to_index:
-            new_food_index = len(self.food_ids)
-            self.food_ids.append(food_id)
-            self.food_id_to_index[food_id] = new_food_index
-            new_shape[0] = len(self.food_ids)
-            need_resize = True
+        # 先处理 item_ids（可能是批量）
+        for item_id in item_ids:
+            if item_id not in self.item_id_to_index:
+                new_item_index = len(self.item_ids)
+                self.item_ids.append(item_id)
+                self.item_id_to_index[item_id] = new_item_index
+                need_resize = True
 
-        # 检查是否需要扩展user_id维度
+        # 然后处理 user_id
         if user_id not in self.user_id_to_index:
             new_user_index = len(self.user_ids)
             self.user_ids.append(user_id)
             self.user_id_to_index[user_id] = new_user_index
-            new_shape[1] = len(self.user_ids)
             need_resize = True
 
-        # 如果需要调整大小，扩展数组
+        # 如果需要调整大小，扩展数组（一次性）
         if need_resize:
-            if self.data.size == 0:
+            new_shape = [len(self.item_ids), len(self.user_ids)]
+            if self.data is None or self.data.size == 0:
                 self.data = np.zeros(new_shape, dtype=int)
             else:
                 new_data = np.zeros(new_shape, dtype=int)
-                # 复制旧数据到新数组
                 rows = min(self.data.shape[0], new_shape[0])
                 cols = min(self.data.shape[1], new_shape[1])
                 new_data[:rows, :cols] = self.data[:rows, :cols]
                 self.data = new_data
 
-    def get_average(self, food_id: int) -> float:
-        """计算food_id对应的所有非0评分的平均值"""
-        if food_id not in self.food_id_to_index:
+        self._precompute_super_user_indices()  # 同步 superuser 索引数据
+
+    def get_score(self, item_id: int) -> float:
+        """计算item_id对应的所有非0评分的平均值"""
+        if item_id not in self.item_id_to_index:
             return 0.0
 
         multiplier: int = 30
 
-        food_index = self.food_id_to_index[food_id]
-        scores = self.data[food_index, :]
+        item_index = self.item_id_to_index[item_id]
+        scores = self.data[item_index, :]
 
         non_zero_mask = scores != 0
         non_zero_scores = scores[non_zero_mask]
@@ -134,25 +146,43 @@ class Score:
 
         return round(avg_score, 2)
 
-    def set_score(self, food_id: int, score: Literal[1, 2, 3, 4, 5], user_id: int):
-        """设置或更新评分"""
+    def _set_score(self, data: Dict[int, int], user_id: int):
+        """
+        :param data: {item_id: score}
+        :param user_id: 用户ID
+        """
         # 确保容量
-        self._ensure_capacity(food_id, user_id)
+        self._ensure_capacity([item_id for item_id in data.keys()], user_id)
+        for item_id, score in data.items():
+            # 获取索引
+            item_index = self.item_id_to_index[item_id]
+            user_index = self.user_id_to_index[user_id]
+            # 设置评分
+            self.data[item_index, user_index] = score
 
-        # 获取索引
-        food_index = self.food_id_to_index[food_id]
-        user_index = self.user_id_to_index[user_id]
+    def set_score(self, item_id: int, score: int, user_id: int):
+        """设置或更新评分"""
+        self._set_score({item_id: score}, user_id)
+        self.save()
 
-        # 设置评分
-        self.data[food_index, user_index] = score
+    def set_scores(self, data: Dict[int, int], user_id: int):
+        """
+        批量设置或更新评分
+
+        :param data: { item_id: score }
+        :param user_id: 用户ID
+        """
+        self._set_score(data, user_id)
+        self.save()
 
     def save(self):
         """保存数据到.npz文件"""
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             # 使用临时文件避免写入过程中出错
-            temp_path = self.path.with_suffix('.tmp')
-            np.savez(temp_path, data=self.data, food_ids=np.array(self.food_ids), user_ids=np.array(self.user_ids))
+            temp_path = self.path.parent / "temp_bcfa7f6.npz"
+            temp_path.unlink(missing_ok=True)
+            np.savez(temp_path, data=self.data, item_ids=np.array(self.item_ids), user_ids=np.array(self.user_ids))
             temp_path.replace(self.path)  # 原子操作替换
         except Exception as e:
             # 记录日志
@@ -160,6 +190,8 @@ class Score:
 
 
 class Eatable:
+    category: str = 'Eatable'
+
     def __init__(self, name: str, adder: int, score: Score, is_wine: bool = False,
                  enabled: bool = True, num: int = -10):
         # num = -10: 未指定 ID，添加时由 Menu 类分配
@@ -170,13 +202,12 @@ class Eatable:
         # Score 规则: 喜欢的餐点(1), 不错的餐点(2), 也可以说成餐点(3), 不喜欢这个餐点(4), 不适合作为餐点(5)
         self.score: Score = score
         self.enabled: bool = enabled
-        self.category: str = 'Eatable'  # 子类中重写
 
-    def average_score(self) -> float:
+    def get_score(self) -> float:
         """计算平均评分"""
-        return self.score.get_average(self.num)
+        return self.score.get_score(self.num)
 
-    def set_score(self, score_value: Literal[1, 2, 3, 4, 5], user_id: int):
+    def set_score(self, score_value: int, user_id: int):
         """设置评分"""
         self.score.set_score(self.num, score_value, user_id)
 
@@ -189,139 +220,153 @@ class Drink(Eatable):
     category = 'Drink'
 
 
-class Menu:
+class EatableMenu:
     """菜单数据类"""
+    def __init__(self, cls: Type[Eatable], default_data: Dict[int, Dict[str, bool | int | str]],
+                 dir_path: Path, cache_dir_path: Path, super_users: Optional[Set[int]] = None, nb_logger=BadLogger()):
+        self.logger = nb_logger
 
-    def __init__(self):
-        dir_path = get_data_dir()
         dir_path.mkdir(parents=True, exist_ok=True)
+        cache_dir_path.mkdir(parents=True, exist_ok=True)
+        self.cache_dir = cache_dir_path
+        self.default_data = default_data
+        self.super_users = super_users if super_users else set()
 
-        self.foods_path = dir_path / "foods.json"
-        self.drinks_path = dir_path / "drinks.json"
+        self.cls: Type[Eatable] = cls
+        self.data_path = dir_path / f"{self.cls.category}.json"
+        self.score = Score(dir_path / f"{self.cls.category}_scores.npz", super_users)
+        self.menu: Dict[int, Eatable] = dict()
+        self._load_menu()
 
-        self.food_score = Score(dir_path / "foods_score.npz")
-        self.drink_score = Score(dir_path / "drinks_score.npz")
-        # 加载菜单数据
-        self.foods: Dict[int, Food] = self._load_menu(Food, self.food_score)
-        self.drinks: Dict[int, Drink] = self._load_menu(Drink, self.drink_score)
+        self.item_avg_pairs: List[Tuple[Eatable, float]] = []
+        self._get_items_with_averages()
 
-    @staticmethod
-    def _add_history(category: Literal['Add', 'Score', 'Wine'], item: Eatable, score: Optional[int],
-                     user_id: int, group_id: int = -1,) -> None:
+    def _load_json(self, num: int = 0, e: Optional[Exception] = None) -> Dict[int, Dict[str, bool | int | str]]:
+        """从文件加载菜单数据，若文件不存在则创建默认数据，返回转 int 后的原始数据"""
+        if num > 2:
+            raise e  # 递归次数过多
+        if not self.data_path.exists():
+            with open(self.data_path, "w", encoding="utf-8") as file:
+                json.dump(self.default_data, file, ensure_ascii=False, indent=2)
+
+        try:
+            with open(self.data_path, "r", encoding="utf-8") as file:
+                data: Dict[str, Dict[str, bool | int | str]] = json.load(file)
+        except ValueError as e:
+            self.logger.error(f"加载数据产生 ValueError，为预防文件问题，终端插件运行。错误详情：\n{e}")
+            raise e  # 重新抛出
+        except Exception as e:
+            try:
+                self.data_path.unlink()
+            except Exception as ex:
+                self.logger.error(f"{ex}")
+            return self._load_json(num+1, e)  # 利用递归重新加载
+        return {int(eid): e for eid, e in data.items()}
+
+    def _load_menu(self) -> None:
+        """加载菜单数据，返回 Food 或 Drink 实例的字典"""
+        menu: Dict[int, Dict[str, bool | int | str]] = self._load_json()
+
+        items: Dict[int, Eatable] = {}
+        for item_id, attrs in menu.items():
+            item = self.cls(
+                num=item_id,
+                name=attrs.get("name", "Unknown Food"),
+                adder=attrs.get("adder", -1),
+                score=self.score,
+                is_wine=attrs.get("is_wine", False),
+                enabled=attrs.get("enabled", False)
+            )
+            items[item_id] = item
+
+        self.menu = items
+
+    def _save_menu(self) -> None:
+        """保存菜单数据到文件"""
+        # 存储时，key 必须为 str
+        items: Dict[str, Dict[str, bool | int | str]] = {
+            str(item.num): {
+                "name": item.name,
+                "is_wine": item.is_wine,
+                "adder": item.adder,
+                "enabled": item.enabled
+            }
+            for item in self.menu.values()
+        }
+
+        with open(self.data_path, "w", encoding="utf-8") as file:
+            json.dump(items, file, ensure_ascii=False, indent=2)
+
+        # 再尝试保存一次
+        self.score.save()
+
+    def _get_items_with_averages(self) -> List[Tuple[Eatable, float]]:
+        """预计算 (item, avg) 列表以便重复使用"""
+        pairs: List[Tuple[Eatable, float]] = []
+        for item in self.get_items():
+            avg = item.get_score()
+            pairs.append((item, avg))
+        pairs.sort(key=lambda x: x[1])  # 依据评分顺序返回
+        self.item_avg_pairs = pairs
+        return pairs
+
+    def _add_history(self, category: Literal['Add', 'Score', 'Wine', 'Ban'], item: Eatable, score: Optional[int],
+                     user_id: int, group_id: int = -1) -> None:
         """添加历史记录"""
         now = datetime.now()
         now_date = now.strftime('%Y%m%d')
         now_time = now.strftime('%H:%M:%S')
-        history_path = get_cache_dir() / "logs" / f"menu_{category.lower()}_history_{now_date}.csv"
+        history_path = self.cache_dir / "logs" / f"menu_{category.lower()}_history_{now_date}.csv"
         if not history_path.parent.exists():
             history_path.parent.mkdir(parents=True, exist_ok=True)
-        if not history_path.exists():
-            with open(history_path, "w", encoding="utf-8") as file:
-                if category == 'Add':
-                    file.write("time,user_id,category,food_id,name,group_id\n")
-                elif category == 'Score':
-                    file.write("time,user_id,category,food_id,score,group_id\n")
-                elif category == 'Wine':
-                    file.write("time,user_id,category,food_id,is_wine,group_id\n")
 
-        with open(history_path, "a", encoding="utf-8") as file:
-            if category == 'Add':
-                file.write(f"{now_time},{user_id},{item.category},{item.num},\"{item.name}\",{group_id}\n")
-            elif category == 'Score' and score is not None:
-                file.write(f"{now_time},{user_id},{category},{item.num},{score},{group_id}\n")
-            elif category == 'Wine':
-                file.write(f"{now_time},{user_id},{category},{item.num},{item.is_wine},{group_id}\n")
+        # 根据 category 确定第四列信息字段名
+        info4_name = {
+            "Add": "name",
+            "Score": "score",
+            "Wine": "is_wine",
+            "Ban": "is_ban",
+        }.get(category, "info")
 
-    def _save_menu(self, cls: Optional[Type[Union[Food, Drink]]],
-                   init_dict: Optional[Dict[int, Dict[str, bool | int | str]]] = None) -> None:
-        """保存菜单数据到文件"""
-        """
-        Dict[int, Dict[str, bool | int | str]]
-        { 1, {"name": "烤冷面", "is_wine": false, "adder": -1, "enabled": true} }
-        """
-        if not cls:
-            # 无参 -> 保存所有类别
-            self._save_menu(Food)
-            self._save_menu(Drink)
-            return
+        # 使用 csv 模块写入，保证 header 与每行列数一致
+        write_header = not history_path.exists()
+        with open(history_path, "a", encoding="utf-8", newline='') as file:
+            writer = csv.writer(file)
+            if write_header:
+                writer.writerow(["time", "user_id", "category", "item_id", info4_name, "group_id"])
 
-        fpath = {Food: self.foods_path, Drink: self.drinks_path}.get(cls)
-        items = {Food: self.foods, Drink: self.drinks}.get(cls)
-        foods: Dict[int, Dict[str, bool | int | str]] = {
-            item.num: {
-                "name": item.name,
-                "is_wine": item.is_wine,
-                "adder": item.adder,
-                "enabled": True
-            }
-            for item in items.values()
-        } if init_dict is None else init_dict
+            # 选择 info4 的实际值
+            if category == "Add":
+                info4 = item.name
+            elif category == "Score":
+                # 若没有 score 参数则跳过写入（评分记录必须包含分数）
+                if score is None:
+                    return
+                info4 = score
+            elif category == "Wine":
+                info4 = item.is_wine
+            elif category == "Ban":
+                info4 = item.enabled
+            else:
+                info4 = "unknown"
 
-        with open(fpath, "w", encoding="utf-8") as file:
-            json.dump(foods, file, ensure_ascii=False, indent=2)
+            writer.writerow([now_time, user_id, item.category, item.num, info4, group_id])
 
-        score = {Food: self.food_score, Drink: self.drink_score}.get(cls)
-        score.save()
+    def _get_max_id(self) -> int:
+        """获取最大 ID"""
+        if len(self.menu) < 1:
+            return 0  # 初始值
+        return max(self.menu.keys())
 
-    def _load_json(self, cls) -> Dict[int, Dict[str, bool | int | str]]:
-        """从文件加载菜单数据，若文件不存在则创建默认数据，返回原始数据"""
-        """
-        Dict[int, Dict[str, bool | int | str]]
-        { 1, {"name": "烤冷面", "is_wine": false, "adder": -1, "enabled": true} }
-        """
-        fpath = self.foods_path if cls == Food else self.drinks_path
-        if not fpath.exists():
-            default: List[str] = FOODS if cls == Food else DRINKS
-            d = dict()
-            for i, name in enumerate(default):
-                d[i+1] = {"name": name, "is_wine": False, "adder": -1, "enabled": True}
-            if default == DRINKS:
-                for j, name in enumerate(WINES):
-                    d[len(default)+j+1] = {"name": name, "is_wine": True, "adder": -1, "enabled": True}
-            self._save_menu(cls, d)
-        with open(fpath, "r", encoding="utf-8") as file:
-            try:
-                data: Dict[int, Dict[str, bool | int | str]] = json.load(file)
-            except json.JSONDecodeError:
-                # 文件损坏，删除原有数据
-                # logger.
-                fpath.unlink()
-                return self._load_json(cls)  # 利用递归重新加载
-        return data
+    def _is_superuser(self, user_id) -> bool:
+        """检查是否为 Superuser"""
+        if self.super_users is None:
+            return False  # 不存在 Superuser
+        return user_id in self.super_users
 
-    def _load_menu(self, cls: Type[Union[Food, Drink]], score: Score) -> Dict[int, Food | Drink]:
-        """加载菜单数据，返回 Food 或 Drink 实例的字典"""
-        menu: Dict[int, Dict[str, bool | int | str]] = self._load_json(cls)
-
-        foods: Dict[int, Food | Drink] = {}
-        for food_id, attrs in menu.items():
-            item = cls(
-                num=food_id,
-                name=attrs["name"],
-                adder=attrs.get("adder", -1),
-                score=score,
-                is_wine=attrs.get("is_wine", False),
-                enabled=attrs.get("enabled", False)
-            )
-            foods[food_id] = item
-
-        return foods
-
-    def _get_max_id(self, cls) -> int:
-        """获取当前类别的最大 ID"""
-        items = self.foods if cls == Food else self.drinks
-        if not items: return 0
-        return max(items.keys())
-
-    def add_eatable(self, item: Food | Drink, user_id, group_id=-1) -> bool:
-        """添加食物或饮品到相应列表"""
-        if isinstance(item, Food):
-            target_dict = self.foods
-        elif isinstance(item, Drink):
-            target_dict = self.drinks
-        else: return False  # Unsupported type
-
-        target_set = set([v.name for v in target_dict.values()])  # 转为集合以便判断重复
+    def add_item(self, item: Eatable, group_id=-1) -> bool:
+        """添加餐点到相应列表"""
+        target_set = set([v.name for v in self.menu.values()])  # 转为集合以便判断重复
         old_count = len(target_set)
         target_set.add(item.name)
         if not len(target_set) > old_count:
@@ -329,84 +374,232 @@ class Menu:
 
         # 确认存在，分配 ID
         if item.num == -10:
-            item.num = self._get_max_id(type(item)) + 1
-        target_dict.update({item.num: item})
+            item.num = self._get_max_id() + 1
+        self.menu.update({item.num: item})
 
         # 保存到文件
-        self._save_menu(type(item))
+        self._save_menu()
         # 记录添加历史
-        self._add_history('Add', item, None, user_id, group_id)
+        self._add_history('Add', item, None, item.adder, group_id)
+        self._get_items_with_averages()  # 重排 (item, avg)
         return True  # Successfully added
 
-    def add_eatables(self, items: list[Food | Drink], user_id, group_id=-1) -> List[Food | Drink]:
-        """批量添加食物或饮品，返回实际添加的项目列表"""
+    def add_items(self, items: list[Eatable], group_id=-1) -> List[Eatable]:
+        """批量添加餐点，返回实际添加的项目列表"""
         added_items = []
         for item in items:
-            if self.add_eatable(item, user_id, group_id):
+            if self.add_item(item, group_id):
                 added_items.append(item)
         return added_items
 
-    def get_foods(self) -> List[Food]:
-        """获取所有食物列表"""
-        return [food for food in self.foods.values() if food.enabled]
+    def get_items(self) -> List[Eatable]:
+        """获取所有餐点列表"""
+        return [item for item in self.menu.values() if item.enabled]
 
-    def get_drinks(self) -> List[Drink]:
-        """获取所有饮品列表"""
-        return [drink for drink in self.drinks.values() if drink.enabled]
+    def get_item(self, item_id: int) -> Optional[Eatable]:
+        """获取指定 ID 的餐点"""
+        return self.menu.get(item_id, None)
 
-    def get_food(self, food_id: int) -> Optional[Food]:
-        """获取指定 ID 的食物"""
-        food = self.foods.get(food_id, None)
-        return food
-
-    def get_drink(self, drink_id: int) -> Optional[Drink]:
-        """获取指定 ID 的饮品"""
-        drink = self.drinks.get(drink_id, None)
-        return drink
-
-    def set_food_score(self, food_id: int, score_value: Literal[1, 2, 3, 4, 5], user_id: int) -> bool:
-        """设置指定 ID 食物的评分"""
-        food = self.get_food(food_id)
-        if not food: return False
-        food.set_score(score_value, user_id)
-        self._add_history('Score', food, score_value, user_id)
+    def set_score(self, item_id: int, score_value: Literal[1, 2, 3, 4, 5], user_id: int, group_id: int = -1) -> bool:
+        """设置指定 ID 餐点的评分"""
+        item = self.get_item(item_id)
+        if not item:
+            return False
+        item.set_score(score_value, user_id)
+        self._add_history('Score', item, score_value, user_id, group_id)
+        self._get_items_with_averages()  # 重排 (item, avg)
         return True
 
-    def set_drink_score(self, drink_id: int, score_value: Literal[1, 2, 3, 4, 5], user_id: int) -> bool:
-        """设置指定 ID 饮品的评分"""
-        drink = self.get_drink(drink_id)
-        if not drink: return False
-        drink.set_score(score_value, user_id)
-        self._add_history('Score', drink, score_value, user_id)
+    def set_score_from_super_user(self, data: Dict[int, int], user_id: int, group_id: int = -1) -> float:
+        """Superuser 设置的餐点评分（支持批量），通过非1~5的评分实现特殊权重效果"""
+        if self.super_users is None or user_id not in self.super_users:
+            return -1  # 仅限 Superuser
+        count = 0
+        for item_id, score_value in data.items():
+            item = self.get_item(item_id)
+            if not item:
+                break
+            item.set_score(score_value, user_id)
+            self._add_history('Score', item, score_value, user_id, group_id)
+            count += 1
+        self._get_items_with_averages()  # 重排 (item, avg)
+        return round(count / len(data), 2)  # 返回的是成功比例100*约数
+
+    def set_is_wine(self, item_id: int, is_wine: bool, user_id: int, group_id: int = -1) -> bool:
+        """设置指定 ID 餐点的酒精状态"""
+        item = self.get_item(item_id)
+        if not item:
+            return False
+        item.is_wine = is_wine
+        self._save_menu()
+        self._add_history('Wine', item, None, user_id, group_id)
         return True
 
-    def set_food_wine(self, food_id: int, is_wine: bool, user_id: int, group_id: int = -1) -> bool:
-        """设置指定 ID 食物是否为酒类"""
-        food = self.get_food(food_id)
-        if not food: return False
-        food.is_wine = is_wine
-        self._save_menu(Food)
-        self._add_history('Wine', food, None, user_id, group_id)
-        return True
-
-    def set_drink_wine(self, drink_id: int, is_wine: bool, user_id: int, group_id: int = -1) -> bool:
-        """设置指定 ID 饮品是否为酒类"""
-        drink = self.get_drink(drink_id)
-        if not drink: return False
-        drink.is_wine = is_wine
-        self._save_menu(Drink)
-        self._add_history('Wine', drink, None, user_id, group_id)
-        return True
-
-    def find_by_name(self, category: Literal["Food", "Drink"], name: str) -> int:
-        """根据名称查找食物或饮品"""
-        items = self.foods if category == "Food" else self.drinks
-        for item in items.values():
+    def get_item_id_by_name(self, name: str) -> int:
+        """根据名称查找餐点 ID"""
+        for item in self.menu.values():
             if item.name == name:
                 return item.num
         return -1  # Not found
 
-    def get_no_score_list(self, user_id: int) -> Optional[List[Food | Drink]]:
-        """确认该用户未评分的食物及饮品列表"""
-        # todo: 从某些方面来讲实现了审核机制
-        ...
+    def get_item_by_name(self, name: str) -> Optional[Eatable]:
+        """根据名称查找餐点"""
+        item_id = self.get_item_id_by_name(name)
+        if item_id >= 0:
+            return self.get_item(item_id)
+        return None
+
+    def get_items_if_no_score(self, user_id: int) -> Optional[List[Eatable]]:
+        """
+        确认该用户未评分的食物及饮品列表
+        使用列表时注意切分。
+        """
+        if user_id not in self.score.user_id_to_index:
+            # 根本未评分，直接返回
+            return self.get_items()
+
+        user_idx = self.score.user_id_to_index[user_id]
+        result: List[Eatable] = []
+        for item in self.get_items():
+            if item.num not in self.score.item_id_to_index:
+                result.append(item)
+            else:
+                item_idx = self.score.item_id_to_index[item.num]
+                # 如果数据维度不足也认为未评分
+                if item_idx >= self.score.data.shape[0] or user_idx >= self.score.data.shape[1]:
+                    result.append(item)
+                else:
+                    if self.score.data[item_idx, user_idx] == 0:
+                        result.append(item)
+        return result
+
+    def set_enabled(self, item_id: int, enabled: bool = False, user_id: int = -1) -> bool:
+        """设置餐点禁用（仅 Superuser 可操作）"""
+        if not self._is_superuser(user_id):
+            return False  # 非 Superuser
+
+        item = self.get_item(item_id)
+        if not item:
+            # 如果内存中没有，尝试从文件中加载该项
+            try:
+                with open(self.data_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                attrs = data.get(str(item_id))
+                if not attrs:
+                    return False  # 文件中也没有该项
+                # 创建实例并加入内存
+                item = self.cls(
+                    num=item_id,
+                    name=attrs.get("name", "Unknown Food"),
+                    adder=attrs.get("adder", -1),
+                    score=self.score,
+                    is_wine=attrs.get("is_wine", False),
+                    enabled=attrs.get("enabled", False)
+                )
+                self.menu[item_id] = item
+            except Exception as e:
+                self.logger.error(f"{e}")
+                return False
+
+        # 设置 enabled 状态并保存
+        item.enabled = enabled
+        self._save_menu()
+        self._get_items_with_averages()  # 重排 (item, avg)
+        return True
+
+    def choice(self, offset: float = 0.0) -> Optional[Eatable]:
+        """
+        核心方法 - 餐点抽选
+        餐点会按照评分作为抽选权重。
+
+        :param offset: 为正时，不会抽选出低于offset的餐点；为负时，不会抽选出高于offset的餐点，且此时评分权重逆转。
+        """
+        if not self.item_avg_pairs:
+            return None  # 无餐点
+
+        threshold = abs(offset)
+
+        if offset >= 0:
+            candidates = [(it, avg) for it, avg in self.item_avg_pairs if avg >= threshold]
+            reverse_weights = False
+        else:
+            candidates = [(it, avg) for it, avg in self.item_avg_pairs if avg <= threshold]
+            reverse_weights = True
+
+        if not candidates:
+            return None  # 评分范围内无餐点
+
+        items, scores = zip(*candidates)
+        scores = list(scores)
+        min_s = min(scores)
+        max_s = max(scores)
+
+        if reverse_weights:
+            # 采用线性翻转：inverted = (max + min) - score
+            weights = [(max_s + min_s) - s for s in scores]
+        else:
+            weights = scores.copy()
+
+        # 处理权重异常（全部为 0 或负值），退化为均等权重
+        # 保证所有权重非负，且总和 > 0
+        weights = [w if w > 0 else 0.0 for w in weights]
+        total = sum(weights)
+        if total == 0:
+            weights = None
+
+        chosen = random.choices(list(items), weights=weights, k=1)[0]
+        return chosen
+
+
+class MenuManager:
+    """总菜单管理类"""
+
+    def __init__(self, data_dir_path: Path, cache_dir_path: Path, super_users: Optional[Set[int]] = None,
+                 nb_logger=BadLogger()):
+        self.food = EatableMenu(Food, food_init_dict, data_dir_path, cache_dir_path, super_users, nb_logger)
+        self.drink = EatableMenu(Drink, drink_init_dict, data_dir_path, cache_dir_path, super_users, nb_logger)
+
+        self.cache_dir_path = cache_dir_path
+        self.offset_data_path: Path = data_dir_path / "offsets.json"
+        self.offset_data = {}
+
+    def _load_offset_data(self):
+        """加载 offset 数据"""
+        if not self.offset_data_path.exists():
+            self._save_offset_data()
+        with open(self.offset_data_path, "r", encoding="utf-8") as file:
+            self.offset_data = json.load(file)
+
+    def _save_offset_data(self):
+        """存储 offset 数据"""
+        with open(self.offset_data_path, "w", encoding="utf-8") as file:
+            json.dump(self.offset_data, file, ensure_ascii=False, indent=2)
+
+    def _add_history(self, content: str, user_id: int, group_id: int = -1) -> None:
+        """添加历史记录"""
+        now = datetime.now().strftime('%Y%m%d %H:%M:%S')
+        history_path = self.cache_dir_path / "logs" / f"offset_history.log"
+        if not history_path.parent.exists():
+            history_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(history_path, "a", encoding="utf-8") as file:
+            file.write(f"[{now}] {user_id}({group_id}): {content}\n")
+
+    def get_menu(self, category: str) -> Optional[EatableMenu]:
+        """获取指定 Menu 实例"""
+        c = category.lower().strip()
+        if c in ["food", "foods", "吃", "f", "foodlist", "food_list"]:
+            return self.food
+        elif c in ["drink", "drinks", "喝", "d", "drinklist", "drink_list"]:
+            return self.drink
+        return None
+
+    def get_offset(self, user_id: int) -> float:
+        """获取 offset 计算值"""
+        return self.offset_data.get(user_id, 3.0)
+
+    def set_offset(self, user_id: int, offset: float, group_id: int = -1) -> None:
+        """设置 offset 值"""
+        self.offset_data[user_id] = offset
+        self._add_history(f"Offset -> {offset}", user_id, group_id)
+        self._save_offset_data()
