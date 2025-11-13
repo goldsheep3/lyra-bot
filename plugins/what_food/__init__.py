@@ -71,7 +71,7 @@ async def _(event: MessageEvent, matcher: Matcher):
     await matcher.finish(message)
 
 
-on_this_food = on_regex(r"^([吃喝])这个\s+(.+)\s+((没)?有)酒$", priority=5, block=True)
+on_this_food = on_regex(r"^(吃|喝)这个\s+([^有没]*?)\s*(有酒|没有酒)?$", priority=5, block=True)
 
 
 @on_this_food.handle()
@@ -79,9 +79,9 @@ async def _(event: MessageEvent, matcher: Matcher):
     """处理命令: 吃这个 xxx 有酒/ 喝这个 xxx 没有酒"""
     user_id, group_id = get_event_info(event)
     matched = matcher.state["_matched"]
-    category, content, _, not_has_wine = matched.groups()
+    category, content, wine = matched.groups()
     menu = menu_manager.get_menu(category)
-    is_wine = not_has_wine is None  # 有酒 -> True, 没有酒 -> False
+    is_wine = True if len(wine) < 3 else False
 
     item_names = content_cut(content)
 
