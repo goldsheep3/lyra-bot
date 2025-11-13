@@ -68,7 +68,6 @@ async def _(event: MessageEvent, matcher: Matcher):
     message = choice(MESSAGES).format(item.name, content)
     if item.is_wine:
         message += "\n" + ALCOHOL_NOTICE
-    message += "\n" + item_show_id_text(item)
     await matcher.finish(message)
 
 
@@ -165,12 +164,12 @@ async def _(event: MessageEvent, matcher: Matcher):
         if r // 1 == 1:
             # 成功
             await matcher.finish(f"小梨已经收到 Superuser Score 数据 ({user_id} -> {score})！\n"
-                                 f"Score: {item_show_id_text(item)}{item.name} -> {item.get_score():02d}")
+                                 f"Score: {item_show_id_text(item)}{item.name} -> {item.get_score():.2f}")
     else:
         if 0 < score < 6:
             menu.set_score(item_id, cast(Literal[1, 2, 3, 4, 5], score), user_id, group_id)
             await matcher.finish(f"已经记录评分！你当前为 {item_show_id_text(item)}{item.name} 给出了{score}分的分数。"
-                                 f"目前评分均值在{item.get_score():02d}")
+                                 f"目前评分均值在{item.get_score():.2f}")
         else:
             await matcher.finish("评分只能用1~5的整数评分哦~")
 
@@ -188,7 +187,7 @@ async def _(matcher: Matcher):
     item_id = int(item_id_str)
     item = menu.get_item(item_id)
 
-    await matcher.finish(f"据小梨的菜单数据，{item_show_id_text(item)}{item.name} 现在是 {item.get_score():02d} 分喔！")
+    await matcher.finish(f"据小梨的菜单数据，{item_show_id_text(item)}{item.name} 现在是 {item.get_score():.2f} 分喔！")
 
 
 on_score_filter = on_regex(r"^可以吃\s+(.+)$", priority=1, block=True)
@@ -203,7 +202,7 @@ async def _(event: MessageEvent, matcher: Matcher):
 
     level_map = {
         "好": 3.8,
-        "能吃": 3.0,
+        "能吃": 3.1,
         "都行": 2.2,
         "好玩": -3.2,
         "猎奇": -2.2
@@ -212,11 +211,11 @@ async def _(event: MessageEvent, matcher: Matcher):
     offset = level_map.get(level, None)
     offset = offset if offset else level_map.get(level[:-1], None)
     if offset is None:
-        await matcher.finish("小梨不确定你的接受范围喔！可以使用以下五种范围指标（默认为「能吃的」）：\n好的；能吃的；都行的；好玩的；猎奇的")
+        await matcher.finish("小梨不确定你的接受范围喔！可以使用以下五种范围指标（默认为「都行的」）：\n好的；能吃的；都行的；好玩的；猎奇的")
         return
     menu_manager.set_offset(user_id, offset, group_id)
     await matcher.finish(
-        f"小梨已经记录你的「吃什么」可接受范围！在该范围下，抽选结果评分一定{"大" if offset >= 0 else "小"}于{abs(offset):01d}分喔。")
+        f"小梨已经记录你的「吃什么」可接受范围！在该范围下，抽选结果评分一定{"大" if offset >= 0 else "小"}于{abs(offset):.1f}分喔。")
 
 
 on_score_rank = on_regex(r"^([吃喝])什么排行榜\s*(\d*)$", priority=10, block=True)
@@ -275,6 +274,5 @@ async def _(event: MessageEvent, matcher: Matcher):
             user_id, group_id)
         result = result_food + result_drink
         await matcher.finish("[Superuser] "
-                             f"成功评分率{result * 100:4d}%。"
-                             "检查日志获取详细信息。"
-                             f"Log Path: {str(get_plugin_cache_dir)}/logs/")
+                            f"成功评分率:{result*100:.4f}%。"
+                             "检查日志获取详细信息。")

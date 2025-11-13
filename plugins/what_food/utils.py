@@ -413,7 +413,9 @@ class EatableMenu:
     def set_score_from_super_user(self, data: Dict[int, int], user_id: int, group_id: int = -1) -> float:
         """Superuser 设置的餐点评分（支持批量），通过非1~5的评分实现特殊权重效果"""
         if self.super_users is None or user_id not in self.super_users:
-            return -1  # 仅限 Superuser
+            return -10  # 仅限 Superuser
+        if len(data) < 1:
+            return 0  # 无 data 内容 
         count = 0
         for item_id, score_value in data.items():
             item = self.get_item(item_id)
@@ -507,7 +509,7 @@ class EatableMenu:
         self._get_items_with_averages()  # 重排 (item, avg)
         return True
 
-    def choice(self, offset: float = 0.0) -> Optional[Eatable]:
+    def choice(self, offset: float) -> Optional[Eatable]:
         """
         核心方法 - 餐点抽选
         餐点会按照评分作为抽选权重。
@@ -596,7 +598,7 @@ class MenuManager:
 
     def get_offset(self, user_id: int) -> float:
         """获取 offset 计算值"""
-        return self.offset_data.get(user_id, 3.0)
+        return self.offset_data.get(user_id, 2.2)
 
     def set_offset(self, user_id: int, offset: float, group_id: int = -1) -> None:
         """设置 offset 值"""
