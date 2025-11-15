@@ -12,7 +12,7 @@ require("nonebot_plugin_localstore")
 from nonebot_plugin_localstore import get_plugin_data_dir, get_plugin_cache_dir
 
 from .messages import MESSAGES, ALCOHOL_NOTICE, SPECIAL_NOTICE, NICKNAMES
-from .utils import Eatable, Food, Drink, MenuManager, content_cut
+from .utils import Eatable, Food, Drink, MenuManager, content_cut, EatableMenu
 
 __plugin_meta__ = PluginMetadata(
     name="吃什么",
@@ -71,7 +71,7 @@ async def _(event: MessageEvent, matcher: Matcher):
     await matcher.finish(message)
 
 
-on_this_food = on_regex(r"^(吃|喝)这个\s+([^有没]*?)\s*(有酒|没有酒)?$", priority=5, block=True)
+on_this_food = on_regex(r"^(吃|喝)这个\s+([^有没\s]+.*?)(?:\s+(有酒|没有酒))?$", priority=5, block=True)
 
 
 @on_this_food.handle()
@@ -81,7 +81,9 @@ async def _(event: MessageEvent, matcher: Matcher):
     matched = matcher.state["_matched"]
     category, content, wine = matched.groups()
     menu = menu_manager.get_menu(category)
-    is_wine = True if len(wine) < 3 else False
+    is_wine = False
+    if wine and len(wine) < 3:
+        is_wine = True
 
     item_names = content_cut(content)
 
@@ -94,16 +96,19 @@ async def _(event: MessageEvent, matcher: Matcher):
             int(item_name)
             await matcher.finish("真的有纯数字的餐点吗（\n使用餐点ID或纯数字餐点名称会导致问题，不可以这么做哦")
             return
-        except ValueError | TypeError:
+        except (ValueError, TypeError):
             pass
 
     for item_name in item_names:
         # 查找对应的食物或饮品，如果不存在则直接添加，否则修改酒精属性
         item_id = menu.get_item_id_by_name(item_name)
         if item_id >= 0:
-            # 存在，进行调整
+            # 存在
+            item = menu.get_item(item_id)
+            if item.is_wine == is_wine:
+                continue  # 不需要改
+            # 进行调整
             menu.set_is_wine(item_id, is_wine, user_id, group_id)
-            item = menu.get_item_by_name(item_name)
             exist_items.append(item)
         else:
             new_item = menu.cls(
@@ -122,13 +127,12 @@ async def _(event: MessageEvent, matcher: Matcher):
     if exist_items:
         msg.append(f"小梨已经把以下的餐点标记为{"含有" if is_wine else "不含"}酒精咯！\n"
                    f"{'；'.join([f"{item_show_id_text(item)}{item.name}" for item in exist_items])}")
-    if len(msg) >= 0:
-        for i in range(len(msg) - 1):
-            await matcher.send(msg[-i])
-        await matcher.finish(msg[0])
+    if len(msg) <= 0:
+        await matcher.finish("这些餐点在小梨的菜单上已经都有了喔——")
         return
-    logger.warning(f"未知餐点意外错误。regex=r\"^([吃喝])这个\\s+(.+)\\s+((没)?有)酒$\", message=\"{event.message}\"")
-    await matcher.finish("小梨好像看到了棍母……（\n*意外错误，请检查消息条格式并反馈")
+    while len(msg) > 0:
+        await matcher.send(msg[-1])
+    return
 
 
 on_score = on_regex(r"^好([吃喝])吗\s+(.+?)(?:\s+(-?\d+))?$", priority=3, block=True)
@@ -197,6 +201,7 @@ async def _(event: MessageEvent, matcher: Matcher):
         "好": 3.8,
         "能吃": 3.1,
         "都行": 2.2,
+        "正常": 2.2,
         "好玩": -3.2,
         "猎奇": -2.2
     }
@@ -235,7 +240,7 @@ async def _(matcher: Matcher):
     await matcher.finish(f"小梨的「{category}什么」菜单评分排行榜！(第{page}页)\n{"\n".join(rank_msg_list)}\n\n")
 
 
-on_superuser = on_startswith("lyra_superuser")
+on_superuser = on_regex(r"^suLyra\s+WhatFood(.*?)$")
 
 
 @on_superuser.handle()
@@ -244,16 +249,21 @@ async def _(event: MessageEvent, matcher: Matcher):
     user_id, group_id = get_event_info(event)
     if user_id not in super_user_int:
         return  # 非 superuser 不返回消息
-    content = str(event.get_message())
+    matched = matcher.state["_matched"]
+    content = matched.group(1)
 
     content_list = content.split("\n")
     commands = content_list[0].split(" ")
     if commands[1] == "获取未评分项目":
-        if len(commands) < 3:
-            await matcher.finish("[Superuser] 缺少类别参数。")
-            return
-        menu = menu_manager.get_menu(commands[2])
-        no_score_items_all = menu.get_items_if_no_score(user_id)
+        def get_no_score(m: EatableMenu, u: int):
+            return m.get_items_if_no_score(u)
+
+        if len(commands) >= 3:
+            no_score_items_all = get_no_score(menu_manager.get_menu(commands[2]), user_id)
+        else:
+            # 获取所有类别未评分项目
+            no_score_items_all = get_no_score(menu_manager.food, user_id) + \
+                                 get_no_score(menu_manager.drink, user_id)
 
         if len(no_score_items_all) > 20:
             no_score_items = no_score_items_all[:20]
@@ -288,7 +298,7 @@ async def _(event: MessageEvent, matcher: Matcher):
         await matcher.finish(f"[Superuser] 已{commands[1]} {category}{item_id} 。")
     else:
         await matcher.finish("""[Superuser] 当前可用命令：
-- 获取未评分项目 <类别>
+- 获取未评分项目 (<类别>)
 - 批量评分  // 后续多行输入评分数据<类别><ID><分数>
 - 删除 <FullID>
 - 恢复 <FullID>""")

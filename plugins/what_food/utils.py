@@ -354,9 +354,14 @@ class EatableMenu:
 
     def _get_max_id(self) -> int:
         """获取最大 ID"""
-        if len(self.menu) < 1:
-            return 0  # 初始值
-        return max(self.menu.keys())
+        try:
+            int_keys = [int(k) for k in self.menu.keys()]
+        except Exception as e:
+            self.logger.error(f"{e}")
+            return -1
+        if not int_keys:
+            return 0
+        return max(int_keys)
 
     def _is_superuser(self, user_id) -> bool:
         """检查是否为 Superuser"""
@@ -373,7 +378,10 @@ class EatableMenu:
 
         # 确认存在，分配 ID
         if item.num == -10:
-            item.num = self._get_max_id() + 1
+            max_id = self._get_max_id()
+            if max_id < 0:
+                return False  # 获取最大 ID 失败
+            item.num = max_id + 1
         self.menu.update({item.num: item})
 
         # 记录添加历史
