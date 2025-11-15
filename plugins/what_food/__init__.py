@@ -1,5 +1,7 @@
 import re
+import yaml
 from random import choice
+from typing import Tuple
 
 from nonebot import require, logger
 from nonebot.plugin import on_regex, PluginMetadata
@@ -61,20 +63,6 @@ on_this_food = on_regex(r"^([吃喝])这个\s+(.+)$", block=True)
 async def _(event: MessageEvent, matcher: Matcher):
     """处理命令: 吃这个 xxx / 喝这个 xxx"""
 
-    # 对特定行为的用户进行限制
-    # 暂时硬编码
-    from datetime import datetime
-    ban_users = {
-        "1305906153": datetime(2025, 11, 19),
-        "2716511039": datetime(2025, 11, 7),
-    }
-    if str(event.user_id) in ban_users:
-        ban_until = ban_users[str(event.user_id)]
-        if datetime.now() < ban_until:
-            await matcher.finish(f"由于添加的“餐点”过于逆天，目前禁止使用添加功能。禁止时间截止到 {ban_until.strftime('%Y-%m-%d')}。")
-            return
-
-    # 解析指令
     match = re.search(r"^([吃喝])这个\s+(.+)$", str(event.get_message()))
     if not match: return
 
