@@ -37,7 +37,8 @@ help_aliases = {
     "吃什么": "what_food",
 }
 
-lyra_help = on_regex(pattern=r"^\s*(?:[Hh]elp|帮助)\s+(\S+)", rule=to_me(), priority=1000, block=True)
+
+lyra_help = on_regex(pattern=r"帮助\s*(.*)", rule=to_me(), priority=1000, block=True)
 
 
 @lyra_help.handle()
