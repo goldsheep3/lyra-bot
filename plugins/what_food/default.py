@@ -1,4 +1,4 @@
-FOODS = (
+FOODS = [
     # 中餐
     "拉面", "炸酱面", "刀削面", "热干面", "重庆小面",
     "饺子", "馄饨", "包子", "馒头", "烧麦",
@@ -22,9 +22,9 @@ FOODS = (
     # 甜点
     "蛋糕", "冰淇淋", "布丁", "提拉米苏", "马卡龙",
     "泡芙", "甜甜圈", "华夫饼", "松饼", "可丽饼",
-)
+]
 
-DRINKS = (
+DRINKS = [
     # 茶类
     "绿茶", "红茶", "乌龙茶", "普洱茶", "茉莉花茶",
     "奶茶", "珍珠奶茶", "水果茶", "奶绿", "抹茶拿铁",
@@ -50,10 +50,27 @@ DRINKS = (
 
     # 季节性饮品
     "热巧克力", "姜饼拿铁", "冰沙", "奶昔", "星冰乐",
-)
+]
 
 WINES = (
     # 酒精饮料
-    "啤酒⑨", "红酒⑨", "白酒⑨", "鸡尾酒⑨", "清酒⑨",
-    "梅酒⑨", "烧酒⑨", "威士忌⑨", "朗姆酒⑨", "伏特加⑨",
+    "啤酒", "红酒", "白酒", "鸡尾酒", "清酒",
+    "梅酒", "烧酒", "威士忌", "朗姆酒", "伏特加",
 )
+
+
+food_init_dict = {
+    i+1: {"name": food, "is_wine": False, "adder": -1, "enabled": True}
+    for i, food in enumerate(FOODS)
+}
+
+drink_init_dict = {
+    **{
+        i+1: {"name": drink, "is_wine": False, "adder": -1, "enabled": True}
+        for i, drink in enumerate(DRINKS)
+    },
+    **{
+        len(DRINKS)+i+1: {"name": wine_drink, "is_wine": True, "adder": -1, "enabled": True}
+        for i, wine_drink in enumerate(DRINKS)
+    }
+}
