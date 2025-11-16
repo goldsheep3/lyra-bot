@@ -95,7 +95,7 @@ async def _(event: MessageEvent, matcher: Matcher):
         try:
             if re.fullmatch(r"\d+", item_name):
                 await matcher.finish("真的有纯数字的餐点吗…")
-            return
+                return
         except (ValueError, TypeError):
             pass
 
