@@ -3,7 +3,7 @@ from random import choice
 from typing import Set, Tuple, Literal, List, cast
 
 from nonebot import logger, require, get_driver
-from nonebot.plugin import on_regex, on_startswith, PluginMetadata
+from nonebot.plugin import on_regex, PluginMetadata
 from nonebot.internal.matcher import Matcher
 
 from nonebot.adapters.onebot.v11 import MessageEvent
@@ -93,8 +93,8 @@ async def _(event: MessageEvent, matcher: Matcher):
     # 预检查
     for item_name in item_names:
         try:
-            int(item_name)
-            await matcher.finish("真的有纯数字的餐点吗（\n使用餐点ID或纯数字餐点名称会导致问题，不可以这么做哦")
+            if re.fullmatch(r"\d+", item_name):
+                await matcher.finish("真的有纯数字的餐点吗…")
             return
         except (ValueError, TypeError):
             pass
@@ -120,18 +120,15 @@ async def _(event: MessageEvent, matcher: Matcher):
             menu.add_item(new_item, group_id)
             item = menu.get_item_by_name(item_name)
             new_items.append(item)
-    msg: List[str] = list()
-    if new_items:
-        msg.append(f"小梨已经把以下{"含有" if is_wine else "不含"}酒精的餐点添加到餐点列表咯！\n"
-                   f"{'；'.join([f"{item_show_id_text(item)}{item.name}" for item in new_items])}")
-    if exist_items:
-        msg.append(f"小梨已经把以下的餐点标记为{"含有" if is_wine else "不含"}酒精咯！\n"
-                   f"{'；'.join([f"{item_show_id_text(item)}{item.name}" for item in exist_items])}")
-    if len(msg) <= 0:
+    if len(new_items) + len(exist_items) <= 0:
         await matcher.finish("这些餐点在小梨的菜单上已经都有了喔——")
         return
-    while len(msg) > 0:
-        await matcher.send(msg[-1])
+    if new_items:
+        await matcher.send(f"小梨已经把以下{"含有" if is_wine else "不含"}酒精的餐点添加到餐点列表咯！\n" +
+                           '；'.join([f"{item_show_id_text(item)}{item.name}" for item in new_items]))
+    if exist_items:
+        await matcher.send(f"小梨已经把以下的餐点标记为{"含有" if is_wine else "不含"}酒精咯！\n" +
+                           '；'.join([f"{item_show_id_text(item)}{item.name}" for item in exist_items]))
     return
 
 
@@ -177,7 +174,7 @@ async def _(event: MessageEvent, matcher: Matcher):
             await matcher.finish("Superuser Score 提交失败。")
     else:
         # 普通用户评分限制为 1~5
-        if 0 < score < 6:
+        if score in {1, 2, 3, 4, 5}:
             menu.set_score(item.num, cast(Literal[1, 2, 3, 4, 5], score), user_id, group_id)
             await matcher.finish(
                 f"已经记录评分！你当前为 {item_show_id_text(item)}{item.name} 给出了{score}分的分数。"
@@ -216,28 +213,57 @@ async def _(event: MessageEvent, matcher: Matcher):
         f"小梨已经记录你的「吃什么」可接受范围！在该范围下，抽选结果评分一定{"大" if offset >= 0 else "小"}于{abs(offset):.1f}分喔。")
 
 
-on_score_rank = on_regex(r"^([吃喝])什么排行榜\s*(\d*)$", priority=10, block=True)
+on_score_rank = on_regex(r"^([吃喝])什么排行榜\s*(-?\d+)?$", priority=10, block=True)
 
 
 @on_score_rank.handle()
 async def _(matcher: Matcher):
-    """处理命令: 吃什么排行榜 / 喝什么排行榜2"""
-    return  # 暂时不可用
+    """处理命令: 吃什么排行榜 / 喝什么排行榜2 / 吃什么排行榜-1"""
+
     matched = matcher.state["_matched"]
-    category, page = matched.groups()
+
+    category, page_str = matched.groups()  # page_str 可能为 None
+    # 解析页码：None -> 默认 1；支持负数如 "-1"
+    try:
+        page = int(page_str)
+    except (ValueError, TypeError):
+        page = 1
+    page = page if page != 0 else 1
+
+    # 每页条数
+    per_page = 10
+
     menu = menu_manager.get_menu(category)
-    page = int(page) if page else 1
+    # menu.item_avg_pairs: List[Tuple[Eatable, float]]
+    menu_count = len(menu.item_avg_pairs)
+    if menu_count <= 0:
+        await matcher.finish(f"小梨的「{category}什么」菜单评分排行榜！……是空的！快去找莉莉丝阿姐递菜单！")
 
-    rank_list: List[Tuple[Eatable, float]] = menu.item_avg_pairs[10 * (page - 1):10 * page]
-    max_rank_len = len(str(page * 10))
-    rank_msg_list = [
-        f"{i + (page - 1) * 10 + 1:>{max_rank_len}} "        # 0001_
-        f"[{str(item.category)[:1]}{item.num}] {item.name}"  # [F42]_FoodName
-        f"{''*4}(Score: {avg:02d})"                          # ____(Score:_3.75)
-        for i, item, avg in enumerate(rank_list)
-    ]
+    # 计算当前页的切片
+    start = per_page * (abs(page) - 1)
+    end = start + per_page
+    step = 1
+    if page < 1:
+        # 负数页码，从尾部开始计算
+        start = -(start+1)
+        end = -(end+1)
+        step = -1
+    rank_list: List[Tuple["Eatable", float]] = menu.item_avg_pairs[start:end:step]
 
-    await matcher.finish(f"小梨的「{category}什么」菜单评分排行榜！(第{page}页)\n{"\n".join(rank_msg_list)}\n\n")
+    if not rank_list:
+        await matcher.finish(f"小梨的「{category}什么」菜单评分排行榜！(第{page}页)\n\n……没这么多页面啦！不要耍小梨！")
+
+    rank_msg_list: List[str] = []
+    for idx, (item, avg) in enumerate(rank_list, start=1 if page > 0 else 0):
+        global_index = start + (idx if step > 0 else menu_count - idx)
+        rank_line = (
+            f"{global_index:>{len(str(end))}} "        # 编号对齐
+            f"{item_show_id_text(item)} {item.name}"  # '[F42] 名称'
+            f"{' ' * 2}(Score: {avg:.2f})"            # 两个空格 + 分数
+        )
+        rank_msg_list.append(rank_line)
+
+    await matcher.finish(f"小梨的「{category}什么」菜单评分排行榜！(第{page}页)\n\n" + "\n".join(rank_msg_list))
 
 
 on_superuser = on_regex(r"^suLyra\s+WhatFood(.*?)$")
@@ -290,6 +316,7 @@ async def _(event: MessageEvent, matcher: Matcher):
             await matcher.finish("[Superuser] 缺少FullID参数。")
             return
         category, item_id = re.match(r"([DF])(\d+)", commands[2]).groups()
+        item_id = int(item_id)
         if not all([category, item_id]):
             await matcher.finish("[Superuser] 不正确的FullID参数。")
             return
