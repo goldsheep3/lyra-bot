@@ -306,7 +306,7 @@ class EatableMenu:
         for item in self.get_items():
             avg = item.get_score()
             pairs.append((item, avg))
-        pairs.sort(key=lambda x: x[1])  # 依据评分顺序返回
+        pairs.sort(key=lambda x: x[1], reverse=True)  # 依据评分顺序返回
         self.item_avg_pairs = pairs
         return pairs
 
