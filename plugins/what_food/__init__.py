@@ -271,11 +271,11 @@ async def _(event: MessageEvent, matcher: Matcher):
         menu = menu_manager.get_menu(category)
         menus = [menu] if menu else [menu_manager.food, menu_manager.drink]
         items_no_score: List[Eatable] = list()
-        for m in menus:
+        for menu in menus:
             if user_id := int(user_id_str) if user_id_str else None:
-                items_no_score += m.get_items_if_no_score(user_id)
+                items_no_score += menu.get_items_if_no_score(user_id)
             else:
-                items_no_score += m.get_items_if_superuser_no_score()
+                items_no_score += menu.get_items_if_superuser_no_score()
                 items_no_score = menu.get_items_if_superuser_no_score()
 
         if len(items_no_score) > 20:
@@ -288,6 +288,7 @@ async def _(event: MessageEvent, matcher: Matcher):
         await matcher.finish(
             f"[Superuser] 待评分项目 ({len(output_items)}/{len(items_no_score)})\n" +
             '\n'.join([f"{item_show_id_text(item)} {item.name}" for item in output_items]))
+
     elif commands[0] == "批量评分":
         score_infos = [re.match(r"([DF])\s*(\d+)\s*(-?\d+)", text).groups() for text in content_list[1:]]  # 除首行外的数据
         result_food = menu_manager.food.set_score_from_super_user(
@@ -298,6 +299,7 @@ async def _(event: MessageEvent, matcher: Matcher):
             user_id, group_id)
         result = result_food + result_drink
         await matcher.finish(f"[Superuser] 成功评分率:{result*100:.4f}%。检查日志以获取详细信息。")
+
     elif commands[0] in ["禁用", "恢复"]:
         if len(commands) < 2:
             await matcher.finish("[Superuser] 缺少FullID参数。")
