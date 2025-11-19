@@ -254,7 +254,7 @@ async def _(matcher: Matcher):
     await matcher.finish(f"小梨的「{category}什么」菜单评分排行榜！(第{page}页)\n\n" + "\n".join(rank_msg_list))
 
 
-on_superuser = on_regex(r"^suLyra\s+WhatFood(.*?)", permission=SUPERUSER)
+on_superuser = on_regex(r"^suLyra\s+WhatFood\s+(.*?)", permission=SUPERUSER)
 
 
 @on_superuser.handle()
@@ -265,10 +265,11 @@ async def _(event: MessageEvent, matcher: Matcher):
     content = matched.group(1)
 
     content_list = content.split("\n")
-    commands = content_list[0].split(" ")
-    if commands[1] == "获取未评分项目":
-        if len(commands) >= 3:
-            no_score_items_all = menu_manager.get_menu(commands[2]).get_items_if_superuser_no_score()
+    commands_origin = content_list[0].split(" ")
+    commands = [commands_origin[i] for i in range(2, len(commands_origin))]  # 去掉前两位 suLyra WhatFood
+    if commands[0] == "获取未评分项目":
+        if len(commands) >= 2:
+            no_score_items_all = menu_manager.get_menu(commands[1]).get_items_if_superuser_no_score()
         else:
             # 获取所有类别未评分项目
             no_score_items_all = menu_manager.food.get_items_if_superuser_no_score() + \
@@ -284,7 +285,7 @@ async def _(event: MessageEvent, matcher: Matcher):
         await matcher.finish(
             f"[Superuser] 待评分项目 ({len(no_score_items)}/{len(no_score_items_all)})\n" +
             '\n'.join([f"{item_show_id_text(item)} {item.name}" for item in no_score_items]))
-    elif commands[1] == "批量评分":
+    elif commands[0] == "批量评分":
         score_infos = [re.match(r"([DF])\s*(\d+)\s*(-?\d+)", text).groups() for text in content_list[1:]]  # 除首行外的数据
         result_food = menu_manager.food.set_score_from_super_user(
             {i: s for i, s in [(int(item[1]), int(item[2])) for item in score_infos if item[0] == "F"]},
@@ -294,18 +295,18 @@ async def _(event: MessageEvent, matcher: Matcher):
             user_id, group_id)
         result = result_food + result_drink
         await matcher.finish(f"[Superuser] 成功评分率:{result*100:.4f}%。检查日志以获取详细信息。")
-    elif commands[1] in ["禁用", "恢复"]:
-        if len(commands) < 3:
+    elif commands[0] in ["禁用", "恢复"]:
+        if len(commands) < 2:
             await matcher.finish("[Superuser] 缺少FullID参数。")
             return
-        category, item_id = re.match(r"([DF])(\d+)", commands[2]).groups()
+        category, item_id = re.match(r"([DF])(\d+)", commands[1]).groups()
         item_id = int(item_id)
         if not all([category, item_id]):
             await matcher.finish("[Superuser] 不正确的FullID参数。")
             return
         menu = menu_manager.get_menu(category)
-        menu.set_enabled(item_id, False if commands[1] == "禁用" else True, user_id)
-        await matcher.finish(f"[Superuser] 已{commands[1]} {category}{item_id} 。")
+        menu.set_enabled(item_id, False if commands[0] == "禁用" else True, user_id)
+        await matcher.finish(f"[Superuser] 已{commands[0]} {category}{item_id} 。")
     else:
         await matcher.finish("""[Superuser] 当前可用命令：
 - 获取未评分项目 (<类别>)
