@@ -254,7 +254,7 @@ async def _(matcher: Matcher):
     await matcher.finish(f"小梨的「{category}什么」菜单评分排行榜！(第{page}页)\n\n" + "\n".join(rank_msg_list))
 
 
-on_superuser = on_regex(r"^suLyra\s+(WhatFood)\s+(.*)", permission=SUPERUSER)
+on_superuser = on_regex(r"^(suLyra\s+WhatFood)\s+(.*)", permission=SUPERUSER)
 
 
 @on_superuser.handle()
@@ -264,27 +264,30 @@ async def _(event: MessageEvent, matcher: Matcher):
     matched = matcher.state["_matched"]
     _, content = matched.groups()
 
-    print("content:", content)
     content_list = content.split("\n")
     commands = content_list[0].split(" ")
-    if commands[0] == "获取未评分项目":
-        if len(commands) >= 2:
-            no_score_items_all = menu_manager.get_menu(commands[1]).get_items_if_superuser_no_score()
-        else:
-            # 获取所有类别未评分项目
-            no_score_items_all = menu_manager.food.get_items_if_superuser_no_score() + \
-                                 menu_manager.drink.get_items_if_superuser_no_score()
+    if commands[0] in ["获取未评分项目", "获取未评分餐点", "获取未评分内容"]:
+        _, category, user_id_str = commands + ["" for _ in range(3 - len(commands))]  # 保证长度为3
+        menu = menu_manager.get_menu(category)
+        menus = [menu] if menu else [menu_manager.food, menu_manager.drink]
+        items_no_score: List[Eatable] = list()
+        for m in menus:
+            if user_id := int(user_id_str) if user_id_str else None:
+                items_no_score += m.get_items_if_no_score(user_id)
+            else:
+                items_no_score += m.get_items_if_superuser_no_score()
+                items_no_score = menu.get_items_if_superuser_no_score()
 
-        if len(no_score_items_all) > 20:
-            no_score_items = no_score_items_all[:20]
-        elif len(no_score_items_all) < 1:
-            await matcher.finish("[Superuser] 目前没有需要评分的项目。")
+        if len(items_no_score) > 20:
+            output_items = items_no_score[:20]
+        elif len(items_no_score) < 1:
+            await matcher.finish(f"[Superuser] 目前{user_id if user_id else "Superuser"}没有需要评分的项目。")
             return
         else:
-            no_score_items = no_score_items_all
+            output_items = items_no_score
         await matcher.finish(
-            f"[Superuser] 待评分项目 ({len(no_score_items)}/{len(no_score_items_all)})\n" +
-            '\n'.join([f"{item_show_id_text(item)} {item.name}" for item in no_score_items]))
+            f"[Superuser] 待评分项目 ({len(output_items)}/{len(items_no_score)})\n" +
+            '\n'.join([f"{item_show_id_text(item)} {item.name}" for item in output_items]))
     elif commands[0] == "批量评分":
         score_infos = [re.match(r"([DF])\s*(\d+)\s*(-?\d+)", text).groups() for text in content_list[1:]]  # 除首行外的数据
         result_food = menu_manager.food.set_score_from_super_user(

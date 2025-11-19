@@ -56,32 +56,6 @@ class Score:
         else:
             self.data = np.zeros((0, 0), dtype=int)
 
-        self._old_version_update_check()
-
-    def _old_version_update_check(self):
-        """检查并更新旧版本数据格式"""
-
-        # 从 4f3c858b 或更早的版本升级到 now
-        # 由于当前 Bot 代码未被广泛使用过旧版本，故该段代码会在未来移除
-        if SUPERUSER_ID not in self.user_id_to_index:
-            self.logger.info("检测到 what_food 破坏性更新 #4f3c85b ，正在进行评分数据升级...")
-            # 查找旧版 superuser id
-            old_superuser_id = 2940119626  # 硬编码开发者 user_id
-            if old_superuser_id in self.user_id_to_index:
-                old_index = self.user_id_to_index[old_superuser_id]
-                # 确保 -127 的位置
-                self._ensure_capacity(0, SUPERUSER_ID)
-                new_index = self.user_id_to_index[SUPERUSER_ID]
-                # 迁移评分数据
-                for item_idx in range(self.data.shape[0]):
-                    score_value = self.data[item_idx, old_index]
-                    if score_value != 0:
-                        self.data[item_idx, new_index] = score_value
-                # 重新构建 user_id_to_index 映射
-                self.user_id_to_index = {uid: idx for idx, uid in enumerate(self.user_ids)}
-            self.logger.info("what_food 破坏性更新 #4f3c85b 评分数据升级完成。")
-            self.save()
-
     def _load_from_file(self):
         """从.npz文件加载数据"""
         try:
