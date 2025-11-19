@@ -4,9 +4,13 @@ import random
 import numpy as np
 from pathlib import Path
 from datetime import datetime
-from typing import Literal, List, Optional, Dict, Set, Type, Tuple
+from typing import Literal, List, Optional, Dict, Type, Tuple
 
-from .default import food_init_dict, drink_init_dict
+from .init import get_default_foods, get_default_drinks
+
+
+SUPERUSER_ID = -127
+SUPERUSER_MULTIPLIER = 30
 
 
 # noinspection DuplicatedCode
@@ -38,35 +42,45 @@ def content_cut(text: str) -> List[str]:
 
 
 class Score:
-    def __init__(self, path: Path, super_users: Optional[Set[int]] = None, nb_logger=BadLogger()):
+    def __init__(self, path: Path, nb_logger=None):
         self.logger = nb_logger
-
         self.path = path
         self.data = None
-        self.item_ids = []  # 存储item_id的映射
-        self.user_ids = []  # 存储user_id的映射
-        self.item_id_to_index = {}  # item_id到索引的映射
-        self.user_id_to_index = {}  # user_id到索引的映射
-
-        self.super_users: Set[int] = super_users if super_users else set()
+        self.item_ids = []
+        self.user_ids = []
+        self.item_id_to_index = {}
+        self.user_id_to_index = {}
 
         if path.exists():
             self._load_from_file()
         else:
-            # 如果文件不存在，创建空数组
             self.data = np.zeros((0, 0), dtype=int)
 
-        self._precompute_super_user_indices()
+        self._old_version_update_check()
 
-    def _precompute_super_user_indices(self):
-        """预先计算超级用户索引，保证类型一致（整型）"""
-        indices = [self.user_id_to_index[user_id] for user_id in self.super_users if user_id in self.user_id_to_index]
-        if len(indices) == 0:
-            self.super_user_indices = np.array([], dtype=int)
-        else:
-            self.super_user_indices = np.array(indices, dtype=int)
-        # 存为 Python int 的集合，方便成员判断与序列化
-        self.super_user_index_set = set(int(x) for x in self.super_user_indices)
+    def _old_version_update_check(self):
+        """检查并更新旧版本数据格式"""
+
+        # 从 4f3c858b 或更早的版本升级到 now
+        # 由于当前 Bot 代码未被广泛使用过旧版本，故该段代码会在未来移除
+        if SUPERUSER_ID not in self.user_id_to_index:
+            self.logger.info("检测到 what_food 破坏性更新 #4f3c85b ，正在进行评分数据升级...")
+            # 查找旧版 superuser id
+            old_superuser_id = 2940119626  # 硬编码开发者 user_id
+            if old_superuser_id in self.user_id_to_index:
+                old_index = self.user_id_to_index[old_superuser_id]
+                # 确保 -127 的位置
+                self._ensure_capacity(0, SUPERUSER_ID)
+                new_index = self.user_id_to_index[SUPERUSER_ID]
+                # 迁移评分数据
+                for item_idx in range(self.data.shape[0]):
+                    score_value = self.data[item_idx, old_index]
+                    if score_value != 0:
+                        self.data[item_idx, new_index] = score_value
+                # 重新构建 user_id_to_index 映射
+                self.user_id_to_index = {uid: idx for idx, uid in enumerate(self.user_ids)}
+            self.logger.info("what_food 破坏性更新 #4f3c85b 评分数据升级完成。")
+            self.save()
 
     def _load_from_file(self):
         """从.npz文件加载数据"""
@@ -75,34 +89,26 @@ class Score:
                 self.data = npz_file['data']
                 self.item_ids = npz_file['item_ids'].tolist()
                 self.user_ids = npz_file['user_ids'].tolist()
-
-                # 重建索引映射
-                self.item_id_to_index = {fid: idx for idx, fid in enumerate(self.item_ids)}
+                self.item_id_to_index = {iid: idx for idx, iid in enumerate(self.item_ids)}
                 self.user_id_to_index = {uid: idx for idx, uid in enumerate(self.user_ids)}
-
         except Exception as e:
             raise ValueError(f"加载文件失败: {e}")
 
-    def _ensure_capacity(self, item_ids: List[int], user_id: int):
-        """确保数组有足够的容量来存储指定的 item_id 和 user_id。可能同时扩展多个 item_id。"""
+    def _ensure_capacity(self, item_id: int, user_id: int):
+        """确保数组有足够的容量来存储指定的 item_id 和 user_id。"""
         need_resize = False
+        if item_id not in self.item_id_to_index:
+            new_item_index = len(self.item_ids)
+            self.item_ids.append(item_id)
+            self.item_id_to_index[item_id] = new_item_index
+            need_resize = True
 
-        # 先处理 item_ids（可能是批量）
-        for item_id in item_ids:
-            if item_id not in self.item_id_to_index:
-                new_item_index = len(self.item_ids)
-                self.item_ids.append(item_id)
-                self.item_id_to_index[item_id] = new_item_index
-                need_resize = True
-
-        # 然后处理 user_id
         if user_id not in self.user_id_to_index:
             new_user_index = len(self.user_ids)
             self.user_ids.append(user_id)
             self.user_id_to_index[user_id] = new_user_index
             need_resize = True
 
-        # 如果需要调整大小，扩展数组（一次性）
         if need_resize:
             new_shape = [len(self.item_ids), len(self.user_ids)]
             if self.data is None or self.data.size == 0:
@@ -114,78 +120,49 @@ class Score:
                 new_data[:rows, :cols] = self.data[:rows, :cols]
                 self.data = new_data
 
-        self._precompute_super_user_indices()  # 同步 superuser 索引数据
-
     def get_score(self, item_id: int) -> float:
-        """计算item_id对应的所有非0评分的平均值"""
+        """计算item_id对应的所有非0评分的平均值，-127用户有30倍权重"""
         if item_id not in self.item_id_to_index:
             return 0.0
-
-        multiplier: int = 30
-
         item_index = self.item_id_to_index[item_id]
         scores = self.data[item_index, :]
 
-        non_zero_mask = scores != 0
-        non_zero_scores = scores[non_zero_mask]
+        user_ids_np = np.array(self.user_ids)
+        superuser_mask = user_ids_np == SUPERUSER_ID
+        normal_mask = user_ids_np > 0
 
-        if len(non_zero_scores) == 0:
+        superuser_scores = scores[superuser_mask]
+        normal_scores = scores[normal_mask]
+
+        total_sum = (np.sum(normal_scores[normal_scores != 0]) +
+                     np.sum(superuser_scores[superuser_scores != 0]) * SUPERUSER_MULTIPLIER)
+        total_count = np.count_nonzero(normal_scores) + np.count_nonzero(superuser_scores) * SUPERUSER_MULTIPLIER
+
+        if total_count == 0:
             return 0.0
-
-        # 使用向量化操作处理超级用户
-        super_mask = np.isin(np.arange(len(scores)), self.super_user_indices) & non_zero_mask
-        super_scores = scores[super_mask]
-        normal_scores = scores[non_zero_mask & ~super_mask]
-
-        if len(super_scores) > 0:
-            total_sum = np.sum(normal_scores) + np.sum(super_scores) * multiplier
-            total_count = len(normal_scores) + len(super_scores) * multiplier
-            avg_score = total_sum / total_count
-        else:
-            avg_score = np.mean(non_zero_scores)
-
-        return round(avg_score, 2)
-
-    def _set_score(self, data: Dict[int, int], user_id: int):
-        """
-        :param data: {item_id: score}
-        :param user_id: 用户ID
-        """
-        # 确保容量
-        self._ensure_capacity([item_id for item_id in data.keys()], user_id)
-        for item_id, score in data.items():
-            # 获取索引
-            item_index = self.item_id_to_index[item_id]
-            user_index = self.user_id_to_index[user_id]
-            # 设置评分
-            self.data[item_index, user_index] = score
+        return round(total_sum / total_count, 2)
 
     def set_score(self, item_id: int, score: int, user_id: int):
-        """设置或更新评分"""
-        self._set_score({item_id: score}, user_id)
+        """设置或更新普通用户评分（user_id > 0）"""
+        self._ensure_capacity(item_id, user_id)
+        item_index = self.item_id_to_index[item_id]
+        user_index = self.user_id_to_index[user_id]
+        self.data[item_index, user_index] = score
         self.save()
 
-    def set_scores(self, data: Dict[int, int], user_id: int):
-        """
-        批量设置或更新评分
-
-        :param data: { item_id: score }
-        :param user_id: 用户ID
-        """
-        self._set_score(data, user_id)
-        self.save()
+    def set_superuser_score(self, item_id: int, score: int):
+        """超级用户专属评分（user_id == -127）"""
+        self.set_score(item_id, score, SUPERUSER_ID)
 
     def save(self):
         """保存数据到.npz文件"""
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
-            # 使用临时文件避免写入过程中出错
             temp_path = self.path.parent / "temp_bcfa7f6.npz"
             temp_path.unlink(missing_ok=True)
             np.savez(temp_path, data=self.data, item_ids=np.array(self.item_ids), user_ids=np.array(self.user_ids))
-            temp_path.replace(self.path)  # 原子操作替换
+            temp_path.replace(self.path)
         except Exception as e:
-            # 记录日志
             raise e
 
 
@@ -211,6 +188,10 @@ class Eatable:
         """设置评分"""
         self.score.set_score(self.num, score_value, user_id)
 
+    def set_superuser_score(self, score_value: int):
+        """超级用户专属评分"""
+        self.score.set_superuser_score(self.num, score_value)
+
 
 class Food(Eatable):
     category = 'Food'
@@ -223,18 +204,17 @@ class Drink(Eatable):
 class EatableMenu:
     """菜单数据类"""
     def __init__(self, cls: Type[Eatable], default_data: Dict[int, Dict[str, bool | int | str]],
-                 dir_path: Path, cache_dir_path: Path, super_users: Optional[Set[int]] = None, nb_logger=BadLogger()):
+                 dir_path: Path, cache_dir_path: Path, nb_logger=BadLogger()):
         self.logger = nb_logger
 
         dir_path.mkdir(parents=True, exist_ok=True)
         cache_dir_path.mkdir(parents=True, exist_ok=True)
         self.cache_dir = cache_dir_path
         self.default_data = default_data
-        self.super_users = super_users if super_users else set()
 
         self.cls: Type[Eatable] = cls
         self.data_path = dir_path / f"{self.cls.category}.json"
-        self.score = Score(dir_path / f"{self.cls.category}_scores.npz", super_users)
+        self.score = Score(dir_path / f"{self.cls.category}_scores.npz", nb_logger)
         self.menu: Dict[int, Eatable] = dict()
         self._load_menu()
 
@@ -311,7 +291,7 @@ class EatableMenu:
         return pairs
 
     def _add_history(self, category: Literal['Add', 'Score', 'Wine', 'Ban'], item: Eatable, score: Optional[int],
-                     user_id: int, group_id: int = -1) -> None:
+                     user_id: int, group_id: int = -1, superuser: bool = False) -> None:
         """添加历史记录"""
         now = datetime.now()
         now_date = now.strftime('%Y%m%d')
@@ -350,7 +330,9 @@ class EatableMenu:
             else:
                 info4 = "unknown"
 
-            writer.writerow([now_time, user_id, item.category, item.num, info4, group_id])
+            writer.writerow(
+                [now_time, f"{user_id}{"-SU" if superuser else ''}", item.category, item.num, info4, group_id]
+            )
 
     def _get_max_id(self) -> int:
         """获取最大 ID"""
@@ -362,12 +344,6 @@ class EatableMenu:
         if not int_keys:
             return 0
         return max(int_keys)
-
-    def _is_superuser(self, user_id) -> bool:
-        """检查是否为 Superuser"""
-        if self.super_users is None:
-            return False  # 不存在 Superuser
-        return user_id in self.super_users
 
     def _add_item(self, item: Eatable, group_id=-1, score: Literal[1, 2, 3, 4, 5] = 3) -> bool:
         target_set = set([v.name for v in self.menu.values()])  # 转为集合以便判断重复
@@ -414,6 +390,20 @@ class EatableMenu:
         """获取指定 ID 的餐点"""
         return self.menu.get(item_id, None)
 
+    def get_item_id_by_name(self, name: str) -> int:
+        """根据名称查找餐点 ID"""
+        for item in self.menu.values():
+            if item.name == name:
+                return item.num
+        return -1  # Not found
+
+    def get_item_by_name(self, name: str) -> Optional[Eatable]:
+        """根据名称查找餐点"""
+        item_id = self.get_item_id_by_name(name)
+        if item_id >= 0:
+            return self.get_item(item_id)
+        return None
+
     def set_score(self, item_id: int, score_value: Literal[1, 2, 3, 4, 5], user_id: int, group_id: int = -1) -> bool:
         """设置指定 ID 餐点的评分"""
         item = self.get_item(item_id)
@@ -426,8 +416,6 @@ class EatableMenu:
 
     def set_score_from_super_user(self, data: Dict[int, int], user_id: int, group_id: int = -1) -> float:
         """Superuser 设置的餐点评分（支持批量），通过非1~5的评分实现特殊权重效果"""
-        if self.super_users is None or user_id not in self.super_users:
-            return -10  # 仅限 Superuser
         if len(data) < 1:
             return 0  # 无 data 内容 
         count = 0
@@ -451,20 +439,6 @@ class EatableMenu:
         self._add_history('Wine', item, None, user_id, group_id)
         return True
 
-    def get_item_id_by_name(self, name: str) -> int:
-        """根据名称查找餐点 ID"""
-        for item in self.menu.values():
-            if item.name == name:
-                return item.num
-        return -1  # Not found
-
-    def get_item_by_name(self, name: str) -> Optional[Eatable]:
-        """根据名称查找餐点"""
-        item_id = self.get_item_id_by_name(name)
-        if item_id >= 0:
-            return self.get_item(item_id)
-        return None
-
     def get_items_if_no_score(self, user_id: int) -> Optional[List[Eatable]]:
         """确认该用户未评分的食物及饮品列表"""
         if user_id not in self.score.user_id_to_index:
@@ -486,10 +460,11 @@ class EatableMenu:
                         result.append(item)
         return result
 
+    def get_items_if_superuser_no_score(self) -> Optional[List[Eatable]]:
+        return self.get_items_if_no_score(SUPERUSER_ID)
+
     def set_enabled(self, item_id: int, enabled: bool = False, user_id: int = -1) -> bool:
-        """设置餐点禁用（仅 Superuser 可操作）"""
-        if not self._is_superuser(user_id):
-            return False  # 非 Superuser
+        """设置餐点禁用"""
 
         item = self.get_item(item_id)
         if not item:
@@ -516,6 +491,7 @@ class EatableMenu:
 
         # 设置 enabled 状态并保存
         item.enabled = enabled
+        self._add_history("Ban", item, None, user_id)
         self._save_menu()
         self._get_items_with_averages()  # 重排 (item, avg)
         return True
@@ -567,10 +543,9 @@ class EatableMenu:
 class MenuManager:
     """总菜单管理类"""
 
-    def __init__(self, data_dir_path: Path, cache_dir_path: Path, super_users: Optional[Set[int]] = None,
-                 nb_logger=BadLogger()):
-        self.food = EatableMenu(Food, food_init_dict, data_dir_path, cache_dir_path, super_users, nb_logger)
-        self.drink = EatableMenu(Drink, drink_init_dict, data_dir_path, cache_dir_path, super_users, nb_logger)
+    def __init__(self, data_dir_path: Path, cache_dir_path: Path, nb_logger=BadLogger()):
+        self.food = EatableMenu(Food, get_default_foods(), data_dir_path, cache_dir_path, nb_logger)
+        self.drink = EatableMenu(Drink, get_default_drinks(), data_dir_path, cache_dir_path, nb_logger)
 
         self.cache_dir_path = cache_dir_path
         self.offset_data_path: Path = data_dir_path / "offsets.json"

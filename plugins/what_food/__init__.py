@@ -1,10 +1,11 @@
 import re
 from random import choice
-from typing import Set, Tuple, Literal, List, cast
+from typing import Tuple, Literal, List, cast
 
-from nonebot import logger, require, get_driver
+from nonebot import logger, require
 from nonebot.plugin import on_regex, PluginMetadata
-from nonebot.internal.matcher import Matcher
+from nonebot.matcher import Matcher
+from nonebot.permission import SUPERUSER
 
 from nonebot.adapters.onebot.v11 import MessageEvent
 
@@ -21,14 +22,9 @@ __plugin_meta__ = PluginMetadata(
 )
 
 # 初始化菜单数据类
-super_user_str: Set[str] = get_driver().config.superusers
-super_user_int: Set[int] = set()
-for sus in super_user_str:
-    super_user_int.add(int(sus))
 menu_manager = MenuManager(
     data_dir_path=get_plugin_data_dir(),
     cache_dir_path=get_plugin_cache_dir(),
-    super_users=super_user_int,
     nb_logger=logger
 )
 
@@ -143,15 +139,18 @@ async def _(event: MessageEvent, matcher: Matcher):
     category, item_key_str, score_str = matched.groups()
     menu = menu_manager.get_menu(category)
 
-    key = item_key_str.strip()
+    item_id_matched = re.match(r"^([a-zA-Z])?(\d+)$", item_key_str.strip())
+    if item_id_matched:
+        # 按 ID 或 FullID 解析
+        letter, item_id_str = item_id_matched.groups()
+        new_menu = menu_manager.get_menu(letter)
+        menu = new_menu if new_menu else menu
+        item = menu.get_item(int(item_id_str))
+    else:
+        # 按名称解析
+        item = menu.get_item_by_name(item_key_str.strip())
 
-    # 先尝试把 key 转为 int 来判断是 id 还是名称
-    try:
-        item_id = int(key)
-        item = menu.get_item(item_id)
-    except (ValueError, KeyError):
-        # 不是整数或通过 id 未找到，就按名称查找
-        item = menu.get_item_by_name(key)
+    # 空检查
     if item is None:
         await matcher.finish(f"小梨没在菜单找到这个餐点诶qwq")
 
@@ -162,29 +161,18 @@ async def _(event: MessageEvent, matcher: Matcher):
 
     # 有分数，走评分路径
     score = int(score_str)
-    if user_id in super_user_int:
-        # superuser 可以提交任意整数分
-        r = menu.set_score_from_super_user({item.num: score}, user_id, group_id)
-        if r // 1 == 1:
-            await matcher.finish(
-                f"小梨已经收到 Superuser Score 数据 ({user_id} -> {score})！\n"
-                f"Score: {item_show_id_text(item)}{item.name} -> {item.get_score():.2f}"
-            )
-        else:
-            await matcher.finish("Superuser Score 提交失败。")
+    # 用户评分限制为 1~5
+    if score in {1, 2, 3, 4, 5}:
+        menu.set_score(item.num, cast(Literal[1, 2, 3, 4, 5], score), user_id, group_id)
+        await matcher.finish(
+            f"已经记录评分！你当前为 {item_show_id_text(item)}{item.name} 给出了{score}分的分数。"
+            f"目前评分均值在{item.get_score():.2f}"
+        )
     else:
-        # 普通用户评分限制为 1~5
-        if score in {1, 2, 3, 4, 5}:
-            menu.set_score(item.num, cast(Literal[1, 2, 3, 4, 5], score), user_id, group_id)
-            await matcher.finish(
-                f"已经记录评分！你当前为 {item_show_id_text(item)}{item.name} 给出了{score}分的分数。"
-                f"目前评分均值在{item.get_score():.2f}"
-            )
-        else:
-            await matcher.finish("评分只能用1~5的整数评分哦~")
+        await matcher.finish("评分只能用1~5的整数评分哦~")
 
 
-on_score_filter = on_regex(r"^可以吃\s+(.+)$", priority=1, block=True)
+on_score_filter = on_regex(r"^(可以吃|吃什么)\s+(.+)$", priority=1, block=True)
 
 
 @on_score_filter.handle()
@@ -192,7 +180,7 @@ async def _(event: MessageEvent, matcher: Matcher):
     """处理命令: 可以吃 xxx"""
     user_id, group_id = get_event_info(event)
     matched = matcher.state["_matched"]
-    level = matched.group(1)
+    _, level = matched.groups()
 
     level_map = {
         "好": 3.8,
@@ -257,39 +245,34 @@ async def _(matcher: Matcher):
     for idx, (item, avg) in enumerate(rank_list, start=1 if page > 0 else 0):
         global_index = start + (idx if step > 0 else menu_count - idx)
         rank_line = (
-            f"{global_index:>{len(str(end))}} "        # 编号对齐
+            f"{global_index:>{len(str(end))}} "       # 编号对齐
             f"{item_show_id_text(item)} {item.name}"  # '[F42] 名称'
-            f"{' ' * 2}(Score: {avg:.2f})"            # 两个空格 + 分数
+            f"{' ' * 2}{avg:.2f}"                     # 分数
         )
         rank_msg_list.append(rank_line)
 
     await matcher.finish(f"小梨的「{category}什么」菜单评分排行榜！(第{page}页)\n\n" + "\n".join(rank_msg_list))
 
 
-on_superuser = on_regex(r"^suLyra\s+WhatFood(.*?)$")
+on_superuser = on_regex(r"^suLyra\s+WhatFood(.*?)", permission=SUPERUSER)
 
 
 @on_superuser.handle()
 async def _(event: MessageEvent, matcher: Matcher):
     """Superuser 操作：批量获取未评分内容/统一评分"""
     user_id, group_id = get_event_info(event)
-    if user_id not in super_user_int:
-        return  # 非 superuser 不返回消息
     matched = matcher.state["_matched"]
     content = matched.group(1)
 
     content_list = content.split("\n")
     commands = content_list[0].split(" ")
     if commands[1] == "获取未评分项目":
-        def get_no_score(m: EatableMenu, u: int):
-            return m.get_items_if_no_score(u)
-
         if len(commands) >= 3:
-            no_score_items_all = get_no_score(menu_manager.get_menu(commands[2]), user_id)
+            no_score_items_all = menu_manager.get_menu(commands[2]).get_items_if_superuser_no_score()
         else:
             # 获取所有类别未评分项目
-            no_score_items_all = get_no_score(menu_manager.food, user_id) + \
-                                 get_no_score(menu_manager.drink, user_id)
+            no_score_items_all = menu_manager.food.get_items_if_superuser_no_score() + \
+                                 menu_manager.drink.get_items_if_superuser_no_score()
 
         if len(no_score_items_all) > 20:
             no_score_items = no_score_items_all[:20]
