@@ -254,7 +254,7 @@ async def _(matcher: Matcher):
     await matcher.finish(f"小梨的「{category}什么」菜单评分排行榜！(第{page}页)\n\n" + "\n".join(rank_msg_list))
 
 
-on_superuser = on_regex(r"^suLyra\s+WhatFood\s+(.*?)", permission=SUPERUSER)
+on_superuser = on_regex(r"^suLyra\s+(WhatFood)\s+(.*?)", permission=SUPERUSER)
 
 
 @on_superuser.handle()
@@ -262,11 +262,11 @@ async def _(event: MessageEvent, matcher: Matcher):
     """Superuser 操作：批量获取未评分内容/统一评分"""
     user_id, group_id = get_event_info(event)
     matched = matcher.state["_matched"]
-    content = matched.group(1)
+    _, content = matched.groups()
 
+    print("content:", content)
     content_list = content.split("\n")
-    commands_origin = content_list[0].split(" ")
-    commands = [commands_origin[i] for i in range(2, len(commands_origin))]  # 去掉前两位 suLyra WhatFood
+    commands = content_list[0].split(" ")
     if commands[0] == "获取未评分项目":
         if len(commands) >= 2:
             no_score_items_all = menu_manager.get_menu(commands[1]).get_items_if_superuser_no_score()
