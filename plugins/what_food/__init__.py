@@ -254,7 +254,7 @@ async def _(matcher: Matcher):
     await matcher.finish(f"小梨的「{category}什么」菜单评分排行榜！(第{page}页)\n\n" + "\n".join(rank_msg_list))
 
 
-on_superuser = on_regex(r"^suLyra\s+(WhatFood)\s+(.*?)", permission=SUPERUSER)
+on_superuser = on_regex(r"^suLyra\s+(WhatFood)\s+(.*)", permission=SUPERUSER)
 
 
 @on_superuser.handle()
