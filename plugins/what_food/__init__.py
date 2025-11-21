@@ -1,6 +1,6 @@
 import re
 from random import choice
-from typing import Tuple, Literal, List, cast
+from typing import Tuple, Literal, List, cast, Optional
 
 from nonebot import logger, require
 from nonebot.plugin import on_regex, PluginMetadata
@@ -222,8 +222,8 @@ async def _(matcher: Matcher):
     per_page = 10
 
     menu = menu_manager.get_menu(category)
-    # menu.item_avg_pairs: List[Tuple[Eatable, float]]
-    menu_count = len(menu.item_avg_pairs)
+    items = menu.get_items()
+    menu_count = len(items)
     if menu_count <= 0:
         await matcher.finish(f"小梨的「{category}什么」菜单评分排行榜！……是空的！快去找莉莉丝阿姐递菜单！")
 
@@ -236,18 +236,18 @@ async def _(matcher: Matcher):
         start = -(start+1)
         end = -(end+1)
         step = -1
-    rank_list: List[Tuple["Eatable", float]] = menu.item_avg_pairs[start:end:step]
+    rank_list: List[Eatable] = items[start:end:step]
 
     if not rank_list:
         await matcher.finish(f"小梨的「{category}什么」菜单评分排行榜！(第{page}页)\n\n……没这么多页面啦！不要耍小梨！")
 
     rank_msg_list: List[str] = []
-    for idx, (item, avg) in enumerate(rank_list, start=1 if page > 0 else 0):
+    for idx, item in enumerate(rank_list, start=1 if page > 0 else 0):
         global_index = start + (idx if step > 0 else menu_count - idx)
         rank_line = (
             f"{global_index:>{len(str(end))}} "       # 编号对齐
             f"{item_show_id_text(item)} {item.name}"  # '[F42] 名称'
-            f"{' ' * 2}{avg:.2f}"                     # 分数
+            f"{' ' * 2}{item.get_score():.2f}"        # 分数
         )
         rank_msg_list.append(rank_line)
 
@@ -267,21 +267,23 @@ async def _(event: MessageEvent, matcher: Matcher):
     content_list = content.split("\n")
     commands = content_list[0].split(" ")
     if commands[0] in ["获取未评分项目", "获取未评分餐点", "获取未评分内容"]:
-        _, category, user_id_str = commands + ["" for _ in range(3 - len(commands))]  # 保证长度为3
+        _, category, check_user_id_str = commands + ["" for _ in range(3 - len(commands))]  # 保证长度为3
+        # menu 为空则表示获取全部类别
         menu = menu_manager.get_menu(category)
         menus = [menu] if menu else [menu_manager.food, menu_manager.drink]
         items_no_score: List[Eatable] = list()
+        check_user_id: Optional[int] = int(check_user_id_str) if check_user_id_str else None
         for menu in menus:
-            if user_id := int(user_id_str) if user_id_str else None:
-                items_no_score += menu.get_items_if_no_score(user_id)
+            if check_user_id:
+                items_no_score += menu.get_items_if_no_score(check_user_id)
             else:
                 items_no_score += menu.get_items_if_superuser_no_score()
-                items_no_score = menu.get_items_if_superuser_no_score()
 
         if len(items_no_score) > 20:
             output_items = items_no_score[:20]
         elif len(items_no_score) < 1:
-            await matcher.finish(f"[Superuser] 目前{user_id if user_id else "Superuser"}没有需要评分的项目。")
+            target = str(check_user_id) if check_user_id else "Superuser"
+            await matcher.finish(f"[Superuser] 目前{target}没有需要评分的项目。")
             return
         else:
             output_items = items_no_score
@@ -290,15 +292,20 @@ async def _(event: MessageEvent, matcher: Matcher):
             '\n'.join([f"{item_show_id_text(item)} {item.name}" for item in output_items]))
 
     elif commands[0] == "批量评分":
-        score_infos = [re.match(r"([DF])\s*(\d+)\s*(-?\d+)", text).groups() for text in content_list[1:]]  # 除首行外的数据
+        score_infos = []
+        for text in content_list[1:]:  # 跳过第一行的命令内容
+            m = re.match(r"([DF])\s*(\d+)\s*(-?\d+)", text.strip())
+            if m:
+                score_infos.append(m.groups())
         result_food = menu_manager.food.set_score_from_super_user(
             {i: s for i, s in [(int(item[1]), int(item[2])) for item in score_infos if item[0] == "F"]},
             user_id, group_id)
         result_drink = menu_manager.drink.set_score_from_super_user(
             {i: s for i, s in [(int(item[1]), int(item[2])) for item in score_infos if item[0] == "D"]},
             user_id, group_id)
-        result = result_food + result_drink
-        await matcher.finish(f"[Superuser] 成功评分率:{result*100:.4f}%。检查日志以获取详细信息。")
+        rf, tf = result_food
+        rd, td = result_drink
+        await matcher.finish(f"[Superuser] 成功评分：Food( {rf}/{tf} )，Drink( {rd}/{td} )。")
 
     elif commands[0] in ["禁用", "恢复"]:
         if len(commands) < 2:
