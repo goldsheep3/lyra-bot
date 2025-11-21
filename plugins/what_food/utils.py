@@ -150,7 +150,7 @@ class Score:
 
     def set_score(self, item_id: int, score: int, user_id: int):
         """设置或更新用户评分"""
-        self._score_cache.pop(item_id)  # 清除缓存
+        self._score_cache.pop(item_id, None)  # 清除缓存
         self._ensure_capacity(item_id, user_id)
         item_index = self.item_id_index[item_id]
         user_index = self.user_id_index[user_id]
@@ -502,8 +502,8 @@ class EatableMenu:
 
         :param offset: 为正时，不会抽选出低于offset的餐点；为负时，不会抽选出高于offset的餐点，且此时评分权重逆转。
         """
-        if not self.menu:
-            return None  # 无餐点
+        # 确保缓存存在
+        self._refresh_sorted_items_cache()
 
         threshold = abs(offset)
 
