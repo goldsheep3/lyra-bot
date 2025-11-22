@@ -15,11 +15,24 @@ from nonebot_plugin_localstore import get_plugin_data_dir, get_plugin_cache_dir
 from .messages import MESSAGES, ALCOHOL_NOTICE, SPECIAL_NOTICE, NICKNAMES
 from .utils import Eatable, Food, Drink, MenuManager, content_cut, EatableMenu
 
+from libs.HelpContent import HelpContent, lyra_helper
+
 __plugin_meta__ = PluginMetadata(
     name="吃什么",
     description="一个「吃什么」的查询插件。",
     usage="发送「吃什么」即可使用。",
 )
+
+
+# 初始化帮助内容
+helper = HelpContent(
+    name="what_food",
+    title="WhatFood (吃什么)",
+    description="“餐点”的随机抽选推荐(支持对“餐点”评分)",
+    aliases=['whatfood', '吃什么', '喝什么']
+)
+lyra_helper.register_help_content(helper)
+
 
 # 初始化菜单数据类
 menu_manager = MenuManager(
@@ -41,7 +54,9 @@ def item_show_id_text(item: Eatable) -> str:
     return f"[{str(item.category)[:1]}{item.num}]"
 
 
-on_what_food = on_regex(r"^(.*?)([吃喝])什么$", block=True)
+on_what_food = on_regex(r"^(.*?)([吃喝])什么$", priority=5, block=True)
+helper.add_content(
+    "吃什么/喝什么", "根据当前过滤条件随机推荐餐点，可在前面添加内容以修改小梨的回复内容。")
 
 
 @on_what_food.handle()
@@ -68,6 +83,9 @@ async def _(event: MessageEvent, matcher: Matcher):
 
 
 on_this_food = on_regex(r"^(吃|喝)这个\s+([^有没\s]+.*?)(?:\s+(有酒|没有酒))?$", priority=5, block=True)
+helper.add_content(
+    "吃这个 [餐点名称/ID] [*酒精状态=没有酒]/喝这个 [饮品名称/ID] [*酒精状态=没有酒]",
+    "添加新餐点或修改已有餐点酒精状态(有酒/没有酒)。")
 
 
 @on_this_food.handle()
@@ -129,6 +147,9 @@ async def _(event: MessageEvent, matcher: Matcher):
 
 
 on_score = on_regex(r"^好([吃喝])吗\s+(.+?)(?:\s+(-?\d+))?$", priority=3, block=True)
+helper.add_content(
+    "好吃吗/好喝吗 [餐点名称/ID] [*评分]",
+    "为餐点评分(1~5分，不填评分可查询当前分数)\n建议的标准：喜欢的餐点(5), 不错的餐点(4), 也可以说成餐点(3), 不喜欢这个餐点(2), 不适合作为餐点(1)。")
 
 
 @on_score.handle()
@@ -172,7 +193,9 @@ async def _(event: MessageEvent, matcher: Matcher):
         await matcher.finish("评分只能用1~5的整数评分哦~")
 
 
-on_score_filter = on_regex(r"^(可以吃|吃什么)\s+(.+)$", priority=1, block=True)
+on_score_filter = on_regex(r"^(可以[吃喝]|[吃喝]什么)\s+(.+)$", priority=1, block=True)
+helper.add_content(
+    "可以吃 [过滤条件]", "设置餐点过滤(好的/能吃的/正常的/好玩的/猎奇的)。「吃什么」和「喝什么」的过滤条件会共同调整。")
 
 
 @on_score_filter.handle()
@@ -202,6 +225,8 @@ async def _(event: MessageEvent, matcher: Matcher):
 
 
 on_score_rank = on_regex(r"^([吃喝])什么排行榜\s*(-?\d+)?$", priority=10, block=True)
+helper.add_content(
+    "吃什么排行榜/喝什么排行榜 [*页码=1]", "查看餐点评分排行榜。可以使用负页码查看反向排行榜。")
 
 
 @on_score_rank.handle()
@@ -254,7 +279,7 @@ async def _(matcher: Matcher):
     await matcher.finish(f"小梨的「{category}什么」菜单评分排行榜！(第{page}页)\n\n" + "\n".join(rank_msg_list))
 
 
-on_superuser = on_regex(r"^(suLyra\s+WhatFood)\s+(.*)", permission=SUPERUSER)
+on_superuser = on_regex(r"^(suLyra\s+(WhatFood|what_food))\s+(.*)", permission=SUPERUSER)
 
 
 @on_superuser.handle()
