@@ -317,6 +317,7 @@ async def _(event: MessageEvent, matcher: Matcher):
             '\n'.join([f"{item_show_id_text(item)} {item.name}" for item in output_items]))
 
     elif commands[0] == "批量评分":
+        # todo: SUPERUSER 批量评分无法成功评分，待修复
         score_infos = []
         for text in content_list[1:]:  # 跳过第一行的命令内容
             m = re.match(r"([DF])\s*(\d+)\s*(-?\d+)", text.strip())
