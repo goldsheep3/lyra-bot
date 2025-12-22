@@ -22,8 +22,7 @@ async def generate(config: dict[str, Config]) -> None:
 
     try:
         pic = await draw_best.draw(music_list, config)
-        # path = OUTPUT + (datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S') + '.png')
-        path = r"E:\Projects\PythonProjects\mai\maimai-b50-image-generator\output\b50.png"
+        path = OUTPUT + (datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S') + '.png')
         pic.save(path, "PNG")
     except TypeError:
         print(f"[FATAL]生成失败，Traceback如下\n{traceback.format_exc()}"
