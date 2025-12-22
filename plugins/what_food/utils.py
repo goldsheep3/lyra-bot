@@ -525,10 +525,8 @@ class EatableMenu:
             weights = None
         if any([w <= 0 for w in weights]):
             # 存在非正权重，整体偏移为正值
-            # offset = abs(min(weights)) + 1
-            # weights = [w + offset for w in weights]
-            # fix
-            weights = None
+            offset = abs(min(weights)) + 1
+            weights = [w + offset for w in weights]
 
         chosen = random.choices(list(sorted_items), weights=weights, k=1)[0]
         return chosen

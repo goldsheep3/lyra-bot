@@ -10,7 +10,6 @@ from nonebot.plugin import PluginMetadata
 from nonebot.internal.matcher import Matcher
 from nonebot.adapters.onebot.v11 import Bot, Event
 
-from .adx_download import handle_download
 from .ra_calculator import calculate_rating, fetch_chart_level
 from .utils import init_difficulty_from_text
 

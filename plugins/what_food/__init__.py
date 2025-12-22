@@ -1,6 +1,6 @@
 import re
 from random import choice
-from typing import Tuple, Literal, List, cast, Optional
+from typing import Tuple, List, Optional
 
 from nonebot import logger, require
 from nonebot.plugin import on_regex, PluginMetadata
@@ -15,24 +15,11 @@ from nonebot_plugin_localstore import get_plugin_data_dir, get_plugin_cache_dir
 from .messages import MESSAGES, ALCOHOL_NOTICE, SPECIAL_NOTICE, NICKNAMES
 from .utils import Eatable, Food, Drink, MenuManager, content_cut, EatableMenu
 
-from libs.HelpContent import HelpContent, lyra_helper
-
 __plugin_meta__ = PluginMetadata(
     name="吃什么",
     description="一个「吃什么」的查询插件。",
     usage="发送「吃什么」即可使用。",
 )
-
-
-# 初始化帮助内容
-helper = HelpContent(
-    name="what_food",
-    title="WhatFood (吃什么)",
-    description="“餐点”的随机抽选推荐(支持对“餐点”评分)",
-    aliases=['whatfood', '吃什么', '喝什么']
-)
-lyra_helper.register_help_content(helper)
-
 
 # 初始化菜单数据类
 menu_manager = MenuManager(
@@ -55,8 +42,6 @@ def item_show_id_text(item: Eatable) -> str:
 
 
 on_what_food = on_regex(r"^(.*?)([吃喝])什么$", priority=5, block=True)
-helper.add_content(
-    "吃什么/喝什么", "根据当前过滤条件随机推荐餐点，可在前面添加内容以修改小梨的回复内容。")
 
 
 @on_what_food.handle()
@@ -83,9 +68,6 @@ async def _(event: MessageEvent, matcher: Matcher):
 
 
 on_this_food = on_regex(r"^(吃|喝)这个\s+([^有没\s]+.*?)(?:\s+(有酒|没有酒))?$", priority=5, block=True)
-helper.add_content(
-    "吃这个 [餐点名称/ID] [*酒精状态=没有酒]/喝这个 [饮品名称/ID] [*酒精状态=没有酒]",
-    "添加新餐点或修改已有餐点酒精状态(有酒/没有酒)。")
 
 
 @on_this_food.handle()
@@ -147,9 +129,6 @@ async def _(event: MessageEvent, matcher: Matcher):
 
 
 on_score = on_regex(r"^好([吃喝])吗\s+(.+?)(?:\s+(-?\d+))?$", priority=3, block=True)
-helper.add_content(
-    "好吃吗/好喝吗 [餐点名称/ID] [*评分]",
-    "为餐点评分(1~5分，不填评分可查询当前分数)\n建议的标准：喜欢的餐点(5), 不错的餐点(4), 也可以说成餐点(3), 不喜欢这个餐点(2), 不适合作为餐点(1)。")
 
 
 @on_score.handle()
@@ -184,7 +163,7 @@ async def _(event: MessageEvent, matcher: Matcher):
     score = int(score_str)
     # 用户评分限制为 1~5
     if score in {1, 2, 3, 4, 5}:
-        menu.set_score(item.num, cast(Literal[1, 2, 3, 4, 5], score), user_id, group_id)
+        menu.set_score(item.num, score, user_id, group_id)
         await matcher.finish(
             f"已经记录评分！你当前为 {item_show_id_text(item)}{item.name} 给出了{score}分的分数。"
             f"目前评分均值在{item.get_score():.2f}"
@@ -194,8 +173,6 @@ async def _(event: MessageEvent, matcher: Matcher):
 
 
 on_score_filter = on_regex(r"^(可以[吃喝]|[吃喝]什么)\s+(.+)$", priority=1, block=True)
-helper.add_content(
-    "可以吃 [过滤条件]", "设置餐点过滤(好的/能吃的/正常的/好玩的/猎奇的)。「吃什么」和「喝什么」的过滤条件会共同调整。")
 
 
 @on_score_filter.handle()
@@ -217,7 +194,8 @@ async def _(event: MessageEvent, matcher: Matcher):
     offset = level_map.get(level, None)
     offset = offset if offset else level_map.get(level[:-1], None)
     if offset is None:
-        await matcher.finish("小梨不确定你的接受范围喔！可以使用以下五种范围指标（默认为「都行的」）：\n好的；能吃的；都行的；好玩的；猎奇的")
+        await matcher.finish(
+            "小梨不确定你的接受范围喔！可以使用以下五种范围指标（默认为「都行的」）：\n好的；能吃的；都行的；好玩的；猎奇的")
         return
     menu_manager.set_offset(user_id, offset, group_id)
     await matcher.finish(
@@ -225,8 +203,6 @@ async def _(event: MessageEvent, matcher: Matcher):
 
 
 on_score_rank = on_regex(r"^([吃喝])什么排行榜\s*(-?\d+)?$", priority=10, block=True)
-helper.add_content(
-    "吃什么排行榜/喝什么排行榜 [*页码=1]", "查看餐点评分排行榜。可以使用负页码查看反向排行榜。")
 
 
 @on_score_rank.handle()
@@ -258,8 +234,8 @@ async def _(matcher: Matcher):
     step = 1
     if page < 1:
         # 负数页码，从尾部开始计算
-        start = -(start+1)
-        end = -(end+1)
+        start = -(start + 1)
+        end = -(end + 1)
         step = -1
     rank_list: List[Eatable] = items[start:end:step]
 
@@ -270,9 +246,9 @@ async def _(matcher: Matcher):
     for idx, item in enumerate(rank_list, start=1 if page > 0 else 0):
         global_index = start + (idx if step > 0 else menu_count - idx)
         rank_line = (
-            f"{global_index:>{len(str(end))}} "       # 编号对齐
+            f"{global_index:>{len(str(end))}} "  # 编号对齐
             f"{item_show_id_text(item)} {item.name}"  # '[F42] 名称'
-            f"{' ' * 2}{item.get_score():.2f}"        # 分数
+            f"{' ' * 2}{item.get_score():.2f}"  # 分数
         )
         rank_msg_list.append(rank_line)
 
