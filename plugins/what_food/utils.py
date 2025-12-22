@@ -45,24 +45,12 @@ def content_cut(text: str) -> List[str]:
 
 
 class Score:
-    """基于 numpy 的评分数据类"""
 
     def __init__(self, path: Path, nb_logger=None):
         self.logger = nb_logger
         self.npz_path = path
 
         self.data: np.ndarray
-        """
-        数组结构：
-        行：item_id 索引
-        列：user_id 索引
-        数据值：评分值（int）
-        
-        user_id > 0 的用户为普通用户
-        superuser 用户通过`suLyra WhatFood 批量评分`设置的分数会使用 user_id = -127（即SUPERUSER_ID）
-        计算平均值时，user_id > 0 的评分权重为 1，user_id = -127 的评分权重为 30 倍（即SUPERUSER_MULTIPLIER）
-        忽略其余 user_id <= 0 的评分数据
-        """
         self.item_id_index: Dict[int, int] = {}
         self.user_id_index: Dict[int, int] = {}
         self._score_cache: Dict[int, float] = {}
@@ -133,8 +121,7 @@ class Score:
                 self.data = new_data
 
     def get_score(self, item_id: int) -> float:
-        """核心方法：分数获取，SUPERUSER 有更高权重"""
-
+        """计算item_id对应的所有非0评分的平均值，-127用户有30倍权重"""
         if item_id not in self.item_id_index:
             return 0.0
         # 缓存命中
@@ -163,7 +150,7 @@ class Score:
 
     def set_score(self, item_id: int, score: int, user_id: int):
         """设置或更新用户评分"""
-        self._score_cache.pop(item_id, None)  # 清除该 user_id 缓存
+        self._score_cache.pop(item_id, None)  # 清除缓存
         self._ensure_capacity(item_id, user_id)
         item_index = self.item_id_index[item_id]
         user_index = self.user_id_index[user_id]
@@ -238,12 +225,6 @@ class EatableMenu:
         self.data_path: Path = dir_path / f"{self.cls.category}.json"  # 菜单数据文件路径
         score_path = dir_path / f"{self.cls.category}_scores.npz"  # 评分数据文件路径
         self.score: Score = Score(score_path, nb_logger)  # 评分对象类
-        """
-        对【食品】或【饮品】两个不同部分，创建两个 EatableMenu 实例
-        data_path 指向各自的 JSON 文件（`Food.json`/`Drink.json`），结构见`self._save_to_file`
-        score_path 指向各自的评分数据文件（`Food_scores.npz`/`Drink_scores.npz`）
-        数据类维护的是对 Score 实例的引用，实际计算过程在 Score 类中完成
-        """
 
         self._load_from_file(default_data=default_data)
 
@@ -310,9 +291,6 @@ class EatableMenu:
                      item: Eatable, user_id: int, group_id: int = -1, score: Optional[int] = None,
                      superuser: bool = False) -> None:
         """添加历史记录"""
-
-        # todo: 当前为独立的历史记录方法，后续考虑使用 Loguru 记录并考虑异步优化
-
         now = datetime.now()
         now_date = now.strftime('%Y%m%d')
         now_time = now.strftime('%H:%M:%S')
@@ -531,10 +509,10 @@ class EatableMenu:
 
         sorted_items: List[Eatable]
         if offset >= 0:
-            sorted_items = [item for item in self._sorted_items_cache if item.get_score() >= threshold]
+            sorted_items = [item for item in self.get_items() if item.get_score() >= threshold]
             reverse_weights = False
         else:
-            sorted_items = [item for item in self._sorted_items_cache if item.get_score() <= threshold]
+            sorted_items = [item for item in self.get_items() if item.get_score() <= threshold]
             reverse_weights = True
 
         if not sorted_items:
@@ -547,8 +525,10 @@ class EatableMenu:
             weights = None
         if any([w <= 0 for w in weights]):
             # 存在非正权重，整体偏移为正值
-            offset = abs(min(weights)) + 1
-            weights = [w + offset for w in weights]
+            # offset = abs(min(weights)) + 1
+            # weights = [w + offset for w in weights]
+            # fix
+            weights = None
 
         chosen = random.choices(list(sorted_items), weights=weights, k=1)[0]
         return chosen

@@ -29,6 +29,7 @@ __plugin_meta__ = PluginMetadata(
 
 on_fortune = on_regex(r"^(今日运势|运势|抽签|签到|打卡)$", block=True)
 
+
 @on_fortune.handle()
 async def _(event: MessageEvent, matcher: Matcher):
     # 获取基本信息

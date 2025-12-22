@@ -55,8 +55,8 @@ __plugin_meta__ = PluginMetadata(
 #         output = await cmd_query_all(event.group_id)
 #         await event.finish(output)
 
-
 # on_listen = on_regex(r"")
+
 #
 # @on_listen.handle()
 # async def _(event):

@@ -1,9 +1,0 @@
-serverAddr = "acloudu.ciane.cn"
-serverPort = 4022
-
-[[proxies]]
-name = "LyraBotDebug"
-type = "tcp"
-localIP = "127.0.0.1"
-localPort = 8080
-remotePort = 6700
