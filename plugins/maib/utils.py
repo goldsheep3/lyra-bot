@@ -176,7 +176,10 @@ class MusicInfo:
 
     def get_dx_score_star_count(self) -> int:
         """计算 DX Score 星数"""
-        dx_score = self.dx_score[0] / self.dx_score[1]
+        try:
+            dx_score = self.dx_score[0] / self.dx_score[1]
+        except ZeroDivisionError:
+            dx_score = 0.0
         self.dx_score_star_count = next((i for i, s in enumerate([85, 90, 93, 95, 97, 100]) if dx_score <= s), 5)
         return self.dx_score_star_count
 

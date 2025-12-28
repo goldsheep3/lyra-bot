@@ -531,7 +531,7 @@ async def handle_list_players(bot, event, matcher):
 
 
 # 超级用户白名单管理（优先级较高，支持添加和删除）
-admin_whitelist_matcher = on_regex(r'^(添加|删除)白名单\s+(\. ?)([0-9a-zA-Z\-_]+)\s+(\d+)$',
+admin_whitelist_matcher = on_regex(r'^(添加|删除)白名单\s+(\.?)([0-9a-zA-Z\-_]+)\s+(\d+)$',
                                    priority=10, block=True, permission=SUPERUSER)
 
 
