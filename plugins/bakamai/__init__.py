@@ -540,7 +540,7 @@ async def handle_admin_whitelist_request(event, matcher):
     """处理超级用户白名单管理请求"""
 
     # 群组过滤：仅允许的群组才响应
-    if (group_id := getattr(event, "group_id", None)) not in ALLOWED_GROUPS:
+    if getattr(event, "group_id", None) not in ALLOWED_GROUPS:
         return
 
     matched = matcher.state["_matched"]
@@ -569,7 +569,7 @@ async def handle_user_whitelist_request(event, matcher):
     """处理普通用户白名单添加请求"""
 
     # 群组过滤：仅允许的群组才响应
-    if (group_id := getattr(event, "group_id", None)) not in ALLOWED_GROUPS:
+    if getattr(event, "group_id", None) not in ALLOWED_GROUPS:
         return
 
     matched = matcher.state["_matched"]
@@ -591,7 +591,7 @@ async def handle_view_whitelist(event):
     """处理管理员查看白名单请求"""
 
     # 群组过滤：仅允许的群组才响应
-    if (group_id := getattr(event, "group_id", None)) not in ALLOWED_GROUPS:
+    if getattr(event, "group_id", None) not in ALLOWED_GROUPS:
         return
     logger.info(f"超级用户 {event.user_id} 查看白名单")
 
@@ -617,4 +617,3 @@ async def handle_view_whitelist(event):
 
     result = "\n".join(result_lines)
     await view_whitelist_matcher.finish(result)
-

@@ -35,6 +35,7 @@ class DifficultyVariant:
         self.simai = num
         self.maipy = num - 2
 
+
 class ChartDifficulty:
     # 主要采用 simai 规则的数值表示
     EASY = DifficultyVariant(1)
@@ -74,6 +75,7 @@ def init_difficulty(level: int, variant: Literal['simai', 'maipy'] = 'simai') ->
         ChartDifficulty.Re_MASTER,
     ][index]
 
+
 def init_difficulty_from_text(name: str) -> DifficultyVariant:
     """根据字符串初始化 ChartDifficulty"""
     name = name.lower()
@@ -87,8 +89,9 @@ def init_difficulty_from_text(name: str) -> DifficultyVariant:
     }
     return mapping.get(name, ChartDifficulty.MASTER)  # 默认返回 MASTER
 
+
 _old_versions = [
-    'maimai', 'maimai_PLUS','GreeN', 'GreeN_PLUS',
+    'maimai', 'maimai_PLUS', 'GreeN', 'GreeN_PLUS',
     'ORANGE', 'ORANGE_PLUS', 'PiNK', 'PiNK_PLUS',
     'MURASAKi', 'MURASAKi_PLUS', 'MiLK', 'MiLK_PLUS', 'FiNALE',
 ]
@@ -148,7 +151,8 @@ class MusicInfo:
         elif isinstance(dx_score, tuple):
             if dx_score[1] < dx_score[0]:
                 raise ValueError("dx_score max must be greater than or equal to dx_score")
-        else: raise ValueError("dx_score must be int or Tuple[int, int]")
+        else:
+            raise ValueError("dx_score must be int or Tuple[int, int]")
 
         self.get_dx_rating()
         self.get_dx_score_star_count()
@@ -176,17 +180,16 @@ class MusicInfo:
 
     def get_dx_score_star_count(self) -> int:
         """计算 DX Score 星数"""
-        try:
+        dx_score = 0
+        if self.dx_score[1] != 0:
             dx_score = self.dx_score[0] / self.dx_score[1]
-        except ZeroDivisionError:
-            dx_score = 0.0
         self.dx_score_star_count = next((i for i, s in enumerate([85, 90, 93, 95, 97, 100]) if dx_score <= s), 5)
         return self.dx_score_star_count
 
 
 def _ra_calculate(level: float, score: float) -> int:
     return MusicInfo(
-        name="", short_id=-1, dx_chart=True,difficulty=ChartDifficulty.MASTER,
+        name="", short_id=-1, dx_chart=True, difficulty=ChartDifficulty.MASTER,
         score=score, level=level, version=0, region_version='JP'
     ).dxrating
 

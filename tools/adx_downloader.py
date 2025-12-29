@@ -99,7 +99,7 @@ class ChartFileDownloader:
         song_id = str(song_id)
         logger.info(f"{log_prefix}: 准备开始下载")
         download_dir.mkdir(parents=True, exist_ok=True)
-        file_path = download_dir / f"{song_id}{ '' if bga else '_nobga' }.zip"
+        file_path = download_dir / f"{song_id}.zip"
         if file_path.exists():
             logger.info(f"{log_prefix}: 文件已存在，跳过下载")
             return {"file_path": str(file_path), "download_tag": False}
@@ -162,7 +162,7 @@ class ChartFileDownloader:
 
 
 if __name__ == "__main__":
-    working_dir = Path("/home/goldsheep3/.local/share/nonebot/maib")
+    working_dir = Path("/home/goldsheep3/lyra-bot/plugin_data/maib")
 
     logger.remove()
     logger.add(

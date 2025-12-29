@@ -53,6 +53,7 @@ async def _(bot: Bot, event: Event, matcher: Matcher):
         logger.warning(f"谱面: id{str(short_id)} 不存在。")
         await matcher.finish("小梨没有找到这个谱面！可能这张谱面未被收录，请联系小梨的监护人确认谱面存在及收录情况qwq")
         return
+    await matcher.send(f"请稍候——小梨开始准备id{short_id}的谱面文件啦！")
 
     # 解压并读取maidata.txt第一行
     logger.info("开始解压zip文件")
@@ -83,7 +84,7 @@ async def _(bot: Bot, event: Event, matcher: Matcher):
         "upload_group_file",
         group_id=group_id,
         file=chart_file_path.as_posix(),
-        name=f"{short_id}.zip"
+        name=f"{short_id}.adx"
     )
     logger.success(f"{short_id}.zip 上传成功")
     finish_message = f"{maidata_title}(id{short_id})" if maidata_title else f"id{short_id}"
@@ -120,7 +121,8 @@ async def _(event: Event, matcher: Matcher):
     """处理命令: ra 13.2 100.1000 或 ra 13.2 鸟加 或 ra help"""
     msg = str(event.get_message())
     match = re.search(r"^ra\s+(\d+(?:\.\d+)?)\s+(\S+)", msg)  # 定数直接计算
-    if not match: return
+    if not match:
+        return
     await calculate_rating(matcher, float(match.group(1)), match.group(2))
 
 
@@ -129,7 +131,8 @@ async def _(event: Event, matcher: Matcher):
     """处理命令: ra id10240红 100.5 或 ra id10240红 鸟加 或 ra help"""
     msg = str(event.get_message())
     match = re.search(r"^ra\s+id(\d+)([绿黄红紫白])?\s+(\S+)", msg)  # id加颜色计算
-    if not match: return
+    if not match:
+        return
     difficulty = init_difficulty_from_text(match.group(2)) if match.group(2) else None
     song_info = await fetch_chart_level(maipy, int(match.group(1)), difficulty)
     if song_info:
