@@ -54,7 +54,10 @@ class MergeChartCNVersionData:
             maiJP_data: dict = self._downloader(maiJP_chart_data_url)
         except (requests.exceptions.RequestException, ValueError) as e:
             logger.error(f"获取 Maichart-Converts(maiJP) 数据失败: {str(e)}")
-            raise Exception("获取 Maichart-Converts(maiJP) 数据失败") from e
+            import json
+            with open("/home/goldsheep3/index.json", "r", encoding="utf-8") as f:
+                maiJP_data = json.load(f)
+            
         logger.debug(f"成功获取 Maichart-Converts(maiJP) 数据，数据包含 {len(maiJP_data)} 首歌曲。")
         logger.info("")
         logger.info("请考虑支持 Maichart-Converts 项目，在 GitHub 上给该项目一个 Star ⭐！")
