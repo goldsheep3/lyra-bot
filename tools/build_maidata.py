@@ -382,8 +382,11 @@ if __name__ == "__main__":
     # 补充 CN 版本信息
     logger.info("✉ 提取 CN 文件数据")
     from adx_downloader import MergeChartCNVersionData
+    from extract_maidata import parse_diving_fish_version
     cn_ver = MergeChartCNVersionData().merge_chart_cnver_data()  # id: version
-    [setattr(m, "version_cn", cn_ver.get(str(m.shortid))) for m in maidata_list if not isinstance(m, UtageMaiData)]
+    for mai in maidata_list:
+        if not isinstance(mai, UtageMaiData):
+            mai.version_cn = parse_diving_fish_version(cn_ver.get(str(mai.shortid)), versions_config)
 
     # 批量插入
     logger.info("💾 插入数据到数据库")

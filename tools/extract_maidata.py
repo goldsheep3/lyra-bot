@@ -104,6 +104,20 @@ def parse_version(version_str: str, version_dict: Dict[int, str]) -> Optional[in
     return v
 
 
+def parse_diving_fish_version(version_str: str, version_dict: Dict[int, str]) -> Optional[int]:
+    """辅助函数：解析国服版本号"""
+    v_jp_result = parse_version(version_str, version_dict)
+    if v_jp_result is None:
+        return None
+    elif v_jp_result <= 12:
+        # 旧框版本，一致
+        return v_jp_result
+    else:
+        # 新框版本，转化
+        v = (v_jp_result - 13) // 2 + 2020
+        return v
+
+
 def extract_metadata_from_maidata(content: str) -> Dict[str, str]:
     """
     从 maidata. txt 内容中提取 &key=value 格式的元数据
