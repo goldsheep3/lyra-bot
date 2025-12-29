@@ -5,25 +5,24 @@ from nonebot.internal.matcher import Matcher
 
 from .utils import DifficultyVariant, DIFFICULTY_MAP, init_difficulty, _ra_calculate
 
-
 # 完成率别名映射
 rate_alias: Dict[float, Tuple[str]] = {
     101.0000: ("ap+", "理论"),
     100.7500: ("ap",),
     100.5000: ("鸟加", "鸟家", "sss+", "3s+"),
     100.0000: ("鸟", "鸟s", "sss", "3s"),
-     99.5000: ("ss+", "2s+"),
-     99.0000: ("ss", "2s"),
-     98.0000: ("s+", "1s+"),
-     97.0000: ("s", "1s"),
-     94.0000: ("鸟a", "aaa", "3a"),
-     90.0000: ("aa", "2a"),
-     80.0000: ("a", "1a"),
-     75.0000: ("鸟b", "bbb", "3b"),
-     70.0000: ("bb", "2b"),
-     60.0000: ("b", "1b"),
-     50.0000: ("c", "1c"),
-      0.0000: ("d", "1d"),
+    99.5000:  ("ss+", "2s+"),
+    99.0000:  ("ss", "2s"),
+    98.0000:  ("s+", "1s+"),
+    97.0000:  ("s", "1s"),
+    94.0000:  ("鸟a", "aaa", "3a"),
+    90.0000:  ("aa", "2a"),
+    80.0000:  ("a", "1a"),
+    75.0000:  ("鸟b", "bbb", "3b"),
+    70.0000:  ("bb", "2b"),
+    60.0000:  ("b", "1b"),
+    50.0000:  ("c", "1c"),
+    0.0000:   ("d", "1d"),
 }
 rate_alias_map: Dict[str, float] = {}
 for rate_value, aliases in rate_alias.items():
@@ -34,7 +33,8 @@ for rate_value, aliases in rate_alias.items():
 async def fetch_chart_level(maipy, short_id: int, difficult: Optional[DifficultyVariant] = None) -> Optional[dict]:
     """调用 maipy 获取谱面及定数信息"""
     difficulty_tag = short_id // 10000  # 0->SD, 1->DX, 其余在 ra 计算中无效
-    if difficulty_tag > 1 or difficulty_tag < 0: return None
+    if difficulty_tag > 1 or difficulty_tag < 0:
+        return None
     chart_tag: str = "SD" if difficulty_tag == 0 else "DX"
     maipy_id: int = short_id % 10000
 
@@ -70,7 +70,7 @@ def _calculate(level: float, rate_str: str) -> Optional[Tuple[int, float]]:
     return d, rate
 
 
-async def calculate_rating(matcher: Matcher, level: float, rate_str: str, song_info: Optional[dict] = None)-> None:
+async def calculate_rating(matcher: Matcher, level: float, rate_str: str, song_info: Optional[dict] = None) -> None:
     """计算并回复 Rating"""
     result = _calculate(level, rate_str)
     if result is None:

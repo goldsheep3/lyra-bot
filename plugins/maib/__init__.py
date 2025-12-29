@@ -32,13 +32,14 @@ maipy = maimai_py.MaimaiClient()
 # ADX 谱面下载
 # =================================
 
-adx_download = on_regex(r"下载谱面\s*([0-9]+)", priority=5)
+adx_download = on_regex(r"下载谱面\s*(?:id\s*)?(\d+)(?:\s*(zip|z))?$", priority=5)
 
 
 @adx_download.handle()
 async def _(bot: Bot, event: Event, matcher: Matcher):
     """处理命令: 下载谱面11568"""
-    short_id = int(matcher.state["_matched"].group(1))
+    short_id, archive_type = matcher.state["_matched"].groups()
+    short_id = int(short_id)
     group_id = event.group_id if hasattr(event, "group_id") else None
     logger.debug(f"group_id: {group_id}")
     if not group_id:
@@ -80,11 +81,12 @@ async def _(bot: Bot, event: Event, matcher: Matcher):
 
     # 上传到QQ群文件
     logger.info(f"{short_id}.zip 开始上传群文件")
+    file_type = "zip" if archive_type else "adx"
     await bot.call_api(
         "upload_group_file",
         group_id=group_id,
         file=chart_file_path.as_posix(),
-        name=f"{short_id}.adx"
+        name=f"{short_id}.{file_type}"
     )
     logger.success(f"{short_id}.zip 上传成功")
     finish_message = f"{maidata_title}(id{short_id})" if maidata_title else f"id{short_id}"
