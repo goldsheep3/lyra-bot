@@ -139,3 +139,9 @@ async def _(event: Event, matcher: Matcher):
         await calculate_rating(matcher, song_info['level'], match.group(3), song_info)
     else:
         await matcher.finish(f"小梨找不到这个谱面qwq\n请确认谱面的id和难度。")
+
+# =================================
+# ADX 谱面下载
+# =================================
+
+pass

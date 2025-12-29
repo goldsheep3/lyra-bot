@@ -366,11 +366,11 @@ if __name__ == "__main__":
         zip_folder_paths.append(Path(zip_folder_path))
 
     # 创建数据库
-    logger.info("\n📦 创建数据库")
+    logger.info("📦 创建数据库")
     create_database(database_path)
 
     # 提取数据
-    logger.info("\n📦 提取 zip 文件数据")
+    logger.info("📦 提取 zip 文件数据")
     maidata_list = list()
     for path in zip_folder_paths:
         new_list = process_zip_files(path, versions_config)
@@ -379,12 +379,18 @@ if __name__ == "__main__":
         add_list = [new for new in new_list if new.shortid not in old_set]
         maidata_list += add_list
 
-        # 批量插入
-    logger.info("\n💾 插入数据到数据库")
+    # 补充 CN 版本信息
+    logger.info("✉ 提取 CN 文件数据")
+    from adx_downloader import MergeChartCNVersionData
+    cn_ver = MergeChartCNVersionData().merge_chart_cnver_data()  # id: version
+    [setattr(m, "version_cn", cn_ver.get(str(m.shortid))) for m in maidata_list if not isinstance(m, UtageMaiData)]
+
+    # 批量插入
+    logger.info("💾 插入数据到数据库")
     batch_insert_maidata(database_path, maidata_list)
 
     # 显示统计信息
-    logger.info("\n📊 数据库统计信息:")
+    logger.info("📊 数据库统计信息:")
     stats = get_database_stats(database_path)
     logger.info(f"  普通歌曲数:  {stats['normal_songs']}")
     logger.info(f"  普通谱面数: {stats['normal_charts']}")

@@ -20,7 +20,8 @@ def milkbot_download_api_url(short_id: int, bga: bool = False) -> str:
 class MergeChartCNVersionData:
     """合并 CNVersion (CNVer) 谱面数据的工具类"""
 
-    def _downloader(self, url: str, retries: int = 3, delay: int | float = 1):
+    @staticmethod
+    def _downloader(url: str, retries: int = 3, delay: int | float = 1):
         """
         获取数据的辅助函数
         """
@@ -46,7 +47,6 @@ class MergeChartCNVersionData:
         """合并 song_id: CNVersion 谱面数据"""
         logger.info("准备合并 ChartData")
 
-        chart_data: Dict[str, Optional[str]] = {}
         # 1. 获取 Converts(maiJP) 数据，以获取所有 song_id
         logger.debug("准备获取 Maichart-Converts(maiJP) 数据")
         maiJP_chart_data_url = CHART_INDEX_URL
