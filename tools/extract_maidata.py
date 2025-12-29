@@ -28,6 +28,7 @@ class MaiData:
     version: int  # 日服更新版本
     version_cn: Optional[int]  # 国服更新版本
     converter: str  # 谱面来源
+    zip_path: str = ""  # zip 压缩包文件位置
 
     chart1: Optional[MaiDataChart] = None  # Easy
     chart2: Optional[MaiDataChart] = None  # Basic
@@ -143,13 +144,14 @@ def extract_metadata_from_maidata(content: str) -> Dict[str, str]:
     return metadata
 
 
-def parse_normal_maidata(raw_metadata: Dict[str, str], versions_config: Dict[int, str]) -> MaiData:
+def parse_normal_maidata(raw_metadata: Dict[str, str], versions_config: Dict[int, str], zip_path: str = "") -> MaiData:
     """
     解析普通 maimai 谱面
 
     Args:
         raw_metadata: 原始提取的键值对字典
         versions_config: 版本映射配置字典
+        zip_path: zip 文件路径
 
     Returns:
         MaiData 对象
@@ -177,7 +179,8 @@ def parse_normal_maidata(raw_metadata: Dict[str, str], versions_config: Dict[int
         cabinet=cabinet,
         version=version,
         version_cn=None,
-        converter=converter
+        converter=converter,
+        zip_path=zip_path
     )
 
     for chart_num in range(2, 7):
@@ -187,13 +190,14 @@ def parse_normal_maidata(raw_metadata: Dict[str, str], versions_config: Dict[int
     return mai
 
 
-def parse_utage_maidata(raw_metadata: Dict[str, str], versions_config: Dict[int, str]) -> UtageMaiData:
+def parse_utage_maidata(raw_metadata: Dict[str, str], versions_config: Dict[int, str], zip_path: str = "") -> UtageMaiData:
     """
     解析宴会场 maimai 谱面
 
     Args:
         raw_metadata: 原始提取的键值对字典
         versions_config: 版本映射配置字典
+        zip_path: zip 文件路径
 
     Returns:
         UtageMaiData 对象
@@ -220,7 +224,8 @@ def parse_utage_maidata(raw_metadata: Dict[str, str], versions_config: Dict[int,
         cabinet="UTAGE",
         version=version,
         version_cn=None,
-        converter=converter
+        converter=converter,
+        zip_path=zip_path
     )
 
     match = re.match(r'^\[(.)]', title)
@@ -280,9 +285,9 @@ def process_zip_files(zip_folder_path: Path, versions_config: Dict[int, str]) ->
             if raw_metadata:
                 # (Utage) or (Utage Buddy)
                 if ('lv_7' in raw_metadata) or ('?' in raw_metadata.get('lv_2', "")):
-                    mai = parse_utage_maidata(raw_metadata, versions_config)
+                    mai = parse_utage_maidata(raw_metadata, versions_config, str(zip_path))
                 else:
-                    mai = parse_normal_maidata(raw_metadata, versions_config)
+                    mai = parse_normal_maidata(raw_metadata, versions_config, str(zip_path))
                 result.append(mai)
 
                 # 根据类型显示不同信息

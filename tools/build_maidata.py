@@ -30,7 +30,8 @@ def create_database(db_path:  Path) -> None:
                        cabinet         TEXT NOT NULL,       -- 谱面类型(SD/DX)
                        version         INTEGER NOT NULL,    -- 谱面更新版本（日服）
                        version_cn      INTEGER,             -- 谱面更新版本（国服）
-                       converter       TEXT                 -- 谱面来源
+                       converter       TEXT,                -- 谱面来源
+                       zip_path        TEXT                 -- zip 压缩包文件位置
                    )
                    ''')
 
@@ -64,6 +65,7 @@ def create_database(db_path:  Path) -> None:
                         cabinet         TEXT NOT NULL,       -- 谱面类型(SD/DX)
                         version         INTEGER,             -- 谱面更新版本
                         converter       TEXT,                -- 谱面来源
+                        zip_path        TEXT,                -- zip 压缩包文件位置
                         
                         utage_tag       TEXT,                -- Utage 标签
                         buddy           BOOLEAN              -- Buddy 人数
@@ -146,9 +148,10 @@ def insert_normal_maidata(db_path: Path, maidata: MaiData) -> bool:
                 cabinet        , -- 谱面类型(SD/DX)
                 version        , -- 谱面更新版本
                 version_cn     , -- 谱面更新版本（国服）
-                converter        -- 谱面来源
+                converter      , -- 谱面来源
+                zip_path         -- zip 压缩包文件位置
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             maidata.shortid,
             maidata.title,
@@ -158,7 +161,8 @@ def insert_normal_maidata(db_path: Path, maidata: MaiData) -> bool:
             maidata.cabinet,
             maidata.version,
             maidata.version_cn,
-            maidata.converter
+            maidata.converter,
+            maidata.zip_path
         ))
 
         # 插入谱面数据
@@ -216,11 +220,12 @@ def insert_utage_maidata(db_path: Path, maidata: UtageMaiData) -> bool:
                            cabinet        , -- 谱面类型(SD/DX)
                            version        , -- 谱面更新版本
                            converter      , -- 谱面来源
+                           zip_path       , -- zip 压缩包文件位置
                            
                            utage_tag      , -- Utage 标签
-                           buddy           -- Buddy 人数
+                           buddy            -- Buddy 人数
                        )
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                        ''', (
                            maidata.shortid,
                            maidata.title,
@@ -230,6 +235,7 @@ def insert_utage_maidata(db_path: Path, maidata: UtageMaiData) -> bool:
                            maidata.cabinet,
                            maidata.version,
                            maidata.converter,
+                           maidata.zip_path,
 
                            maidata.utage_tag,
                            maidata.buddy,
