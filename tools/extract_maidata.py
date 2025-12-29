@@ -87,8 +87,20 @@ def parse_version(version_str: str, version_dict: Dict[int, str]) -> Optional[in
     # 2. 尝试去掉前缀 "maimai "
     if not v:
         if v_str[:7] == "maimai ":
-            v_str = v_str[7:].strip()
+            v_str = v_str[6:].strip()
             v = rd.get(v_str, None)
+    # 3. 尝试替换 DX -> でらっくす
+    if not v:
+        if 'dx' in v_str:
+            v_str = v_str.replace('dx', 'でらっくす')
+            v = rd.get(v_str, None)
+    # 4. 尝试去掉前缀 "でらっくす "
+    if not v:
+        if v_str[:6] == "でらっくす ":
+            v_str = v_str[5:].strip()
+            v = rd.get(v_str, None)
+    if v is None:
+        logger.warning(f"无法解析版本号: {version_str}")
     return v
 
 
