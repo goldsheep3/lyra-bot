@@ -70,7 +70,7 @@ def get_chart(raw_metadata: dict, chart_num: int) -> Optional[MaiDataChart]:
     inote_key = f'inote_{chart_num}'
     if lv_key in raw_metadata:
         chart = MaiDataChart(
-            lv=float(raw_metadata.get(lv_key, 0.0)),
+            lv=float(raw_metadata.get(lv_key, "?")[:-1]),  # 去掉末尾的 '?' 符号
             des=str(raw_metadata.get(des_key, '')),
             inote=str(raw_metadata.get(inote_key, ''))
         )
