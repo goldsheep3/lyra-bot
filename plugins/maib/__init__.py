@@ -32,7 +32,7 @@ maipy = maimai_py.MaimaiClient()
 # ADX 谱面下载
 # =================================
 
-adx_download = on_regex(r"下载谱面\s*(?:id\s*)?(\d+)(?:\s*(zip|z))?$", priority=5)
+adx_download = on_regex(r"下载[铺谱]面\s*(?:id\s*)?(\d+)(?:\s*(zip|z))?$", priority=5)
 
 
 @adx_download.handle()
@@ -47,9 +47,14 @@ async def _(bot: Bot, event: Event, matcher: Matcher):
         await matcher.finish("现在小梨只能把谱面传到群文件喔qwq")
         return
 
-    data_dir_path = get_plugin_data_dir() / "charts"
-    chart_file_path = data_dir_path / f"{short_id}.zip"
-    logger.info(f"获取文件 {str(chart_file_path)}")
+    i = 0
+    while i < 3:
+        data_dir_path = get_plugin_data_dir() / f"charts{i if i > 0 else ""}"
+        chart_file_path = data_dir_path / f"{short_id}.zip"
+        logger.info(f"获取文件 {str(chart_file_path)}")
+        if chart_file_path.exists():
+            break
+        i += 1
     if not chart_file_path.exists():
         logger.warning(f"谱面: id{str(short_id)} 不存在。")
         await matcher.finish("小梨没有找到这个谱面！可能这张谱面未被收录，请联系小梨的监护人确认谱面存在及收录情况qwq")
