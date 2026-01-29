@@ -8,6 +8,7 @@ from typing import Optional
 
 from nonebot import require, logger, on_regex, get_plugin_config
 from nonebot.plugin import PluginMetadata
+from nonebot.params import RegexGroup
 from nonebot.internal.matcher import Matcher
 from nonebot.adapters.onebot.v11 import Bot, Event, MessageSegment
 

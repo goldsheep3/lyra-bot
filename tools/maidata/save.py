@@ -8,9 +8,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.orm import selectinload
 
 # 导入 maib 插件中的 MaiData 相关类
-root_path = Path(__file__).parent.parent
-if root_path.as_posix() not in sys.path:
-    sys.path.insert(0, root_path.as_posix())
+sys.path.insert(0, Path.cwd().as_posix())
 from plugins.maib import utils, models
 
 
@@ -145,7 +143,7 @@ if __name__ == "__main__":
     )
 
     # 版本映射配置
-    config_yaml_path = Path(__file__).parent.parent / "versions.yaml"
+    config_yaml_path = Path.cwd() / "versions.yaml"
     import yaml
     with open(config_yaml_path, "r", encoding="utf-8") as f:
         versions_config: Dict[int, str] = yaml.safe_load(f)
@@ -153,9 +151,9 @@ if __name__ == "__main__":
     from fetch import process_chart_folders, sync_diving_fish_version
     # 从 ZIP 获取 maidata 数据
     maidata_list = process_chart_folders([  # 排前的优先级更高
-        Path(__file__).parent.parent / "plugin_data" / "maib" / "charts",
-        Path(__file__).parent.parent / "plugin_data" / "maib" / "charts1",
-        Path(__file__).parent.parent / "plugin_data" / "maib" / "charts2",
+        Path.cwd() / "plugin_data" / "maib" / "charts",
+        Path.cwd() / "plugin_data" / "maib" / "charts1",
+        Path.cwd() / "plugin_data" / "maib" / "charts2",
     ], versions_config)
     maidata_list = sync_diving_fish_version(maidata_list, versions_config)
 

@@ -58,7 +58,7 @@ if __name__ == "__main__":
     logger.info("开始检查谱面完整性")
 
     # 谱面文件路径
-    charts_path = Path(__file__).parent.parent / "plugin_data" / "maib" / "charts"
+    charts_path = Path.cwd() / "plugin_data" / "maib" / "charts"
     not_exist_chart_files = set()
 
     # 获取 Maichart-Converts (maiJP) 数据
