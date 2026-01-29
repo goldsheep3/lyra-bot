@@ -481,6 +481,39 @@ async def process_whitelist_remove(
 # ==================== 事件处理 ====================
 
 
+mc_count = on_regex("^mc几", priority=15, block=False)
+
+
+@mc_count.handle()
+async def handle_mc_count(bot, event, matcher):
+    """处理查询在线玩家数量请求"""
+
+    # 群组过滤：仅允许的群组才响应
+    if (group_id := getattr(event, "group_id", None)) not in ALLOWED_GROUPS:
+        return
+    logger.info(f"📝 用户 {event.user_id} 查询在线玩家数量")
+
+    # 执行 RCON list 命令
+    success, response = execute_rcon_command("list")
+    if not success:
+        logger.warning(f"Bakamai Server RCON 无响应: {response}")
+        await matcher.finish(f"服务器游玩人数：\nBakamai 服务器: ?人 (服务器宕机)")
+        return
+
+    # 提取在线玩家数量
+    try:
+        count_part = response.split(":")[0]  # 格式如 " There are 0 of a max of 8 players online:"
+        online_count = int(count_part.split(" ")[2])
+        _max_count = int(count_part.split(" ")[7])
+    except (IndexError, ValueError) as e:
+        logger.error(f"❌ 解析 RCON 响应失败: {e}")
+        await matcher.finish(f"服务器游玩人数：\nBakamai 服务器: 0人 (更新于 现在)")
+        return
+
+    await matcher.finish(f"服务器游玩人数：\nBakamai 服务器: {online_count}人 (更新于 现在)")
+
+
+
 # 用户查询在线玩家列表
 list_players_matcher = on_regex("^list$", priority=10, block=True)
 
