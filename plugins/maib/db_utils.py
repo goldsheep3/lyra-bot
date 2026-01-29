@@ -7,7 +7,7 @@ from sqlalchemy.orm import selectinload
 from .models import plugin_data, MaiData, MaiChart, MaiAlias
 
 
-get_session = plugin_data.get_session
+get_session = plugin_data.get_session if plugin_data else None
 
 
 # --- 1. 通过 shortid 查询指定乐曲 ---

@@ -10,6 +10,8 @@ try:
     plugin_data = get_plugin_data()
     Model = plugin_data.Model
 except (ImportError, ValueError):
+    plugin_data = None
+
     class Model(DeclarativeBase):
         pass
 
