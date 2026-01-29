@@ -16,7 +16,6 @@ from nonebot.adapters.onebot.v11 import Bot, Event, MessageSegment
 from . import db_utils as MaidataManager
 from .diving_fish import get_record
 from .utils import rate_alias_map, MaiData, MaiChart, MaiChartAch
-from .img import info_board
 
 require("nonebot_plugin_localstore")
 require("nonebot_plugin_datastore")
@@ -137,6 +136,7 @@ async def _(event: Event, matcher: Matcher):
     record_list = await get_record(maidata_data.shortid, qq=user_id, developer_token=DEVELOPER_TOKEN)
     maidata_data.from_diving_fish_json(record_list)  # 若水鱼有数据则进行填入
     # 构建回复消息
+    from .img import info_board
     img = info_board(maidata_data)
     output = io.BytesIO()
     img.save(output, format="jpeg")
