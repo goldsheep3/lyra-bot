@@ -1,13 +1,19 @@
 from typing import List, Optional
 from sqlalchemy import ForeignKey, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-from nonebot_plugin_datastore import get_plugin_data
+try:
+    # 尝试获取 driver 以确认是否为 NoneBot
+    import nonebot
+    nonebot.get_driver()
+    from nonebot_plugin_datastore import get_plugin_data
+    plugin_data = get_plugin_data()
+    Model = plugin_data.Model
+except (ImportError, ValueError):
+    class Model(DeclarativeBase):
+        pass
 
 from . import utils
-
-plugin_data = get_plugin_data()
-Model = plugin_data.Model
 
 
 class MaiData(Model):

@@ -1,13 +1,43 @@
 import httpx
-from nonebot import get_driver, logger
 from typing import Optional, Dict, List
+
+try:
+    from nonebot import get_driver, logger
+    driver = get_driver()
+except (ImportError, ValueError):
+    driver = None
+    from loguru import logger
+
+
+# 全局 httpx AsyncClient 实例
+_client: Optional[httpx.AsyncClient] = None
+
+
+def get_http_client() -> httpx.AsyncClient:
+    """获取或初始化全局 AsyncClient"""
+    global _client
+    if _client is None or _client.is_closed:
+        _client = httpx.AsyncClient(timeout=10.0, follow_redirects=True)
+    return _client
+
+
+# --- NoneBot 模式下的生命周期管理 ---
+if driver:
+    @driver.on_startup
+    async def _():
+        get_http_client()
+        logger.info("✅ NoneBot 模式：HTTPX Client 已初始化")
+
+    @driver.on_shutdown
+    async def _():
+        global _client
+        if _client:
+            await _client.aclose()
+            logger.info("🛑 NoneBot 模式：HTTPX Client 已关闭")
+
 
 # 水鱼 maimaiDX 查分器 API 基础 URL
 BASE_API_URL = "https://www.diving-fish.com/api/maimaidxprober"
-
-# 初始化和自动关闭 httpx Client
-driver = get_driver()
-_client: Optional[httpx.AsyncClient] = None
 
 
 @driver.on_startup
@@ -28,7 +58,7 @@ async def close_http_client():
 
 async def _make_request(
         url: str,
-        headers: dict = {},
+        headers: Optional[dict] = None,
         import_token: Optional[str] = None,
         developer_token: Optional[str] = None,
         method: str = "GET"):
@@ -46,7 +76,7 @@ async def _make_request(
         response = await _client.request(
             method=method,
             url=url,
-            headers=headers)
+            headers=headers if headers else {})
         response.raise_for_status()
         return response.json()
     except httpx.HTTPError as e:
