@@ -121,7 +121,7 @@ async def run_import(sql_alchemy: str, maidata_list: List[utils.MaiData]):
 
 def get_sql_alchemy_from_env(env_file: str = ".env.prod") -> str:
     """从 .env 文件中提取数据库文件路径"""
-    env_path = root_path / env_file
+    env_path = Path().cwd() / env_file
     if env_path.exists():
         with open(env_path, "r", encoding="utf-8") as f:
             for line in f:
@@ -148,7 +148,7 @@ if __name__ == "__main__":
     with open(config_yaml_path, "r", encoding="utf-8") as f:
         versions_config: Dict[int, str] = yaml.safe_load(f)
 
-    from fetch import process_chart_folders, sync_diving_fish_version
+    from .fetch import process_chart_folders, sync_diving_fish_version
     # 从 ZIP 获取 maidata 数据
     maidata_list = process_chart_folders([  # 排前的优先级更高
         Path.cwd() / "plugin_data" / "maib" / "charts",

@@ -206,7 +206,7 @@ def process_chart_folders(folder_path_list: List[Path], versions_config: Dict[in
 
 def sync_diving_fish_version(maidata_list: List[MaiData], versions_config: Dict[int, str]):
     """使用水鱼查分器数据同步国服版本信息"""
-    from downloader import get_diving_fish_music_data
+    from .downloader import get_diving_fish_music_data
     versions_cn_dict: Dict[int, Optional[int]] = {
         int(data.get('id', 0)): parse_diving_fish_version(data.get('basic_info', {}).get('from', ''), versions_config)
         for data in get_diving_fish_music_data()}
