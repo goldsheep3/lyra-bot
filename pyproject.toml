@@ -11,8 +11,7 @@ adapters = [
 ]
 plugins = [
     "nonebot_plugin_localstore",
-    "nonebot_plugin_datastore",
-    "maib"
+    "nonebot_plugin_datastore"
 ]
 plugin_dirs = [
     "plugins"
