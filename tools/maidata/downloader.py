@@ -8,7 +8,6 @@ from loguru import logger
 def _downloader(url: str, project_name: str, retries: int = 3, delay: int | float = 1) -> dict:
     """获取数据的辅助函数"""
     retries = retries if retries > 1 else 1
-    d = {}
     for i in range(retries):
         logger.info(f"获取 {project_name} 数据，第{i+1}次尝试")
         try:
@@ -17,12 +16,12 @@ def _downloader(url: str, project_name: str, retries: int = 3, delay: int | floa
             response.raise_for_status()
             d = response.json()
             logger.success(f"成功获取 {project_name} 数据")
-            break
+            return d
         except httpx.RequestError:
             logger.warning(f"获取 {project_name} 数据失败, 等待 {delay} 秒后重试...")
             time.sleep(delay)
     logger.warning(f"尝试获取 {project_name} 数据失败")
-    return d
+    return {}
 
 
 def get_chart_index(retries: int = 3, delay: int | float = 1) -> dict:

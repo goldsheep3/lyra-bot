@@ -4,10 +4,15 @@ from typing import List, Optional
 from sqlalchemy import select, or_, delete
 from sqlalchemy.orm import selectinload
 
-from .models import plugin_data, MaiData, MaiChart, MaiAlias
+from .models import MaiData, MaiChart, MaiAlias
 
-
-get_session = plugin_data.get_session if plugin_data else None
+try:
+    from nonebot import get_driver
+    get_driver()
+    from nonebot_plugin_datastore import create_session
+    get_session = create_session
+except (ImportError, ValueError, RuntimeError):
+    get_session = None
 
 
 # --- 1. 通过 shortid 查询指定乐曲 ---
