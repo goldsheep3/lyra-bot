@@ -12,11 +12,11 @@ from nonebot.params import RegexGroup
 from nonebot.internal.matcher import Matcher
 from nonebot.adapters.onebot.v11 import Bot, Event, MessageSegment
 
-from diving_fish import get_record
-from utils import rate_alias_map, MaiData, MaiChart, MaiChartAch
 # noinspection PyPep8Naming N812
-import db_utils as MaidataManager
-from img import info_board
+from . import db_utils as MaidataManager
+from .diving_fish import get_record
+from .utils import rate_alias_map, MaiData, MaiChart, MaiChartAch
+from .img import info_board
 
 require("nonebot_plugin_localstore")
 require("nonebot_plugin_datastore")
