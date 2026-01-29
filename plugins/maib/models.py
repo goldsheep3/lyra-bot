@@ -2,9 +2,9 @@ from typing import List, Optional
 from sqlalchemy import ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-import utils
-
 from nonebot_plugin_datastore import get_plugin_data
+
+from . import utils
 
 plugin_data = get_plugin_data()
 Model = plugin_data.Model

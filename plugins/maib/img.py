@@ -5,7 +5,7 @@ from typing import Optional, Tuple, Dict
 
 from PIL import Image, ImageDraw, ImageFont
 
-from utils import MaiData, MaiChart, MaiChartAch
+from .utils import MaiData, MaiChart, MaiChartAch
 
 # ========================================
 # 基础常量

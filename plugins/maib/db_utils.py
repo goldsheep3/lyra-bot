@@ -4,7 +4,7 @@ from typing import List, Optional
 from sqlalchemy import select, or_, delete
 from sqlalchemy.orm import selectinload
 
-from models import plugin_data, MaiData, MaiChart, MaiAlias
+from .models import plugin_data, MaiData, MaiChart, MaiAlias
 
 
 get_session = plugin_data.get_session
