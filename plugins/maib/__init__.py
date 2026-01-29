@@ -6,36 +6,39 @@ from pathlib import Path
 from pydantic import BaseModel
 from typing import Optional
 
-from nonebot import require, logger, on_regex, get_plugin_config
-from nonebot.plugin import PluginMetadata
-from nonebot.params import RegexGroup
-from nonebot.internal.matcher import Matcher
-from nonebot.adapters.onebot.v11 import Bot, Event, MessageSegment
+try:
+    from nonebot import require, logger, on_regex, get_plugin_config
+    from nonebot.plugin import PluginMetadata
+    from nonebot.params import RegexGroup
+    from nonebot.internal.matcher import Matcher
+    from nonebot.adapters.onebot.v11 import Bot, Event, MessageSegment
 
-# noinspection PyPep8Naming N812
-from . import db_utils as MaidataManager
-from .diving_fish import get_record
-from .utils import rate_alias_map, MaiData, MaiChart, MaiChartAch
+    # noinspection PyPep8Naming N812
+    from . import db_utils as MaidataManager
+    from .diving_fish import get_record
+    from .utils import rate_alias_map, MaiData, MaiChart, MaiChartAch
 
-require("nonebot_plugin_localstore")
-require("nonebot_plugin_datastore")
-from nonebot_plugin_localstore import get_plugin_data_dir, get_plugin_cache_dir
-
-
-class Config(BaseModel):
-    DIVING_FISH_DEVELOPER_TOKEN: Optional[str]
+    require("nonebot_plugin_localstore")
+    require("nonebot_plugin_datastore")
+    from nonebot_plugin_localstore import get_plugin_data_dir, get_plugin_cache_dir
 
 
-__plugin_meta__ = PluginMetadata(
-    name="lyra-maib",
-    description="一个QQ群的 舞萌DX 功能机器人。",
-    usage="使用 help 查询使用方法",
-    config=Config,
-)
+    class Config(BaseModel):
+        DIVING_FISH_DEVELOPER_TOKEN: Optional[str]
 
 
-cfg = get_plugin_config(Config)
-DEVELOPER_TOKEN = cfg.DIVING_FISH_DEVELOPER_TOKEN
+    __plugin_meta__ = PluginMetadata(
+        name="lyra-maib",
+        description="一个QQ群的 舞萌DX 功能机器人。",
+        usage="使用 help 查询使用方法",
+        config=Config,
+    )
+
+    cfg = get_plugin_config(Config)
+    DEVELOPER_TOKEN = cfg.DIVING_FISH_DEVELOPER_TOKEN
+
+except (ImportError, ValueError, RuntimeError):
+    pass
 
 
 # =================================
