@@ -40,22 +40,6 @@ if driver:
 BASE_API_URL = "https://www.diving-fish.com/api/maimaidxprober"
 
 
-@driver.on_startup
-async def init_http_client():
-    global _client
-    # 在这里可以配置全局超时、连接池等参数
-    _client = httpx.AsyncClient(timeout=10.0)
-    logger.info("✅ HTTPX Client 已初始化")
-
-
-@driver.on_shutdown
-async def close_http_client():
-    global _client
-    if _client:
-        await _client.aclose()
-        logger.info("🛑 HTTPX Client 已关闭")
-
-
 async def _make_request(
         url: str,
         headers: Optional[dict] = None,
