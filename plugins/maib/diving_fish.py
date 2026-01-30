@@ -76,7 +76,7 @@ async def _make_request(
         return None
 
 
-async def get_record(shortid: int, qq: int | str, developer_token: str) -> Optional[Dict[List[Dict[str, Any]]]]:
+async def get_record(shortid: int, qq: int | str, developer_token: str) -> Optional[Dict[str, List[Dict[str, Any]]]]:
     """获取用户的单曲成绩信息"""
     # 核心修改：参数放入 body
     data_body = {

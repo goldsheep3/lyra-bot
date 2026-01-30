@@ -248,9 +248,10 @@ class MaiData:
         if chart_obj:
             chart_obj.ach = ach
 
-    def from_diving_fish_json(self, data: Dict[List[Dict[str, Any]]], dxscore_max: int = 0) -> None:
+    def from_diving_fish_json(self, data: Dict[str, List[Dict[str, Any]]], dxscore_max: int = 0) -> None:
         """解析来自水鱼查分器的响应体数据，填充 MaiChartAch 分数信息"""
-        for record in data:
+        records: List[Dict[str, Any]] = data.get(str(self.shortid), [])
+        for record in records:
             diff = record.get("level_index", 3) + 2  # 水鱼难度编号转换为 MaiChart 难度编号
             achievement = record.get("achievements", 0.0000)
             dxscore = 0 if dxscore_max == 0 else dxscore_max
