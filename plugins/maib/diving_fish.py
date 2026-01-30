@@ -76,16 +76,26 @@ async def _make_request(
         return None
 
 
-async def get_record(shortid: int, qq: int | str, developer_token: str) -> Optional[Dict[str, List[Dict[str, Any]]]]:
-    """获取用户的单曲成绩信息"""
-    # 核心修改：参数放入 body
+async def music_data() -> Optional[List[Dict[str, Any]]]:
+    """`/music_data` 获取公开乐曲数据"""
+    result = await _make_request(
+        method="GET",
+        url=f"{BASE_API_URL}/music_data"
+    )
+
+    return result
+
+
+async def dev_player_record(shortid: int, qq: int | str,
+                            developer_token: str) -> Optional[Dict[str, List[Dict[str, Any]]]]:
+    """`/dev/player/record`  获取用户单曲成绩信息"""
     data_body = {
         "music_id": str(shortid),
         "qq": str(qq)
     }
 
     result = await _make_request(
-        method="POST",  # 必须是 POST
+        method="POST",
         url=f"{BASE_API_URL}/dev/player/record",
         json_data=data_body,
         developer_token=developer_token

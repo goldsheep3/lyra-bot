@@ -1,7 +1,9 @@
+import time
+import json
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Optional, List, Tuple, Any
+from typing import Dict, Optional, List, Tuple, Any, Set
 
 from PIL import Image
 from loguru import logger
@@ -274,3 +276,106 @@ def parse_adx_zip(zip_path: Path) -> MaiData:
 
 def parse_txt(txt: str | Path, img: Optional[str | Path]) -> MaiData:
     ...
+
+
+class MusicDataManager:
+    """乐曲数据管理器（单例）"""
+    _data: List[Dict[str, Any]] = []
+    _ids: Set[int] = set()
+    _last_update: float = 0
+    _expire_seconds: int = 24 * 3600  # 24小时
+
+    @classmethod
+    async def get_all_data(cls, cache_path: Path) -> List[Dict[str, Any]]:
+        """获取完整的乐曲列表（带内存缓存检查）"""
+        current_time = time.time()
+
+        # 1. 检查内存缓存是否有效
+        if cls._data and (current_time - cls._last_update < cls._expire_seconds):
+            return cls._data
+
+        # 2. 内存失效，执行磁盘/API 加载逻辑
+        data = await cls._load_data(cache_path)
+
+        # 3. 更新内存状态并返回
+        cls._update_memory_state(data)
+        return cls._data
+
+    @classmethod
+    async def contains_id(cls, music_id: int, cache_path: Path) -> bool:
+        """高性能判断 ID 是否在查分器列表中"""
+        await cls.get_all_data(cache_path)
+        return music_id in cls._ids
+
+    @classmethod
+    def _update_memory_state(cls, data: List[Dict[str, Any]]):
+        """刷新内存缓存的时间戳和 ID 索引"""
+        cls._data = data
+        cls._ids = {
+            int(d['id']) for d in data
+            if d.get('id') is not None and str(d['id']).isdigit()
+        }
+        cls._last_update = time.time()
+        logger.debug(f"MusicCache 内存已刷新: 记录数={len(cls._data)}, 索引数={len(cls._ids)}")
+
+    @classmethod
+    async def _load_data(cls, path: Path) -> List[Dict[str, Any]]:
+        """内部逻辑：处理磁盘读取、API 更新及容错降级"""
+        music_data: List[Dict[str, Any]] = []
+        current_time = int(time.time())
+
+        # 1. 检索本地文件
+        json_files = sorted(
+            list(path.glob("diving-fish-music-data_*.json")),
+            key=lambda x: int(x.stem.split('_')[-1]) if x.stem.split('_')[-1].isdigit() else 0,
+            reverse=True
+        )
+
+        latest_file = json_files[0] if json_files else None
+        cache_is_valid = False
+
+        # 2. 尝试读取本地有效缓存
+        if latest_file:
+            ts = int(latest_file.stem.split('_')[-1])
+            if (current_time - ts) < cls._expire_seconds:
+                try:
+                    with open(latest_file, 'r', encoding='utf-8') as f:
+                        music_data = json.load(f)
+                    cache_is_valid = True
+                    logger.info(f"使用本地有效期内缓存: {latest_file.name}")
+                except Exception as e:
+                    logger.error(f"本地缓存读取失败: {e}")
+
+        # 3. 缓存失效或缺失，尝试同步 API
+        if not cache_is_valid:
+            try:
+                from .diving_fish import music_data as fetch_api_data
+                logger.info("正在请求查分器 API 更新数据...")
+                new_data = await fetch_api_data()
+
+                # API 成功：保存文件并准备清理旧缓存
+                music_data = new_data
+                new_file = path / f"diving-fish-music-data_{current_time}.json"
+                with open(new_file, 'w', encoding='utf-8') as f:
+                    json.dump(music_data, f, ensure_ascii=False, indent=4)
+                logger.success(f"数据更新成功并保存至: {new_file.name}")
+
+                # 清理旧文件
+                for f in json_files:
+                    try:
+                        f.unlink()
+                    except OSError:
+                        pass
+
+            except Exception as e:
+                logger.error(f"API 更新失败: {e}")
+                # 容错降级：API 挂了就去翻翻旧的能不能用
+                if latest_file and not music_data:
+                    try:
+                        with open(latest_file, 'r', encoding='utf-8') as f:
+                            music_data = json.load(f)
+                        logger.warning(f"API 故障，已降级复用过期缓存: {latest_file.name}")
+                    except Exception as e:
+                        logger.critical(f"本地无任何可用数据！{e}")
+
+        return music_data

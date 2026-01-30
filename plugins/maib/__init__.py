@@ -15,8 +15,8 @@ try:
 
     # noinspection PyPep8Naming N812
     from . import db_utils as MaidataManager
-    from .diving_fish import get_record
-    from .utils import rate_alias_map, MaiData, MaiChart, MaiChartAch, parse_status, DIFFS_MAP
+    from .diving_fish import dev_player_record
+    from .utils import rate_alias_map, MaiData, MaiChart, MaiChartAch, parse_status, DIFFS_MAP, MusicDataManager
 
     require("nonebot_plugin_localstore")
     require("nonebot_plugin_datastore")
@@ -135,9 +135,10 @@ async def _(event: Event, matcher: Matcher):
         await matcher.finish(f"没有找到 id{short_id} 的乐曲数据qwq")
         return
     maidata_data: MaiData = maidata.to_data()
-    # 通过 QQ 获取用户绑定的信息
-    record_list = await get_record(maidata_data.shortid, qq=user_id, developer_token=DEVELOPER_TOKEN)
-    maidata_data.from_diving_fish_json(record_list)  # 若水鱼有数据则进行填入
+    if MusicDataManager.contains_id(short_id, get_plugin_cache_dir()):
+        # 通过 QQ 获取用户绑定的信息
+        record_list = await dev_player_record(maidata_data.shortid, qq=user_id, developer_token=DEVELOPER_TOKEN)
+        maidata_data.from_diving_fish_json(record_list)  # 若水鱼有数据则进行填入
     # 构建回复消息
     from .img import info_board
     img = info_board(maidata_data)
