@@ -16,7 +16,7 @@ try:
     # noinspection PyPep8Naming N812
     from . import db_utils as MaidataManager
     from .diving_fish import get_record
-    from .utils import rate_alias_map, MaiData, MaiChart, MaiChartAch
+    from .utils import rate_alias_map, MaiData, MaiChart, MaiChartAch, parse_status, DIFFS_MAP
 
     require("nonebot_plugin_localstore")
     require("nonebot_plugin_datastore")
@@ -153,61 +153,78 @@ async def _(event: Event, matcher: Matcher):
 # Rating 计算
 # =================================
 
-ra_calc = on_regex(r"^ra\s+(\d+(?:\.\d+)?)\s+(\S+)", priority=5, block=True)
-ra_calc_with_info = on_regex(r"^ra\s+(\S+)?\s+(\S+)", priority=3, block=True)
+ra_calc = on_regex(r"^ra\s+(\S+)?\s+(\S+)", priority=5, block=True)
 
 
 @ra_calc.handle()
-async def _(matcher: Matcher):
-    """处理命令: ra 13.2 100.1000 或 ra 13.2 鸟加 或 ra help"""
-    matched = matcher.state["_matched"]
-    level, rate = matched.groups()
-    # 处理达成率数值
+async def _(matcher: Matcher, groups: tuple = RegexGroup()):
+    """处理命令: ra 13.2 100.1000"""
+    info, rate = groups
+    level: float = 0
+
+    # 先解析 rate
     try:
         achievement = float(rate)
     except (ValueError, TypeError):
         achievement = rate_alias_map.get(rate.lower())
-    # 调用 MaiChart 计算 DX Rating
-    ach = MaiChartAch(achievement=achievement)
-    chart = MaiChart(difficulty=0, lv=float(level), ach=ach)
-    ra = chart.get_dxrating()
 
-    await matcher.finish("小梨算出来咯！\n"
-                         f"定数{level}*{achievement:.4f}% -> Rating: {ra}")
+    # 1. 尝试以定数形式解析
+    try:
+        level = float(info)
+    except (ValueError, TypeError):
+        pass
 
+    # 2. 判断定数是否越界，越界则解析为纯数字 id
+    if level > 20:
+        level = 0  # 大于 20 则一定不为定数，驳回上述解析
+        shortid = int(level)
+        mai = await MaidataManager.get_song_by_id(shortid)
+        if mai:
+            charts = mai.charts
+            charts.sort(key=lambda c: c.chart_number)
+            level = charts[-1].lv  # 取最高难度的定数
 
-@ra_calc_with_info.handle()
-async def _(matcher: Matcher):
-    """处理命令: ra 歌名 定数完成率"""
-    matched = matcher.state["_matched"]
-    song_info, rate = matched.groups()
-    level = None
-    # 尝试解析歌曲信息
-    if not level:
-        # 1. 可能是 id12345/info12345 格式
-        match = re.search(r'\d+', song_info)
-        if match and (('id' in song_info.lower()) or ('info' in song_info.lower())):
+    # 3. 尝试以 id11451/info11451/id114514紫 形式解析
+    if level == 0:
+        # 通过正则提取 id
+        match = re.search(r'\d+', info)
+        diff_info = re.search('[绿黄红紫白]', info)
+        if match and any([
+            'id' in info.lower(),
+            'info' in info.lower(),
+            diff_info,
+        ]):
             level_str = match.group(0)
             try:
-                level = int(level_str)
+                shortid = int(level_str)
+                mai = await MaidataManager.get_song_by_id(shortid)
             except (ValueError, TypeError):
-                level = None
-    if not level:
-        # 2. 可能是 歌名/别名 格式
-        pass
-    if not level:
-        # E. 无法解析
-        await matcher.finish("小梨无法解析你提供的歌曲信息喔TT")
+                mai = None
+            if mai:
+                charts = mai.charts
+                diff = parse_status(diff_info.group(1), DIFFS_MAP)
+                if diff:
+                    # 指定了难度颜色，尝试匹配
+                    for c in charts:
+                        if c.chart_number == diff:
+                            level = c.lv
+                            break
+                if not level:
+                    # 取最高难度
+                    charts.sort(key=lambda c: c.chart_number)
+                    level = charts[-1].lv  # 取最高难度的定数
+
+    # 4. 尝试解析 歌名/别名
+    if level == 0:
+        pass  # todo: 未实现 歌名/别名解析
+
+    # 解析结束
+    if level == 0:
+        await matcher.finish("小梨无法解析你提供的定数或歌曲信息喔TT")
         return
-    # 处理达成率数值
-    try:
-        achievement = float(rate)
-    except (ValueError, TypeError):
-        achievement = rate_alias_map.get(rate.lower())
+
     # 调用 MaiChart 计算 DX Rating
-    ach = MaiChartAch(achievement=achievement)
-    chart = MaiChart(difficulty=0, lv=float(level), ach=ach)
-    ra = chart.get_dxrating()
+    ra = MaiChart(difficulty=0, lv=level, ach=MaiChartAch(achievement=achievement)).get_dxrating()
 
     await matcher.finish("小梨算出来咯！\n"
                          f"定数{level}*{achievement:.4f}% -> Rating: {ra}")

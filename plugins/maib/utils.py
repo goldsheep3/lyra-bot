@@ -1,7 +1,7 @@
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Optional, List, Tuple
+from typing import Dict, Optional, List, Tuple, Any
 
 from PIL import Image
 from loguru import logger
@@ -248,7 +248,7 @@ class MaiData:
         if chart_obj:
             chart_obj.ach = ach
 
-    def from_diving_fish_json(self, data: List[Dict], dxscore_max: int = 0) -> None:
+    def from_diving_fish_json(self, data: Dict[List[Dict[str, Any]]], dxscore_max: int = 0) -> None:
         """解析来自水鱼查分器的响应体数据，填充 MaiChartAch 分数信息"""
         for record in data:
             diff = record.get("level_index", 3) + 2  # 水鱼难度编号转换为 MaiChart 难度编号
