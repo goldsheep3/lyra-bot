@@ -392,14 +392,18 @@ class DrawUnit:
 
     def bg_png(self, x: float, y: float, w: float, h: float, png: Image.Image | Path, radius: float = 1.5,
                outline: Optional[str] = None, outline_width: float = 0):
-        overlay = (png if isinstance(png, Image.Image) else Image.open(png)).convert('RGBA')
-        overlay = overlay.resize(self.ms.xy(w, h), Image.Resampling.LANCZOS)
+        try:
+            overlay = (png if isinstance(png, Image.Image) else Image.open(png)).convert('RGBA')
+            overlay = overlay.resize(self.ms.xy(w, h), Image.Resampling.LANCZOS)
+            mask = Image.new('L', overlay.size, 0)
+            draw = ImageDraw.Draw(mask)
+            draw.rounded_rectangle((0, 0, overlay.size[0], overlay.size[1]), radius=self.ms.x(radius), fill=255)
 
-        mask = Image.new('L', overlay.size, 0)
-        draw = ImageDraw.Draw(mask)
-        draw.rounded_rectangle((0, 0, overlay.size[0], overlay.size[1]), radius=self.ms.x(radius), fill=255)
+            self.img.paste(overlay, self.ms.xy(x, y), mask=mask)
+        except (FileNotFoundError, AttributeError):
+            return
 
-        self.img.paste(overlay, self.ms.xy(x, y), mask=mask)
+        # 绘制边框（即使图片加载失败）
         if outline and outline_width > 0:
             self.draw.rounded_rectangle(self.ms.size(x, y, w, h), radius=self.ms.x(radius),
                                         outline=outline, width=self.ms.x(outline_width))

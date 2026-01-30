@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import List, Optional
 from sqlalchemy import ForeignKey, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -58,7 +59,7 @@ class MaiData(Model):
             version=self.version,
             version_cn=self.version_cn,
             converter=self.converter,
-            img_path=plugin_data.data_dir / "bg.png",
+            img_path=Path(self.zip_path) / "bg.png",
             aliases=[a.alias for a in self.aliases],
             utage=self.is_utage,
             buddy=self.buddy if self.is_utage else False,
