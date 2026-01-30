@@ -822,11 +822,9 @@ def info_board(
     du.rounded_rect(0, next_y, 240, 6, fill='#313d7c', radius=0)  # 后续修改为遮罩渐变合成
     du.text(120, next_y + 3, text=CR_INFO, fill='#64d2ce', anchor='mm', font=MIS_DB, size=3.5)
 
-    # 切除多余部分
+    # 切除多余部分，同时转换回 RGB 模式
     img = img.crop((0, 0, ms.x(240), ms.x(next_y + 6)))
-
-
-
+    img = img.convert('RGB')
 
     return img
 
