@@ -19,8 +19,8 @@ ASSETS_PATH = Path.cwd() / "assets"
 
 # 字体常量
 FONT_PATH = ASSETS_PATH / "fonts"
-MIS_DB = ImageFont.truetype(FONT_PATH / "Misans-DemiBold.otf", 10.5)
-MIS_HE = ImageFont.truetype(FONT_PATH / "Misans-Heavy.otf", 10.5)
+MIS_DB = ImageFont.truetype(FONT_PATH / "MiSans-Demibold.otf", 10.5)
+MIS_HE = ImageFont.truetype(FONT_PATH / "MiSans-Heavy.otf", 10.5)
 JBM_BD = ImageFont.truetype(FONT_PATH / "JetBrainsMono-Bold.ttf", 10.5)
 JBM_EB = ImageFont.truetype(FONT_PATH / "JetBrainsMono-ExtraBold.ttf", 10.5)
 NSS_RG = ImageFont.truetype(FONT_PATH / "NotoSansSymbols2-Regular.ttf", 10.5)
