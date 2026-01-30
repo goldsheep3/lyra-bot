@@ -135,13 +135,14 @@ async def _(event: Event, matcher: Matcher):
         await matcher.finish(f"没有找到 id{short_id} 的乐曲数据qwq")
         return
     maidata_data: MaiData = maidata.to_data()
-    if MusicDataManager.contains_id(short_id, get_plugin_cache_dir()):
+    song_in_cn = await MusicDataManager.contains_id(short_id, get_plugin_cache_dir())
+    if song_in_cn:
         # 通过 QQ 获取用户绑定的信息
         record_list = await dev_player_record(maidata_data.shortid, qq=user_id, developer_token=DEVELOPER_TOKEN)
         maidata_data.from_diving_fish_json(record_list)  # 若水鱼有数据则进行填入
     # 构建回复消息
     from .img import info_board
-    img = info_board(maidata_data)
+    img = info_board(maidata_data, cn=True if maidata_data.version_cn else False)
     output = io.BytesIO()
     img.save(output, format="jpeg")
     img_bytes = output.getvalue()

@@ -1,7 +1,8 @@
-from dataclasses import dataclass
-from enum import IntEnum
+import yaml
 from pathlib import Path
+from enum import IntEnum
 from typing import Optional, Tuple, Dict
+from dataclasses import dataclass
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -735,28 +736,37 @@ def info_board(
                            font=font_mdb5, spacing=ms.x(1), align="center")
     # Version
     du.text(138, 52, text=f"Version:", fill='#FFF', anchor='la', font=font_mdb6)
-    def ver_img(ver):
-        v = Image.open(VER_PATH/f"{ver}.png").convert('RGBA')
-        original_width, original_height = v.size
-        scale_ratio = min(ms.x(34)/original_width, ms.x(18)/original_height)
-        v = v.resize((int(original_width * scale_ratio), int(original_height * scale_ratio)),
-                       Image.Resampling.LANCZOS)
-        r = Image.new('RGBA', ms.xy(34, 18), color='#00000000')
-        r.paste(v, ((r.width - v.width) // 2, (r.height - v.height) // 2), v)
-        return r
+
+    def ver_img_draw(ver_img_path: Path, img: Image.Image, la_xy: Tuple[int, int], mm_xy: Tuple[int, int],
+                     replace_text: str) -> None:
+        """将版本图标绘制到指定位置"""
+        if ver_img_path.exists():
+            # 版本图标存在，绘制图标
+            v = Image.open(ver_img_path).convert('RGBA')
+            original_width, original_height = v.size
+            scale_ratio = min(ms.x(34)/original_width, ms.x(18)/original_height)
+            v = v.resize((int(original_width * scale_ratio), int(original_height * scale_ratio)),
+                           Image.Resampling.LANCZOS)
+            r = Image.new('RGBA', ms.xy(34, 18), color='#00000000')
+            r.paste(v, ((r.width - v.width) // 2, (r.height - v.height) // 2), v)
+            img.paste(r, la_xy, r)
+        else:
+            # 版本图标不存在，绘制替代文字
+            du.draw.multiline_text(mm_xy, text=replace_text, fill='#FFF', anchor='mm',
+                                   font=font_mdb6, spacing=ms.x(1), align="center")
+
+    config_yaml_path = Path.cwd() / "versions.yaml"
+
+    with open(config_yaml_path, "r", encoding="utf-8") as f:
+        ver_cfg: Dict[int, str] = yaml.safe_load(f)
+
     # JP
-    jp_ver = ver_img(ver=mai.version)
-    img.paste(jp_ver, ms.xy(138, 60), jp_ver)
+    ver_img_draw(VER_PATH / f"{mai.version}.png", img,
+                 ms.xy(138, 60), ms.xy(154, 69), ver_cfg.get(mai.version, str(mai.version)))
     # CN
     if mai.version_cn is not None:
-        if mai.version_cn < 2000:
-            # 旧框版本
-            img.paste(jp_ver, ms.xy(176, 60), jp_ver)
-        elif mai.version_cn >= 2000:
-            # DX 版本
-            ver_text = f"舞萌DX{'' if mai.version_cn == 2020 else mai.version_cn}"
-            du.draw.multiline_text(ms.xy(192, 69), text=ver_text, fill='#FFF', anchor='mm',
-                                   font=font_mdb6, spacing=ms.x(1), align="center")
+        ver_img_draw(VER_PATH / f"CN_{mai.version_cn}.png", img,
+                     ms.xy(176, 60), ms.xy(192, 69), ver_cfg.get(mai.version_cn, str(mai.version_cn)))
 
     next_y = 87  # 记录下一个组件的起始 y 坐标
     aliases_max_width = du.get_text_length('A'*60, font=font_mdb5)
