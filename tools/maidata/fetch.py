@@ -101,6 +101,9 @@ def parse_maidata(raw_metadata: Dict[str, str], versions_config: Dict[int, str],
     version = parse_version(version_str, versions_config)
     converter = raw_get(['ChartConverter'])
 
+    # title 处理：去掉`[XXXX]`
+    title = re.sub(r'\[(宴|DX|SD)]$', '', title)
+
     mai = MaiData(
         shortid=shortid,
         title=title,
@@ -120,20 +123,19 @@ def parse_maidata(raw_metadata: Dict[str, str], versions_config: Dict[int, str],
     #     utage_tag: str = ""  # Utage: utage 标签
     #     _chart7: Optional[MaiChart] = None  # Utage: Utage 谱面
     # Utage 宴会场 判断
-    utage_levels = [int(k[3:]) if k[-1:] == '?' else False for k in raw_metadata.keys() if k.startswith('lv_')]
-    if any(utage_levels):
-        # 等级带 '?'，视为 Utage 谱面
+    if raw_metadata.get('lv_7', '').endswith('?'):
+        # Utage
         mai.utage = True
         mai.utage_tag = mai.title[1:2]  # 取`[X]......`的`X`宴会场标签
-        if len(utage_levels) == 1:
-            # Utage
-            mai.buddy = False
-            mai._chart7 = get_chart(raw_metadata, 7)
-        elif len(utage_levels) == 2:
-            # Utage Buddy
-            mai.buddy = True
-            mai._chart2 = get_chart(raw_metadata, 2)
-            mai._chart3 = get_chart(raw_metadata, 3)
+        mai.buddy = False
+        mai._chart7 = get_chart(raw_metadata, 7)
+    elif raw_metadata.get('lv_2', '').endswith('?'):
+        # Utage Buddy
+        mai.utage = True
+        mai.utage_tag = mai.title[1:2]  # 取`[X]......`的`X`宴会场标签
+        mai.buddy = True
+        mai._chart2 = get_chart(raw_metadata, 2)
+        mai._chart3 = get_chart(raw_metadata, 3)
     else:
         # 非 Utage 谱面
         for chart_num in range(2, 7):

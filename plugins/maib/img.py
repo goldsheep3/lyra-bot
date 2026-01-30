@@ -37,6 +37,7 @@ VER_PATH = PIC_PATH / "ver"
 COLOR_DXSCORE_GN = '#0A5'
 COLOR_DXSCORE_OR = '#C72'
 COLOR_DXSCORE_GD = '#ED4'
+COLOR_THEME = '#64d2ce'
 
 
 # 难度颜色组
@@ -231,7 +232,7 @@ class DrawUnit:
         return current_text
 
     def shadow_text(self, x: float, y: float, text: str, fill: str, anchor: str, font: ImageFont.FreeTypeFont,
-                    size: float, shadow_fill: str, shadow_width: float,
+                    size: float = -1, shadow_fill: str = "", shadow_width: float = 0,
                     stroke_fill: Optional[str] = None, stroke_width: float = 0):
         """阴影 text 绘制简化方法"""
         self.text(x, y, text=text, fill=shadow_fill, anchor=anchor, font=font, size=size,
@@ -729,11 +730,45 @@ def info_board(
     du.text(86, 40, text=f"Artist: {mai.artist}", fill='#FFF', anchor='la', font=font_mdb6)
     # Genre
     du.text(86, 52, text=f"Genre:", fill='#FFF', anchor='la', font=font_mdb6)
-    genre = mai.genre.replace('&', '&\n') if '&' in mai.genre else mai.genre
-    genre = genre+'™' if 'nico' in mai.genre else genre
-    # (86, 60) -> 340*180 img
-    du.draw.multiline_text(ms.xy(103, 69), text=genre, fill='#FFF', anchor='mm',
-                           font=font_mdb5, spacing=ms.x(1), align="center")
+    if 'niconico' in mai.genre.lower():
+        genre = mai.genre[:]
+        if '&' in genre:
+            # niconico&VOCALOID
+            genre = genre.replace('&', '&\n')
+        else:
+            # niconicoボーカロイド
+            genre = genre.replace('niconico', 'niconico\n')
+        genre += '™'
+        genre_text_color = '#02c8d3'
+        genre_texts = genre.split('\n')
+        du.shadow_text(103, 66, text=genre_texts[0], fill='#FFF', anchor='mm',
+                       font=font_mdb5, shadow_width=2, shadow_fill='#FFF')
+        du.shadow_text(103, 72, text=genre_texts[1], fill='#FFF', anchor='mm',
+                       font=font_mdb5, shadow_width=2, shadow_fill='#FFF')
+        du.shadow_text(103, 66, text=genre_texts[0], fill=genre_text_color, anchor='mm',
+                       font=font_mdb5, shadow_width=1, shadow_fill='#FFF')
+        du.shadow_text(103, 72, text=genre_texts[1], fill=genre_text_color, anchor='mm',
+                       font=font_mdb5, shadow_width=1, shadow_fill='#FFF')
+    else:
+        if 'pops' in mai.genre.lower():
+            genre_text_color = '#ff972a'
+        elif 'project' in mai.genre.lower():
+            genre_text_color = '#ad59ee'
+        elif ('game' in mai.genre.lower()) or ('ゲーム' in mai.genre.lower()):
+            genre_text_color = '#4be070'
+        elif 'maimai' in mai.genre.lower():
+            genre_text_color = '#f64849'
+        elif 'chunithm' in mai.genre.lower():
+            genre_text_color = '#3584fe'
+        elif ('会' in mai.genre.lower()) or ('TA' in mai.genre.lower()):  # 宴会场 / U·TA·GE
+            genre_text_color = '#dc39b8'
+        else:
+            genre_text_color = COLOR_THEME
+        du.shadow_text(103, 69, text=mai.genre, fill='#FFF', anchor='mm',
+                       font=font_mdb5, shadow_width=2, shadow_fill='#FFF')
+        du.shadow_text(103, 69, text=mai.genre, fill=genre_text_color, anchor='mm',
+                       font=font_mdb5, shadow_width=1, shadow_fill='#FFF')
+
     # Version
     du.text(138, 52, text=f"Version:", fill='#FFF', anchor='la', font=font_mdb6)
 
@@ -830,7 +865,7 @@ def info_board(
         "Background Artist by @银色山雾"
     ])
     du.rounded_rect(0, next_y, 240, 6, fill='#313d7c', radius=0)  # 后续修改为遮罩渐变合成
-    du.text(120, next_y + 3, text=CR_INFO, fill='#64d2ce', anchor='mm', font=MIS_DB, size=3.5)
+    du.text(120, next_y + 3, text=CR_INFO, fill=COLOR_THEME, anchor='mm', font=MIS_DB, size=3.5)
 
     # 切除多余部分，同时转换回 RGB 模式
     img = img.crop((0, 0, ms.x(240), ms.x(next_y + 6)))
@@ -845,7 +880,7 @@ if __name__ == "__main__":
         title="おちゃめ機能",
         bpm=150,
         artist="ゴジマジP",
-        genre="niconico & VOCALOID",
+        genre="niconicoボーカロイド",
         cabinet='DX',
         version=1,
         version_cn=1,
