@@ -741,10 +741,6 @@ def info_board(
         genre += '™'
         genre_text_color = '#02c8d3'
         genre_texts = genre.split('\n')
-        du.shadow_text(103, 66, text=genre_texts[0], fill='#FFF', anchor='mm',
-                       font=font_mdb5, shadow_width=2, shadow_fill='#FFF')
-        du.shadow_text(103, 72, text=genre_texts[1], fill='#FFF', anchor='mm',
-                       font=font_mdb5, shadow_width=2, shadow_fill='#FFF')
         du.shadow_text(103, 66, text=genre_texts[0], fill=genre_text_color, anchor='mm',
                        font=font_mdb5, shadow_width=1, shadow_fill='#FFF')
         du.shadow_text(103, 72, text=genre_texts[1], fill=genre_text_color, anchor='mm',
@@ -764,8 +760,6 @@ def info_board(
             genre_text_color = '#dc39b8'
         else:
             genre_text_color = COLOR_THEME
-        du.shadow_text(103, 69, text=mai.genre, fill='#FFF', anchor='mm',
-                       font=font_mdb5, shadow_width=2, shadow_fill='#FFF')
         du.shadow_text(103, 69, text=mai.genre, fill=genre_text_color, anchor='mm',
                        font=font_mdb5, shadow_width=1, shadow_fill='#FFF')
 
@@ -799,8 +793,8 @@ def info_board(
     ver_img_draw(VER_PATH / f"{mai.version}.png", img,
                  ms.xy(138, 60), ms.xy(154, 69), ver_cfg.get(mai.version, str(mai.version)))
     # CN
-    if mai.version_cn is not None:
-        ver_img_draw(VER_PATH / f"CN_{mai.version_cn}.png", img,
+    if (mai.version_cn is not None) and (mai.version_cn != mai.version):
+        ver_img_draw(VER_PATH / f"{mai.version_cn}.png", img,
                      ms.xy(176, 60), ms.xy(192, 69), ver_cfg.get(mai.version_cn, str(mai.version_cn)))
 
     next_y = 87  # 记录下一个组件的起始 y 坐标
