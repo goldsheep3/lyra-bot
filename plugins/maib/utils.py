@@ -10,7 +10,7 @@ from loguru import logger
 
 
 # 完成率别名映射
-rate_alias: Dict[float, Tuple[str]] = {
+rate_alias: Dict[float, Tuple[str, ...]] = {
     101.0000: ("ap+", "理论"),
     100.7500: ("ap",),
     100.5000: ("鸟加", "鸟家", "sss+", "3s+"),
@@ -149,9 +149,9 @@ class MaiData:
     img_path: Path  # 图片文件路径
     _cached_image: Optional[Image.Image] = None  # 缓存的封面图片对象
 
-    current_version: Optional[int] = -1  # 当前版本，判断是否为b15
+    current_version: int = -1  # 当前版本，判断是否为b15
 
-    aliases: List[str] = None  # 歌曲别名列表
+    aliases: List[str] = []  # 歌曲别名列表
 
     _chart1: Optional[MaiChart] = None  # Easy, 在 DX 版本中已废弃
     _chart2: Optional[MaiChart] = None  # Basic
@@ -173,13 +173,14 @@ class MaiData:
     @property
     def is_b15(self) -> bool:
         version = self.version
+
         if self.current_version < 0:
             # 未绑定版本，直接返回 False
             return False
         elif self.current_version > 2000:
             # maiCN
             limit = 0
-            version = self.version_cn
+            version = self.version_cn if self.version_cn is not None else self.version
         elif self.current_version >= 25:
             # maiJP: 25(CiRCLE) 开始，B15 扩展到两个版本周期
             limit = 1
@@ -352,6 +353,8 @@ class MusicDataManager:
                 from .diving_fish import music_data as fetch_api_data
                 logger.info("正在请求查分器 API 更新数据...")
                 new_data = await fetch_api_data()
+                if not new_data:
+                    raise ValueError("API 返回数据为空")
 
                 # API 成功：保存文件并准备清理旧缓存
                 music_data = new_data
@@ -377,5 +380,6 @@ class MusicDataManager:
                         logger.warning(f"API 故障，已降级复用过期缓存: {latest_file.name}")
                     except Exception as e:
                         logger.critical(f"本地无任何可用数据！{e}")
+                        raise FileNotFoundError("无法获取乐曲数据，API 及本地缓存均不可用。") from e
 
         return music_data

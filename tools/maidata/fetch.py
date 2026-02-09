@@ -99,6 +99,7 @@ def parse_maidata(raw_metadata: Dict[str, str], versions_config: Dict[int, str],
     cabinet = raw_get(['cabinet'], default="SD" if shortid < 10000 else "DX")
     version_str = raw_get(['version'])
     version = parse_version(version_str, versions_config)
+    version = version if version is not None else -1
     converter = raw_get(['ChartConverter'])
 
     # title 处理：去掉`[XXXX]`
@@ -123,13 +124,13 @@ def parse_maidata(raw_metadata: Dict[str, str], versions_config: Dict[int, str],
     #     utage_tag: str = ""  # Utage: utage 标签
     #     _chart7: Optional[MaiChart] = None  # Utage: Utage 谱面
     # Utage 宴会场 判断
-    if raw_metadata.get('lv_7', '').endswith('?'):
+    if raw_metadata.get('lv_7', '').strip().endswith('?'):
         # Utage
         mai.utage = True
         mai.utage_tag = mai.title[1:2]  # 取`[X]......`的`X`宴会场标签
         mai.buddy = False
         mai._chart7 = get_chart(raw_metadata, 7)
-    elif raw_metadata.get('lv_2', '').endswith('?'):
+    elif raw_metadata.get('lv_2', '').strip().endswith('?'):
         # Utage Buddy
         mai.utage = True
         mai.utage_tag = mai.title[1:2]  # 取`[X]......`的`X`宴会场标签
