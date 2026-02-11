@@ -63,3 +63,14 @@ def get_diving_fish_music_data(retries: int = 3, delay: int | float = 1) -> dict
         retries=retries,
         delay=delay,
     )
+
+
+def get_lxns_aliases(retries: int = 3, delay: int | float = 1) -> dict:
+    """获取 Lxns 别名数据"""
+    url = "https://maimai.lxns.net/api/v0/maimai/alias/list"
+    return _downloader(
+        url,
+        project_name="Lxns 别名数据",
+        retries=retries,
+        delay=delay,
+    )

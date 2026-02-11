@@ -29,7 +29,7 @@ def main():
         )
 
     charts_dir = Path.cwd() / "plugin_data" / "maib" / "charts"
-    md5_file = Path.cwd() / "charts_md5.json"
+    md5_file = Path.cwd() / "plugin_data" / "maib" / "charts" / "md5.json"
 
     missing_files: set[str] = set()
     need_update_files: set[str] = set()

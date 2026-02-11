@@ -179,8 +179,17 @@ def process_chart_files(chart_files: List[Path], versions_config: Dict[int, str]
                 # 未提取到元数据
                 logger.warning(f"未提取到 {chart_file_name} 的元数据")
                 continue
-            mai = parse_maidata(raw_metadata, versions_config, chart_path)
-            result[mai.shortid] = mai
+            mai: MaiData = parse_maidata(raw_metadata, versions_config, chart_path)
+
+            # 去重：以 shortid 为准，后处理的覆盖前处理的
+            # 若前处理的含 Re:MASTER 谱面，优先保留有 Re:MASTER 谱面的版本
+            if mai.shortid in result.keys():
+                exist_remaster: bool = getattr(result[mai.shortid], '_chart6', None) is not None
+                new_remaster: bool = getattr(mai, '_chart6', None) is not None
+                if not (exist_remaster and not new_remaster):
+                    result[mai.shortid] = mai
+            else:
+                result[mai.shortid] = mai
 
             logger.success(f"成功处理 {chart_file_name}: {mai.title}")
 
