@@ -1,7 +1,5 @@
 import io
 import re
-import zipfile
-import tempfile
 from pathlib import Path
 from pydantic import BaseModel
 from typing import Optional
@@ -60,43 +58,13 @@ async def _(bot: Bot, event: Event, matcher: Matcher):
         await matcher.finish("现在小梨只能把谱面传到群文件喔qwq")
         return
 
-    i = 0
-    chart_file_path = None  # todo: 通过数据库查询对应谱面路径
-    while i < 3:
-        data_dir_path = get_plugin_data_dir() / f"charts{i if i > 0 else ""}"
-        chart_file_path = data_dir_path / f"{short_id}.zip"
-        logger.info(f"获取文件 {str(chart_file_path)}")
-        if chart_file_path.exists():
-            break
-        i += 1
-    if not chart_file_path.exists():
-        logger.warning(f"谱面: id{str(short_id)} 不存在。")
+    mdt = await MaidataManager.get_song_by_id(short_id)
+    chart_file_path = Path(mdt.zip_path) if mdt else Path('Unknown')
+    if chart_file_path.exists() and chart_file_path.is_file():
+        logger.warning(f"谱面 id{str(short_id)} 不存在")
         await matcher.finish("小梨没有找到这个谱面！可能这张谱面未被收录，请联系小梨的监护人确认谱面存在及收录情况qwq")
         return
     await matcher.send(f"请稍候——小梨开始准备id{short_id}的谱面文件啦！")
-
-    # 解压并读取maidata.txt第一行
-    logger.info("开始解压zip文件")
-    maidata_title = None
-    with tempfile.TemporaryDirectory(dir=get_plugin_cache_dir()) as tmp_dir:
-        with zipfile.ZipFile(chart_file_path, "r") as zip_ref:
-            zip_ref.extractall(tmp_dir)
-        maidata_path = Path(tmp_dir) / "maidata.txt"
-        if maidata_path.exists():
-            logger.info("找到 maidata.txt，开始读取标题")
-            with maidata_path.open('r', encoding="utf-8", errors="ignore") as f:
-                for line in f:
-                    title_match = re.search(r"&title=(.*)", line)
-                    if title_match:
-                        maidata_title = title_match.group(1).strip()
-                        logger.info(f"成功读取谱面标题: {maidata_title}")
-                        break
-        else:
-            logger.error("谱面中未找到 maidata.txt ?!")
-    if not maidata_title:
-        logger.error(f"读取谱面标题失败，maidata.txt 内容异常。对应谱面：id{short_id} -> {str(chart_file_path)}")
-        await matcher.finish("小梨下载到的谱面好像有问题……请求助小梨的监护人qwq")
-        return
 
     # 上传到QQ群文件
     logger.info(f"{short_id}.zip 开始上传群文件")
@@ -108,7 +76,7 @@ async def _(bot: Bot, event: Event, matcher: Matcher):
         name=f"{short_id}.{file_type}"
     )
     logger.success(f"{short_id}.zip 上传成功")
-    finish_message = f"{maidata_title}(id{short_id})" if maidata_title else f"id{short_id}"
+    finish_message = f"{mdt.title}(id{short_id})" if mdt.title else f"id{short_id}"
     await matcher.finish(f"小梨已经帮你把 {finish_message} 的谱面传到群里啦！")
 
 
