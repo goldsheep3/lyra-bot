@@ -56,7 +56,7 @@ if __name__ == "__main__":
         PLUGIN_CONFIG_PATH / "charts2",
     ]
     # 标准谱面集的本地 MD5 预校验信息
-    md5_file_path: Path = standard_chart_path / "md5.json"
+    md5_file_path: Path = PLUGIN_CONFIG_PATH / "md5.json"
     # 版本映射配置
     config_yaml_path = Path.cwd() / "versions.yaml"
     # .env 文件路径
@@ -87,7 +87,7 @@ if __name__ == "__main__":
         charts.extend(new_charts)
 
     # 从谱面集提取 maidata 数据
-    maidata_list = fetch.process_chart_folders(charts, versions_config)
+    maidata_list = fetch.process_chart_files(charts, versions_config)
     maidata_list = fetch.sync_diving_fish_version(maidata_list, versions_config)
 
     # 保存到数据库

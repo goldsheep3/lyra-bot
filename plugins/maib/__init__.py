@@ -61,7 +61,7 @@ async def _(bot: Bot, event: Event, matcher: Matcher):
         return
 
     i = 0
-    chart_file_path = None
+    chart_file_path = None  # todo: 通过数据库查询对应谱面路径
     while i < 3:
         data_dir_path = get_plugin_data_dir() / f"charts{i if i > 0 else ""}"
         chart_file_path = data_dir_path / f"{short_id}.zip"
