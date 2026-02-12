@@ -129,37 +129,3 @@ def get_sql_alchemy_from_env(env_file: str = ".env.prod") -> str:
                     # 获取等号后的部分并去除引号及空格
                     return line.split("=", 1)[1].strip().strip("'").strip('"')
     return ""
-
-
-if __name__ == "__main__":
-
-    # Loguru 日志配置
-    logger.remove()
-    logger.add(
-        sink=lambda msg: print(msg, end=""),
-        level="INFO",
-        format="<green>{time:HH:mm:ss}</green> <cyan>[{level}]</cyan> {message}\n",
-        colorize=False,
-    )
-
-    # 版本映射配置
-    config_yaml_path = Path.cwd() / "versions.yaml"
-    import yaml
-    with open(config_yaml_path, "r", encoding="utf-8") as f:
-        versions_config: Dict[int, str] = yaml.safe_load(f)
-
-    from .fetch import process_chart_folders, sync_diving_fish_version
-    # 从 ZIP 获取 maidata 数据
-    maidata_list = process_chart_folders([  # 排前的优先级更高
-        Path.cwd() / "plugin_data" / "maib" / "charts",
-        Path.cwd() / "plugin_data" / "maib" / "charts1",
-        Path.cwd() / "plugin_data" / "maib" / "charts2",
-    ], versions_config)
-    maidata_list = sync_diving_fish_version(maidata_list, versions_config)
-
-    logger.success(f"\n提取 {len(maidata_list)} 个谱面数据")
-
-    sql_alchemy = get_sql_alchemy_from_env(".env.prod")
-    if sql_alchemy:
-        import asyncio
-        asyncio.run(run_import(sql_alchemy, maidata_list))

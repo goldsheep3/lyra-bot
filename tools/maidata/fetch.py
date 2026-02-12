@@ -227,30 +227,3 @@ def sync_diving_fish_version(maidata_list: List[MaiData], versions_config: Dict[
         if v_cn:
             maidata.version_cn = v_cn
     return maidata_list
-
-
-if __name__ == "__main__":
-
-    # Loguru 日志配置
-    logger.remove()
-    logger.add(
-        sink=lambda msg: print(msg, end=""),
-        level="INFO",
-        format="<green>{time:HH:mm:ss}</green> <cyan>[{level}]</cyan> {message}\n",
-        colorize=False,
-    )
-
-    # 版本映射配置
-    config_yaml_path = Path.cwd() / "versions.yaml"
-    import yaml
-    with open(config_yaml_path, "r", encoding="utf-8") as f:
-        versions_config: Dict[int, str] = yaml.safe_load(f)
-
-    # 从 ZIP 获取 maidata 数据
-    maidata_list = process_chart_folders([  # 排前的优先级更高
-        Path.cwd() / "plugin_data" / "maib" / "charts"
-    ], versions_config)
-    maidata_list = sync_diving_fish_version(maidata_list, versions_config)
-
-    logger.success(f"\n提取 {len(maidata_list)} 个谱面数据")
-    logger.warning("提取到的数据未保存，请使用 save to db 脚本处理，而不是直接运行此脚本。")

@@ -1,7 +1,7 @@
 import time
 import json
 import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Optional, List, Tuple, Any, Set
 
@@ -151,7 +151,7 @@ class MaiData:
 
     current_version: int = -1  # 当前版本，判断是否为b15
 
-    aliases: List[str] = []  # 歌曲别名列表
+    aliases: List[str] = field(default_factory=list)  # 歌曲别名列表
 
     _chart1: Optional[MaiChart] = None  # Easy, 在 DX 版本中已废弃
     _chart2: Optional[MaiChart] = None  # Basic
