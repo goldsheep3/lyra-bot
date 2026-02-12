@@ -60,7 +60,7 @@ async def _(bot: Bot, event: Event, matcher: Matcher):
 
     mdt = await MaidataManager.get_song_by_id(short_id)
     chart_file_path = Path(mdt.zip_path) if mdt else Path('Unknown')
-    if chart_file_path.exists() and chart_file_path.is_file():
+    if (not chart_file_path.exists()) and chart_file_path.is_file():
         logger.warning(f"谱面 id{str(short_id)} 不存在")
         await matcher.finish("小梨没有找到这个谱面！可能这张谱面未被收录，请联系小梨的监护人确认谱面存在及收录情况qwq")
         return
@@ -76,8 +76,8 @@ async def _(bot: Bot, event: Event, matcher: Matcher):
         name=f"{short_id}.{file_type}"
     )
     logger.success(f"{short_id}.zip 上传成功")
-    finish_message = f"{mdt.title}(id{short_id})" if mdt.title else f"id{short_id}"
-    await matcher.finish(f"小梨已经帮你把 {finish_message} 的谱面传到群里啦！")
+    song_name = mdt.title if (mdt and hasattr(mdt, 'title')) else f"id{short_id}"
+    await matcher.finish(f"小梨已经帮你把 {song_name} 的谱面传到群里啦！")
 
 
 # =================================
