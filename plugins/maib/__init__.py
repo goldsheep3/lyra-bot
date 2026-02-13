@@ -9,7 +9,7 @@ try:
     from nonebot.plugin import PluginMetadata
     from nonebot.params import RegexGroup
     from nonebot.internal.matcher import Matcher
-    from nonebot.adapters.onebot.v11 import Bot, Event, MessageSegment
+    from nonebot.adapters.onebot.v11 import Bot, Event, Message, MessageSegment
 
     # noinspection PyPep8Naming N812
     from . import db_utils as MaidataManager
@@ -43,41 +43,74 @@ except (ImportError, ValueError, RuntimeError):
 # ADX 谱面下载
 # =================================
 
-adx_download = on_regex(r"下载[铺谱]面\s*(?:id\s*)?(\d+)(?:\s*(zip|z))?$", priority=5)
+adx_download = on_regex(r"^下载[铺谱]面\s*(\d*)\s*(.*)$", priority=10, block=True)
 
 
 @adx_download.handle()
-async def _(bot: Bot, event: Event, matcher: Matcher):
+async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
     """处理命令: 下载谱面11568"""
-    short_id, archive_type = matcher.state["_matched"].groups()
-    short_id = int(short_id)
-    group_id = event.group_id if hasattr(event, "group_id") else None
-    logger.debug(f"group_id: {group_id}")
-    if not group_id:
-        logger.debug("未检测到group_id，非群聊环境")
-        await matcher.finish("现在小梨只能把谱面传到群文件喔qwq")
+
+    raw_short_id, archive_type = groups
+    archive_type = archive_type.strip().lower()
+    short_id = int(raw_short_id) if raw_short_id.isdigit() else 0
+
+    if short_id <= 0:
+        # 只有在没有显式输入 ID 的情况下才尝试从回复提取
+        if hasattr(event, "reply") and event.reply:
+            replied_text = str(event.reply.message)
+            match = re.search(r"(\d+)", replied_text)
+            if match:
+                short_id = int(match.group(1))
+                logger.debug(f"从回复消息中提取到 short_id: {short_id}")
+
+        # 仍然未找到 ID，视为误触
+        # **大家当做无事发生**
+        if short_id <= 0:
+            return
+
+    # 获取谱面信息
+    mdt = await MaidataManager.get_song_by_id(short_id)  # 不转换为 utils.MaiData，直接使用数据库对象中才包含的 zip_path
+    chart_file_path = Path(mdt.zip_path) if mdt else None
+
+    if not chart_file_path or not chart_file_path.exists():
+        logger.warning(f"谱面 id {short_id} 不存在")
+        await matcher.finish("小梨没有找到这个谱面！可能还没被收录，请联系监护人确认喔qwq")
         return
 
-    mdt = await MaidataManager.get_song_by_id(short_id)
-    chart_file_path = Path(mdt.zip_path) if mdt else Path('Unknown')
-    if (not chart_file_path.exists()) and chart_file_path.is_file():
-        logger.warning(f"谱面 id{str(short_id)} 不存在")
-        await matcher.finish("小梨没有找到这个谱面！可能这张谱面未被收录，请联系小梨的监护人确认谱面存在及收录情况qwq")
-        return
-    await matcher.send(f"请稍候——小梨开始准备id{short_id}的谱面文件啦！")
+    await matcher.send(f"请稍候——小梨开始准备 id {short_id} 的谱面文件啦！")
 
-    # 上传到QQ群文件
-    logger.info(f"{short_id}.zip 开始上传群文件")
-    file_type = "zip" if archive_type else "adx"
-    await bot.call_api(
-        "upload_group_file",
-        group_id=group_id,
-        file=chart_file_path.as_posix(),
-        name=f"{short_id}.{file_type}"
-    )
-    logger.success(f"{short_id}.zip 上传成功")
-    song_name = mdt.title if (mdt and hasattr(mdt, 'title')) else f"id{short_id}"
-    await matcher.finish(f"小梨已经帮你把 {song_name} 的谱面传到群里啦！")
+    # 4. 上传逻辑
+    file_ext = "zip" if "zip" in archive_type else "adx"
+    file_name = f"{short_id}.{file_ext}"
+
+    group_id = getattr(event, "group_id", None)
+    if group_id:
+        try:
+            await bot.call_api(
+                "upload_group_file",
+                group_id=group_id,
+                file=chart_file_path.resolve().as_posix(),
+                name=file_name
+            )
+            song_name = getattr(mdt, 'title', f"id {short_id}")
+            await matcher.finish(f"小梨已经帮你把 {song_name} 的谱面传到群里啦！")
+        except Exception as e:
+            logger.error(f"上传失败: {e}")
+            await matcher.finish("小梨上传谱面时遇到了问题，请联系监护人确认喔qwq")
+    else:
+        user_id = event.get_user_id()
+        try:
+            await bot.call_api(
+                "upload_private_file",
+                user_id=user_id,
+                file=chart_file_path.resolve().as_posix(),
+                name=file_name
+            )
+            song_name = getattr(mdt, 'title', f"id {short_id}")
+            await matcher.finish(f"登登~请查收 {song_name} 谱面！")
+        except Exception as e:
+            logger.error(f"上传失败: {e}")
+            await matcher.finish("小梨上传谱面时遇到了问题，请联系监护人确认喔qwq")
 
 
 # =================================
@@ -88,35 +121,34 @@ mai_info = on_regex(r"^(id|info)(\d+)", priority=10, block=True)  # `id11451`,`i
 
 
 @mai_info.handle()
-async def _(event: Event, matcher: Matcher):
+async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
     """处理命令: id11451 / info11451"""
-    matched = matcher.state["_matched"]
-    _, shortid = matched.groups()
+    _, shortid = groups
     user_id = event.get_user_id()  # 意图通过QQ查询乐曲数据
     try:
         short_id = int(shortid)
     except (ValueError, TypeError):
         return
     # 查询数据库获取曲目数据
-    maidata: MaidataManager.MaiData = await MaidataManager.get_song_by_id(short_id)
-    if not maidata:
+    mdt: MaidataManager.MaiData = await MaidataManager.get_song_by_id(short_id)
+    if not mdt:
         await matcher.finish(f"没有找到 id{short_id} 的乐曲数据qwq")
         return
-    maidata_data: MaiData = maidata.to_data()
+    maidata: MaiData = mdt.to_data()
     song_in_cn = await MusicDataManager.contains_id(short_id, get_plugin_cache_dir())
     if song_in_cn:
         # 通过 QQ 获取用户绑定的信息
-        record_list = await dev_player_record(maidata_data.shortid, qq=user_id, developer_token=DEVELOPER_TOKEN)
-        maidata_data.from_diving_fish_json(record_list)  # 若水鱼有数据则进行填入
-    # 构建回复消息
+        record_list = await dev_player_record(maidata.shortid, qq=user_id, developer_token=DEVELOPER_TOKEN)
+        maidata.from_diving_fish_json(record_list)  # 若水鱼有数据则进行填入
+    # 构建回复图片
     from .img import info_board
-    img = info_board(maidata_data, cn=True if maidata_data.version_cn else False)
+    img = info_board(maidata, cn=True if maidata.version_cn else False)
     output = io.BytesIO()
     img.save(output, format="jpeg")
     img_bytes = output.getvalue()
-    await matcher.finish(
-        MessageSegment.image(img_bytes)
-    )
+    # 发送消息：`11951. サイエンス [Image]`
+    # 考虑支持回复自动下载
+    await matcher.finish(Message(f"{maidata.shortid}. {maidata.title}") + MessageSegment.image(img_bytes))
 
 
 # =================================
