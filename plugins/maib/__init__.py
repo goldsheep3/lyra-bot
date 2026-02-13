@@ -82,6 +82,7 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
     # 4. 上传逻辑
     file_ext = "zip" if "zip" in archive_type else "adx"
     file_name = f"{short_id}.{file_ext}"
+    song_name = getattr(mdt, 'title', f"id {short_id}")
 
     group_id = getattr(event, "group_id", None)
     if group_id:
@@ -92,11 +93,11 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
                 file=chart_file_path.resolve().as_posix(),
                 name=file_name
             )
-            song_name = getattr(mdt, 'title', f"id {short_id}")
-            await matcher.finish(f"小梨已经帮你把 {song_name} 的谱面传到群里啦！")
         except Exception as e:
             logger.error(f"上传失败: {e}")
             await matcher.finish("小梨上传谱面时遇到了问题，请联系监护人确认喔qwq")
+            return
+        await matcher.finish(f"小梨已经帮你把 {song_name} 的谱面传到群里啦！")
     else:
         user_id = event.get_user_id()
         try:
@@ -106,11 +107,11 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
                 file=chart_file_path.resolve().as_posix(),
                 name=file_name
             )
-            song_name = getattr(mdt, 'title', f"id {short_id}")
-            await matcher.finish(f"登登~请查收 {song_name} 谱面！")
         except Exception as e:
             logger.error(f"上传失败: {e}")
             await matcher.finish("小梨上传谱面时遇到了问题，请联系监护人确认喔qwq")
+            return
+        await matcher.finish(f"登登~请查收 {song_name} 谱面！")
 
 
 # =================================
