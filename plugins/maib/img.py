@@ -13,7 +13,7 @@ from .utils import MaiData, MaiChart, MaiChartAch
 # ========================================
 
 # 模块版本
-MODEL_VERSION: str = "260127"
+MODEL_VERSION: str = "260214"
 
 # assets 资源常量
 ASSETS_PATH = Path.cwd() / "assets"
@@ -616,8 +616,8 @@ class DrawInfo(DrawFactory):
         # 艺术家
         du.text(x + t, y + 14, text=self.maidata.artist, fill='#FFF', anchor='la', font=self.font_mdb[5])
         # ShortID, BPM
-        du.text(x + t, y + 23, text=f"ID {maidata.shortid}", fill='#FFF', anchor='la', font=self.font_mdb[6])
-        du.text(x + t + 30, y + 23, text=f"BPM {maidata.bpm}", fill='#FFF', anchor='la', font=self.font_mdb[6])
+        du.text(x + t, y + 23, text=f"ID {self.maidata.shortid}", fill='#FFF', anchor='la', font=self.font_mdb[6])
+        du.text(x + t + 30, y + 23, text=f"BPM {self.maidata.bpm}", fill='#FFF', anchor='la', font=self.font_mdb[6])
         # Genre, Version
         gvv_title = y + 34
         gvv_la = gvv_title + 5
