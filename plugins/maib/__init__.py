@@ -2,7 +2,9 @@ import io
 import re
 from pathlib import Path
 from pydantic import BaseModel
-from typing import Optional
+from typing import Dict, Optional
+
+version_data: Dict[int, str] = {}
 
 try:
     from nonebot import require, logger, on_regex, get_plugin_config
@@ -23,6 +25,7 @@ try:
 
     class Config(BaseModel):
         DIVING_FISH_DEVELOPER_TOKEN: Optional[str]
+        VERSION_YAML_PATH: str
 
 
     __plugin_meta__ = PluginMetadata(
@@ -34,6 +37,10 @@ try:
 
     cfg = get_plugin_config(Config)
     DEVELOPER_TOKEN = cfg.DIVING_FISH_DEVELOPER_TOKEN
+
+    with open(cfg.VERSION_YAML_PATH, "r", encoding="utf-8") as f:
+        import yaml
+        version_data = yaml.safe_load(f)
 
 except (ImportError, ValueError, RuntimeError):
     pass
@@ -142,8 +149,8 @@ async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
         record_list = await dev_player_record(maidata.shortid, qq=user_id, developer_token=DEVELOPER_TOKEN)
         maidata.from_diving_fish_json(record_list)  # 若水鱼有数据则进行填入
     # 构建回复图片
-    from .img import info_board
-    img = info_board(maidata, cn=True if maidata.version_cn else False)
+    from .img import DrawInfo
+    img = DrawInfo(maidata, version_data, cn_level=1 if maidata.version_cn else 0).get_image()
     output = io.BytesIO()
     img.save(output, format="jpeg")
     img_bytes = output.getvalue()

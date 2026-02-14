@@ -96,6 +96,10 @@ class MaiChartAch:
         return 5
 
     @property
+    def star(self) -> int:
+        return self.dxscore_star_count
+
+    @property
     def dxscore_tuple(self) -> tuple[int, int, int]:
         return self.dxscore, self.dxscore_max, self.dxscore_star_count
 
@@ -108,6 +112,8 @@ class MaiChart:
     des: str = ""  # designer 谱师
     inote: str = ""  # note 音符数据
     ach: Optional[MaiChartAch] = None  # 成就信息
+
+    diving_fish_lv: Optional[int] = None  # 水鱼拟合难度
 
     @property
     def lv_str(self, plus: int = 6) -> str:
