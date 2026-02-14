@@ -617,8 +617,8 @@ class DrawInfo(DrawFactory):
         # 艺术家
         du.text(x + t, y + 14, text=maidata.artist, fill='#FFF', anchor='la', font=self.font_mdb[5])
         # ShortID, BPM
-        du.text(x + t, y + 23, text=f"ID {maidata.shortid}", fill='#FFF', anchor='la', font=self.font_mdb[6])
-        du.text(x + t + 30, y + 23, text=f"BPM {maidata.bpm}", fill='#FFF', anchor='la', font=self.font_mdb[6])
+        du.text(x + t, y + 23, text=f"ID {self.maidata.shortid}", fill='#FFF', anchor='la', font=self.font_mdb[6])
+        du.text(x + t + 30, y + 23, text=f"BPM {self.maidata.bpm}", fill='#FFF', anchor='la', font=self.font_mdb[6])
         # Genre, Version
         gvv_title = y + 34
         gvv_la = gvv_title + 5
