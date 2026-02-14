@@ -13,7 +13,7 @@ from .utils import MaiData, MaiChart, MaiChartAch
 # ========================================
 
 # 模块版本
-MODEL_VERSION: str = "260127"
+MODEL_VERSION: str = "260214"
 
 # assets 资源常量
 ASSETS_PATH = Path.cwd() / "assets"
@@ -604,17 +604,18 @@ class DrawInfo(DrawFactory):
         width = 220
         margin = 5
         du = self.du
+        maidata = self.maidata
 
         # ========== Module.1 曲绘和基本信息 ==========
         # 曲绘
         cover_size = 54
-        du.image(x, y, cover_size, cover_size, radius=5, outline='#FFF', outline_width=1, png=self.maidata.image)
+        du.image(x, y, cover_size, cover_size, radius=5, outline='#FFF', outline_width=1, png=maidata.image)
         t = cover_size + margin
         # 标题
-        du.text(x + t, y, text=self.maidata.title, fill='#FFF', anchor='la',
+        du.text(x + t, y, text=maidata.title, fill='#FFF', anchor='la',
                 font=MIS_HE.font_variant(size=self.ms.x(11)))
         # 艺术家
-        du.text(x + t, y + 14, text=self.maidata.artist, fill='#FFF', anchor='la', font=self.font_mdb[5])
+        du.text(x + t, y + 14, text=maidata.artist, fill='#FFF', anchor='la', font=self.font_mdb[5])
         # ShortID, BPM
         du.text(x + t, y + 23, text=f"ID {maidata.shortid}", fill='#FFF', anchor='la', font=self.font_mdb[6])
         du.text(x + t + 30, y + 23, text=f"BPM {maidata.bpm}", fill='#FFF', anchor='la', font=self.font_mdb[6])
@@ -628,27 +629,27 @@ class DrawInfo(DrawFactory):
         du.text(x+t+73, gvv_title, text="CN", fill='#FFF', anchor='la', font=self.font_mdb[4])
 
         # Genre
-        genre_text, genre_fill = genre_split_and_get_color(self.maidata.genre)
+        genre_text, genre_fill = genre_split_and_get_color(maidata.genre)
         du.text(x+t+17, gvv_mm, text=genre_text, fill='#FFF', anchor='mm', font=self.font_mdb[5],
                 shadow=(1.5, '#FFF'))
         du.text(x+t+17, gvv_mm, text=genre_text, fill=genre_fill, anchor='mm', font=self.font_mdb[5],
                 shadow=(1, '#FFF'))
         # JP
-        ver_jp_path = VER_PATH / f"{self.maidata.version}.png"
+        ver_jp_path = VER_PATH / f"{maidata.version}.png"
         if ver_jp_path.exists():
             du.image(x+t+38, gvv_la, 34, 18, radius=0, png=ver_jp_path)
         else:
-            text = self.ver_cfg.get(self.maidata.version, str(self.maidata.version))
+            text = self.ver_cfg.get(maidata.version, str(maidata.version))
             text = text.replace(' ', '\n')
             du.text(x+t+38+19, gvv_mm, text=text,
                     fill='#FFF', anchor='mm', font=self.font_mdb[5])
         # CN: 需要考虑不存在
-        if self.maidata.version_cn:
-            ver_cn_path = VER_PATH / f"{self.maidata.version_cn}.png"
+        if maidata.version_cn:
+            ver_cn_path = VER_PATH / f"{maidata.version_cn}.png"
             if ver_cn_path.exists():
                 du.image(x+t+73, gvv_la, 34, 18, radius=0, png=ver_cn_path)
             else:
-                text = self.ver_cfg.get(self.maidata.version_cn, str(self.maidata.version_cn))
+                text = self.ver_cfg.get(maidata.version_cn, str(maidata.version_cn))
                 text = text.replace(' ', '\n')
                 du.text(x+t+73+19, gvv_mm, text=text,
                         fill='#FFF', anchor='mm', font=self.font_mdb[5])
@@ -682,16 +683,16 @@ class DrawInfo(DrawFactory):
 
         # ========== Module.3 详细谱面数据 ==========
         now_x = x
-        for i, chart in enumerate(self.maidata.charts):
+        for i, chart in enumerate(maidata.charts):
             if not chart.ach:
                 chart.ach = MaiChartAch(-101, 0, 0, 0, 0)
             if chart.difficulty >= 4:
-                _w, h = self.chart_box(now_x, y, chart, cabinet_dx=self.maidata.is_cabinet_dx)
+                _w, h = self.chart_box(now_x, y, chart, cabinet_dx=maidata.is_cabinet_dx)
             else:
-                _w, h = self.chart_box_lite(now_x, y, chart, cabinet_dx=self.maidata.is_cabinet_dx)
+                _w, h = self.chart_box_lite(now_x, y, chart, cabinet_dx=maidata.is_cabinet_dx)
             if (i + 1) % 2 == 1:
                 now_x = 123
-                if len(self.maidata.charts) - i == 1:
+                if len(maidata.charts) - i == 1:
                     y += h + margin  # 向下传递
             else:
                 now_x = 10
