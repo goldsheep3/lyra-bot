@@ -189,10 +189,7 @@ async def _(matcher: Matcher, groups: tuple = RegexGroup()):
         level = 0  # 大于 20 则一定不为定数，驳回上述解析
         shortid = int(level)
         mai = await MaidataManager.get_song_by_id(shortid)
-        if mai:
-            charts = mai.charts
-            charts.sort(key=lambda c: c.chart_number)
-            level = charts[-1].lv  # 取最高难度的定数
+        level = mai.charts[-1].lv if mai else 0  # 取最高难度的定数
 
     # 3. 尝试以 id11451/info11451/id114514紫 形式解析
     if level == 0:
@@ -216,13 +213,10 @@ async def _(matcher: Matcher, groups: tuple = RegexGroup()):
                 if diff:
                     # 指定了难度颜色，尝试匹配
                     for c in charts:
-                        if c.chart_number == diff:
+                        if c.difficulty == diff:
                             level = c.lv
                             break
-                if not level:
-                    # 取最高难度
-                    charts.sort(key=lambda c: c.chart_number)
-                    level = charts[-1].lv  # 取最高难度的定数
+                level = level if level else charts[-1].lv
 
     # 4. 尝试解析 歌名/别名
     if level == 0:

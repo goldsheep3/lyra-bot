@@ -47,6 +47,10 @@ class MaiData(Model):
     charts: Mapped[List["MaiChart"]] = relationship(back_populates="maidata", cascade="all, delete-orphan")
     aliases: Mapped[List["MaiAlias"]] = relationship(back_populates="maidata")
 
+    def get_charts(self):
+        self.charts.sort(key=lambda c: c.difficulty)
+        return self.charts
+
     def to_data(self) -> utils.MaiData:
         """转换为 utils.MaiData 对象"""
         maidata = utils.MaiData(
@@ -74,7 +78,7 @@ class MaiData(Model):
 class MaiChart(Model):
     """MaiChart 谱面数据"""
     __tablename__ = "charts"
-    __table_args__ = (UniqueConstraint("shortid", "chart_number"),)
+    __table_args__ = (UniqueConstraint("shortid", "difficulty"),)
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     shortid: Mapped[int] = mapped_column(ForeignKey("maidata.shortid", ondelete="CASCADE"))
