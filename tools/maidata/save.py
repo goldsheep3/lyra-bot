@@ -37,7 +37,7 @@ async def upsert_maidata(session: AsyncSession, data: utils.MaiData):
         existing.version = data.version
         existing.version_cn = data.version_cn
         existing.converter = data.converter
-        existing.zip_path = data.zip_path
+        existing.zip_path = str(data.zip_path) if data.zip_path else None
         existing.is_utage = data.is_utage
         existing.utage_tag = data.utage_tag
         existing.buddy = data.buddy

@@ -159,7 +159,7 @@ class MaiDataModelFactory:
             version=maidata.version,
             version_cn=maidata.version_cn,
             converter=maidata.converter,
-            zip_path=maidata.zip_path,
+            zip_path=str(maidata.zip_path) if maidata.zip_path else None,
             is_utage=maidata.is_utage,
             utage_tag=maidata.utage_tag if maidata.is_utage else None,
             buddy=maidata.buddy if maidata.is_utage else None
