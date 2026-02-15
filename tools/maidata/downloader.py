@@ -74,3 +74,14 @@ def get_lxns_aliases(retries: int = 3, delay: int | float = 1) -> dict:
         retries=retries,
         delay=delay,
     )
+
+
+def get_yuzuchan_aliases(retries: int = 3, delay: int | float = 1) -> dict:
+    """获取 Yuzuchan 别名数据"""
+    url = "https://www.yuzuchan.moe/api/maimaidx/maimaidxalias"
+    return _downloader(
+        url,
+        project_name="Yuzuchan 别名数据",
+        retries=retries,
+        delay=delay,
+    )

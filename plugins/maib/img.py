@@ -259,7 +259,7 @@ class DrawUnit:
         xy, sw = self.ms.xy(x, y), self.ms.x(stroke_width)
         self.draw.text(xy, text=text, fill=fill, anchor=anchor, font=font, stroke_width=sw, stroke_fill=stroke_fill)
 
-    def text(self, x: float, y: float, text: str, fill: str, anchor: str, font: ImageFont.FreeTypeFont,
+    def text(self, x: float, y: float, text: str, fill: Optional[str], anchor: str, font: ImageFont.FreeTypeFont,
              margin: int = 1, limit: int = -1, stroke: Tuple[float, str] = (0, ''),
              shadow: Tuple[float, str] = (0, ''), shadow2: Tuple[float, str, float] = (0, '', 0)):
         """总的 text 绘制方法"""

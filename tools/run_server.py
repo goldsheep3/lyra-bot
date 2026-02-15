@@ -91,7 +91,7 @@ if __name__ == "__main__":
     # 从谱面集提取 maidata 数据
     maidata_list = fetch.process_chart_files(charts, versions_config)
     maidata_list = fetch.sync_diving_fish_version(maidata_list, versions_config)
-    maidata_list = fetch.sync_lxns_alias(maidata_list)  # 同步 Lxns 别名数据
+    maidata_list = fetch.sync_aliases(maidata_list)  # 同步 Lxns 别名数据
 
     # 保存到数据库
     sql_alchemy = save.get_sql_alchemy_from_env(".env.prod")

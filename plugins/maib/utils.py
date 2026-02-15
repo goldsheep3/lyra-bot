@@ -297,9 +297,11 @@ class MaiData:
 
     def add_aliases(self, aliases: List[MaiAlias]):
         """添加多个别名"""
+        existing_alias_names = {a.alias for a in self.aliases}
         for alias in aliases:
-            if alias.shortid == self.shortid and alias not in self.aliases:
+            if alias.shortid == self.shortid and alias.alias not in existing_alias_names:
                 self.aliases.append(alias)
+                existing_alias_names.add(alias.alias)
 
 
 class MusicDataManager:

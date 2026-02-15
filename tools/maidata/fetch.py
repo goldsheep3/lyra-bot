@@ -2,7 +2,7 @@ import re
 import sys
 import zipfile
 from pathlib import Path
-from typing import Dict, Optional, List, Any
+from typing import Dict, Optional, List, Any, Set, Tuple
 
 from loguru import logger
 
@@ -227,18 +227,48 @@ def sync_diving_fish_version(maidata_list: List[MaiData], versions_config: Dict[
     return maidata_list
 
 
-def sync_lxns_alias(maidata_list: List[MaiData]):
-    """使用 Lxns 别名数据同步别名信息"""
-    from .downloader import get_lxns_aliases
+def sync_aliases(maidata_list: List[MaiData]):
+    """使用 Lxns 和 YuzuChaN 别名数据同步别名信息"""
+    from .downloader import get_lxns_aliases, get_yuzuchan_aliases
     from time import time
     now = int(time())
-    alias_dict: Dict[str, List[Dict[str, Any]]] = get_lxns_aliases()  # type: ignore
-    aliases: List[MaiAlias] = list()
-    for kv in alias_dict.get("aliases", []):
-        shortid = kv.get('song_id', 0)
-        alias_list = kv.get('aliases', [])
-        for alias in alias_list:
-            aliases.append(MaiAlias(shortid=shortid, alias=alias, create_qq=-1, create_time=now))
+    aliases_list: List[MaiAlias] = list()
+    aliases_set: Set[Tuple[int, str]] = set()  # 用于去重 (shortid, alias)
+
+    # 从别名站获取并合并别名站数据
+    lxns_aliases: Dict[str, List[Dict[str, Any]]] = get_lxns_aliases()
+    if lxns_aliases:
+        for aliases in lxns_aliases.get("aliases", []):
+            shortid = aliases.get('song_id', 0)
+            alias_list = aliases.get('aliases', [])
+            for alias in alias_list:
+                if (shortid, alias) not in aliases_set:
+                    aliases_list.append(MaiAlias(shortid=shortid, alias=alias, create_qq=-1, create_time=now))
+                    aliases_set.add((shortid, alias))  # 添加到集合中以去重
+
+    yuzuchan_aliases: Dict[str, List[Dict[str, List[str]] | Any] | Any] = get_yuzuchan_aliases()
+    if yuzuchan_aliases:
+        for aliases in yuzuchan_aliases.get("content", []):
+            shortid = aliases.get('SongID', 0)
+            alias_list = aliases.get('Alias', [])
+            for alias in alias_list:
+                if (shortid, alias) not in aliases_set:
+                    aliases_list.append(MaiAlias(shortid=shortid, alias=alias, create_qq=-1, create_time=now))
+                    aliases_set.add((shortid, alias))
+
     # 将别名添加到对应的 MaiData 对象中
-    [maidata.add_aliases(aliases) for maidata in maidata_list]
+    for maidata in maidata_list:
+        maidata.add_aliases(aliases_list)
     return maidata_list
+
+
+"""
+  "code": 0,
+  "content": [
+    {
+      "Name": "True Love Song",
+      "IsVotable": true,
+      "SongID": 8,
+      "Alias": [
+        "true love song",
+"""

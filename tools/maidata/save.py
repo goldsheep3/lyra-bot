@@ -24,7 +24,9 @@ async def upsert_maidata(session: AsyncSession, data: utils.MaiData):
     result = await session.execute(
         select(models.MaiData)
         .where(models.MaiData.shortid == data.shortid)
-        .options(selectinload(models.MaiData.charts))
+        .options(
+            selectinload(models.MaiData.charts),
+            selectinload(models.MaiData.aliases))
     )
     existing = result.scalar_one_or_none()
     if existing:
@@ -42,9 +44,13 @@ async def upsert_maidata(session: AsyncSession, data: utils.MaiData):
         existing.utage_tag = data.utage_tag
         existing.buddy = data.buddy
     else:
-        existing = models.MaiDataModelFactory.mai_data(data)
         # 创建新数据
+        existing = models.MaiDataModelFactory.mai_data(data)
         session.add(existing)
+        if not existing.charts:
+            existing.charts = []
+        if not existing.aliases:
+            existing.aliases = []
 
     # 处理谱面数据
     existing_charts = {chart.difficulty: chart for chart in existing.charts}
@@ -64,7 +70,7 @@ async def upsert_maidata(session: AsyncSession, data: utils.MaiData):
         else:
             # 添加新谱面
             new_chart = models.MaiDataModelFactory.mai_chart(chart, data.shortid)
-            session.add(new_chart)
+            existing.charts.append(new_chart)
 
     # 处理别名数据
     existing_set: Set[Tuple[int, str]] = {(a.shortid, a.alias) for a in existing.aliases}
