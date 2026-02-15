@@ -168,6 +168,7 @@ async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
     keyword = groups[0]
     user_id = event.get_user_id()  # 意图通过QQ查询乐曲数据
     mdt_list: List[MaidataManager.MaiData] = list(await MaidataManager.smart_search(keyword))
+    mdt_list = [mdt for mdt in mdt_list if mdt.shortid > 100000]  # 忽略宴会场
     if not mdt_list:
         await matcher.finish(f"没有找到包含「{keyword}」的乐曲数据qwq")
         return
