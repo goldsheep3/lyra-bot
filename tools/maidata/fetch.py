@@ -232,11 +232,11 @@ def sync_lxns_alias(maidata_list: List[MaiData]):
     from .downloader import get_lxns_aliases
     from time import time
     now = int(time())
-    alias_dict_origin: List[Dict[str, List[str] | int]] = get_lxns_aliases()  # type: ignore
+    alias_dict: Dict[str, List[Dict[str, Any]]] = get_lxns_aliases()  # type: ignore
     aliases: List[MaiAlias] = list()
-    for kv in alias_dict_origin:
-        shortid = kv.get('shortid', 0)
-        alias_list = kv.get('alias', [])
+    for kv in alias_dict.get("aliases", []):
+        shortid = kv.get('song_id', 0)
+        alias_list = kv.get('aliases', [])
         for alias in alias_list:
             aliases.append(MaiAlias(shortid=shortid, alias=alias, create_qq=-1, create_time=now))
     # 将别名添加到对应的 MaiData 对象中
