@@ -159,6 +159,15 @@ async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
     await matcher.finish(Message(f"{maidata.shortid}. {maidata.title}") + MessageSegment.image(img_bytes))
 
 
+mai_what_song = on_regex(r"^(\S+?)是什么歌$", priority=10, block=True)
+
+
+@mai_what_song.handle()
+async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
+    """处理命令: id11451 / info11451"""
+    pass
+
+
 # =================================
 # Rating 计算
 # =================================

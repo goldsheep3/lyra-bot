@@ -72,6 +72,8 @@ class MaiData(Model):
         # 添加谱面数据
         for chart in self.charts:
             maidata.set_chart(chart.to_data())
+        # 添加别名数据
+        maidata.add_aliases([a.to_data() for a in self.aliases])
         return maidata
 
 

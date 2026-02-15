@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from PIL import Image, ImageDraw, ImageFont, ImageChops
 
-from .utils import MaiData, MaiChart, MaiChartAch
+from .utils import MaiData, MaiChart, MaiChartAch, MaiAlias
 
 # ========================================
 # 基础常量
@@ -671,12 +671,12 @@ class DrawInfo(DrawFactory):
             current_x_offset = 0
 
             for alias in maidata.aliases:
-                alias_width = self.ms.rev(self.font_mdb[5].getlength(alias))
+                alias_width = self.ms.rev(self.font_mdb[5].getlength(alias.alias))
                 if current_x_offset + alias_width > width:
                     y += line_height
                     current_x_offset = 0
 
-                du.text(x + current_x_offset, y, text=alias, fill='#FFF', anchor='la', font=self.font_mdb[5])
+                du.text(x + current_x_offset, y, text=alias.alias, fill='#FFF', anchor='la', font=self.font_mdb[5])
                 current_x_offset += alias_width + padding
 
             y += line_height + margin
@@ -849,7 +849,7 @@ if __name__ == "__main__":
         version_cn=2022,
         converter="PreData",
         img_path=Path(r"C:\Users\sanji\AppData\Roaming\JetBrains\PyCharm2025.3\scratches\bg.png"),
-        aliases=["ochamekinou", "五月病", "天真浪漫机能", "天真烂漫机能", "机能"] * 5
+        aliases=[MaiAlias(101, a, 0, -1) for a in ["ochamekinou", "五月病", "天真浪漫机能", "天真烂漫机能", "机能"]]*5,
     )
 
     for i in range(2, 7):
