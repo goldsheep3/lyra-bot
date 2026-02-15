@@ -1,5 +1,5 @@
 import time
-from typing import List, Optional
+from typing import List, Optional, Sequence
 
 from sqlalchemy import select, or_, delete
 from sqlalchemy.orm import selectinload
@@ -30,7 +30,7 @@ async def get_song_by_id(shortid: int) -> Optional[MaiData]:
 
 
 # --- 2. 通过曲名查询列表 (支持模糊) ---
-async def search_songs_by_name(name: str) -> List[MaiData]:
+async def search_songs_by_name(name: str) -> Sequence[MaiData]:
     """模糊搜索曲名"""
     async with get_session() as session:
         statement = (
@@ -43,7 +43,7 @@ async def search_songs_by_name(name: str) -> List[MaiData]:
 
 
 # --- 3. 通过别名查询列表 (支持模糊) ---
-async def search_songs_by_alias(alias_name: str) -> List[MaiData]:
+async def search_songs_by_alias(alias_name: str) -> Sequence[MaiData]:
     """模糊搜索别名，并返回对应的乐曲列表"""
     async with get_session() as session:
         statement = (
@@ -58,7 +58,7 @@ async def search_songs_by_alias(alias_name: str) -> List[MaiData]:
 
 
 # --- 4. 通过曲名和别名联合查询 ---
-async def smart_search(keyword: str) -> List[MaiData]:
+async def smart_search(keyword: str) -> Sequence[MaiData]:
     """综合搜索：关键词匹配曲名 OR 别名"""
     async with get_session() as session:
         statement = (
@@ -78,7 +78,7 @@ async def smart_search(keyword: str) -> List[MaiData]:
 
 
 # --- 5. 根据谱面难度 (lv) 筛选 shortid 列表 ---
-async def get_shortids_by_lv(min_lv: float, max_lv: float) -> List[int]:
+async def get_shortids_by_lv(min_lv: float, max_lv: float) -> Sequence[int]:
     """
     查询定数在指定范围内的所有乐曲 ID
     """

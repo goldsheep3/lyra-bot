@@ -1,7 +1,7 @@
 import yaml
 from pathlib import Path
 from enum import IntEnum
-from typing import Optional, Tuple, Dict, Literal
+from typing import Optional, Tuple, Dict, Literal, List
 from dataclasses import dataclass
 
 from PIL import Image, ImageDraw, ImageFont, ImageChops
@@ -832,6 +832,21 @@ def b50_box(
     # 外框
     du.draw.rounded_rectangle(ms.size(0, 0, 91, 36), radius=ms.x(2.5), fill=None, outline=diff.frame,
                               width=3, corners=(True,) * 4)
+
+    return img
+
+
+def simple_list(maidata_list: List[MaiData]) -> Image.Image:
+    """生成一个简单的列表图，展示多个曲目的 ShortID、标题和艺术家"""
+    text = '\n'.join([f"{maidata.shortid:6}. {maidata.title}" for maidata in maidata_list])
+
+    font = MIS_DB.font_variant(size=16)
+    x1, y1, x2, y2 = font.getbbox(text)
+    width, height = int(x2 - x1 + 10), int(y2 - y1 + 10)
+    width = min(width, 200)
+    img = Image.new('RGB', (width, height), color='#FFF')
+    img.draw = ImageDraw.Draw(img)
+    img.draw.text((2, 2), text, fill='#000', font=font)
 
     return img
 

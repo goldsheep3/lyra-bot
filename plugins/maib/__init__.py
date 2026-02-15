@@ -2,7 +2,7 @@ import io
 import re
 from pathlib import Path
 from pydantic import BaseModel
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 
 version_data: Dict[int, str] = {}
 
@@ -15,6 +15,7 @@ try:
 
     # noinspection PyPep8Naming N812
     from . import db_utils as MaidataManager
+    from .img import simple_list, DrawInfo
     from .diving_fish import dev_player_record
     from .utils import rate_alias_map, MaiData, MaiChart, MaiChartAch, parse_status, DIFFS_MAP, MusicDataManager
 
@@ -149,7 +150,6 @@ async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
         record_list = await dev_player_record(maidata.shortid, qq=user_id, developer_token=DEVELOPER_TOKEN)
         maidata.from_diving_fish_json(record_list)  # 若水鱼有数据则进行填入
     # 构建回复图片
-    from .img import DrawInfo
     img = DrawInfo(maidata, version_data, cn_level=1 if maidata.version_cn else 0).get_image()
     output = io.BytesIO()
     img.save(output, format="jpeg")
@@ -165,8 +165,38 @@ mai_what_song = on_regex(r"^(\S+?)是什么歌$", priority=10, block=True)
 @mai_what_song.handle()
 async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
     """处理命令: id11451 / info11451"""
-    pass
-
+    keyword = groups[0]
+    user_id = event.get_user_id()  # 意图通过QQ查询乐曲数据
+    mdt_list: List[MaidataManager.MaiData] = list(await MaidataManager.smart_search(keyword))
+    if not mdt_list:
+        await matcher.finish(f"没有找到包含「{keyword}」的乐曲数据qwq")
+        return
+    if len(mdt_list) == 1:
+        msg = Message(f"找到了乐曲 {mdt_list[0].shortid}. {mdt_list[0].title}")
+    elif len(mdt_list) > 4:
+        await matcher.send(f"找到了 {len(mdt_list)} 首相应的乐曲！请查看以下是否有你的目标！")
+        img = simple_list([mdt.to_data() for mdt in mdt_list])
+        output = io.BytesIO()
+        img.save(output, format="jpeg")
+        img_bytes = output.getvalue()
+        await matcher.finish(MessageSegment.image(img_bytes))
+        return
+    else:
+        msg = Message(f"找到了 {len(mdt_list)} 首相应的乐曲！请查看以下乐曲！")
+    imgs = []
+    for mdt in mdt_list:
+        maidata: MaiData = mdt.to_data()
+        song_in_cn = await MusicDataManager.contains_id(maidata.shortid, get_plugin_cache_dir())
+        if song_in_cn:
+            # 通过 QQ 获取用户绑定的信息
+            record_list = await dev_player_record(maidata.shortid, qq=user_id, developer_token=DEVELOPER_TOKEN)
+            maidata.from_diving_fish_json(record_list)  # 若水鱼有数据则进行填入
+        img = DrawInfo(maidata, version_data, cn_level=1 if maidata.version_cn else 0).get_image()
+        output = io.BytesIO()
+        img.save(output, format="jpeg")
+        img_bytes = output.getvalue()
+        imgs.append(MessageSegment.image(img_bytes))
+    await matcher.finish(msg + Message().join(imgs))
 
 # =================================
 # Rating 计算
