@@ -15,8 +15,10 @@ def check(charts_dir: Path, md5_file_path: Path) -> str | List[Path]:
         return "无法获取 Neskol/Maichart-Converts 标准谱面集的 index.json"
 
     if not md5_file_path.exists():
-        return "无法找到 Neskol/Maichart-Converts 标准谱面集的 md5.json"
-    md5_dict = md5_check.load_or_save_md5(md5_file_path)
+        print("无法找到 Neskol/Maichart-Converts 标准谱面集的 md5.json")
+        md5_dict = {}
+    else:
+        md5_dict = md5_check.load_or_save_md5(md5_file_path)
 
     filenames = [f"{name}.zip" for name in index.keys()]
     for filename in filenames:
@@ -33,8 +35,8 @@ def check(charts_dir: Path, md5_file_path: Path) -> str | List[Path]:
     if any([missing, missing_in_md5, outdated]):
         MESSAGE = "发现 Neskol/Maichart-Converts 标准谱面集未同步："
         if missing:
-            MESSAGE += "MD5 缺少的谱面：\n" + ', '.join(sorted(missing)) if missing else ""
-        if missing_in_md5:
+            MESSAGE += "完全缺少的谱面：\n" + ', '.join(sorted(missing)) if missing else ""
+        if missing_in_md5 and md5_dict:
             MESSAGE += "本地缺少的谱面：\n" + ', '.join(sorted(missing_in_md5)) if missing_in_md5 else ""
         if outdated:
             MESSAGE += "需要更新的谱面：\n" + ', '.join(sorted(outdated)) if outdated else ""
@@ -89,6 +91,7 @@ if __name__ == "__main__":
     # 从谱面集提取 maidata 数据
     maidata_list = fetch.process_chart_files(charts, versions_config)
     maidata_list = fetch.sync_diving_fish_version(maidata_list, versions_config)
+    maidata_list = fetch.sync_lxns_alias(maidata_list)  # 同步 Lxns 别名数据
 
     # 保存到数据库
     sql_alchemy = save.get_sql_alchemy_from_env(".env.prod")

@@ -1,5 +1,5 @@
 import re
-from typing import List, Dict
+from typing import List, Dict, Tuple
 
 
 def extract_note_tokens(simai_text: str) -> List[str]:
@@ -28,7 +28,7 @@ def extract_note_tokens(simai_text: str) -> List[str]:
     # 删除 () 标记
     simai_text = re.sub(r'\([^)]*\)', '', simai_text)
     # 删除 {} 标记
-    simai_text = re.sub(r'\{[^}]*\}', '', simai_text)
+    simai_text = re.sub(r'\{[^}]*}', '', simai_text)
     # 将同位叠加符号 / 视作并列 ,
     simai_text = simai_text.replace('/', ',')
     # 按 , 拆分
@@ -42,11 +42,15 @@ def extract_note_tokens(simai_text: str) -> List[str]:
     return tokens
 
 
-def count_notes(tokens: List[str]) -> Dict[str, List[str]]:
+def count_notes(tokens: str | List[str]) -> Dict[str, List[str]]:
     """
     对音符 token 进行数量统计
     根据提供的判定规则，将音符分类为 TAP, HOLD, SLIDE, TOUCH, BREAK
     """
+
+    if isinstance(tokens, str):
+        # 如果输入是字符串，先提取 token 列表
+        tokens = extract_note_tokens(tokens)
 
     result = {
         "TAP": [],
@@ -95,13 +99,28 @@ def count_notes(tokens: List[str]) -> Dict[str, List[str]]:
     return result
 
 
-def analyze_simai(simai_text: str) -> Dict[str, List[str]]:
-    """
-    主入口函数：
-    simai 文本 -> 音符数量统计结果
-    """
+def note_count_values(counts: Dict[str, List[str]]) -> Dict[str, int]:
+    """从统计结果中提取各类型音符的数量"""
+    return {k: len(v) for k, v in counts.items()}
+
+
+def count_note_values(simai_text: str) -> Dict[str, int]:
+    """直接从 simai 文本中统计各类型音符的数量"""
     tokens = extract_note_tokens(simai_text)
-    return count_notes(tokens)
+    counts = count_notes(tokens)
+    return note_count_values(counts)
+
+
+def count_to_tuple(simai_text: str) -> Tuple[int, int, int, int, int]:
+    """将统计结果转换为元组形式，顺序为 (TAP, HOLD, SLIDE, TOUCH, BREAK)"""
+    counts = count_note_values(simai_text)
+    return (
+        counts.get("TAP", 0),
+        counts.get("HOLD", 0),
+        counts.get("SLIDE", 0),
+        counts.get("TOUCH", 0),
+        counts.get("BREAK", 0),
+    )
 
 
 if __name__ == "__main__":

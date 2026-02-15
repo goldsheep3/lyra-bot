@@ -6,9 +6,11 @@ from typing import Dict, Optional, List, Any
 
 from loguru import logger
 
+from .note_count import count_to_tuple
+
 # 导入 maib 插件中的 MaiData 相关类
 sys.path.insert(0, Path.cwd().as_posix())
-from plugins.maib.utils import MaiData, MaiChart
+from plugins.maib.utils import MaiData, MaiChart, MaiAlias
 
 
 def get_by_list(dict_obj: dict, key_list: str | List[str], default: Any, return_type: Optional[type] = None):
@@ -37,7 +39,8 @@ def get_chart(raw_metadata: dict, chart_num: int) -> Optional[MaiChart]:
             difficulty=chart_num,
             lv=float(raw_metadata.get(lv_key, '0').rstrip('?')),
             des=str(raw_metadata.get(des_key, '')),
-            inote=str(raw_metadata.get(inote_key, ''))
+            inote=str(raw_metadata.get(inote_key, '')),
+            notes=count_to_tuple(raw_metadata.get(inote_key, ''))
         )
         return chart
     return None
@@ -115,28 +118,23 @@ def parse_maidata(raw_metadata: Dict[str, str], versions_config: Dict[int, str],
         version=version,
         version_cn=None,
         converter=converter,
-        img_path=zip_path / "bg.png"
+        zip_path=zip_path,
+        img_path=zip_path / 'bg.png'
     )
 
-#     # Utage 宴会场 专属字段
-    #     utage: bool = True  # Utage: Utage 标志
-    #     buddy: bool = False  # Utage: 是否为 Buddy 谱面
-    #     utage_tag: str = ""  # Utage: utage 标签
-    #     _chart7: Optional[MaiChart] = None  # Utage: Utage 谱面
     # Utage 宴会场 判断
-    if raw_metadata.get('lv_7', '').strip().endswith('?'):
+    if mai.shortid > 100000:
         # Utage
         mai.utage = True
-        mai.utage_tag = mai.title[1:2]  # 取`[X]......`的`X`宴会场标签
-        mai.buddy = False
-        mai._chart7 = get_chart(raw_metadata, 7)
-    elif raw_metadata.get('lv_2', '').strip().endswith('?'):
-        # Utage Buddy
-        mai.utage = True
-        mai.utage_tag = mai.title[1:2]  # 取`[X]......`的`X`宴会场标签
-        mai.buddy = True
-        mai._chart2 = get_chart(raw_metadata, 2)
-        mai._chart3 = get_chart(raw_metadata, 3)
+        matched = re.match(r'\[(.)]', mai.title)  # 取`[X]......`的`X`宴会场标签
+        mai.utage_tag = matched.group(1) if matched else "宴"
+        if raw_metadata.get('lv_7', '').strip():
+            mai.buddy = False
+            mai._chart7 = get_chart(raw_metadata, 7)
+        else:
+            mai.buddy = True
+            mai._chart2 = get_chart(raw_metadata, 2)
+            mai._chart3 = get_chart(raw_metadata, 3)
     else:
         # 非 Utage 谱面
         for chart_num in range(2, 7):
@@ -226,4 +224,21 @@ def sync_diving_fish_version(maidata_list: List[MaiData], versions_config: Dict[
         v_cn = versions_cn_dict.get(maidata.shortid, None)
         if v_cn:
             maidata.version_cn = v_cn
+    return maidata_list
+
+
+def sync_lxns_alias(maidata_list: List[MaiData]):
+    """使用 Lxns 别名数据同步别名信息"""
+    from .downloader import get_lxns_aliases
+    from time import time
+    now = int(time())
+    alias_dict_origin: List[Dict[str, List[str] | int]] = get_lxns_aliases()  # type: ignore
+    aliases: List[MaiAlias] = list()
+    for kv in alias_dict_origin:
+        shortid = kv.get('shortid', 0)
+        alias_list = kv.get('alias', [])
+        for alias in alias_list:
+            aliases.append(MaiAlias(shortid=shortid, alias=alias, create_qq=-1, create_time=now))
+    # 将别名添加到对应的 MaiData 对象中
+    [maidata.add_aliases(aliases) for maidata in maidata_list]
     return maidata_list

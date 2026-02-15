@@ -74,6 +74,17 @@ def parse_status(target: str, mapping: Dict[str, int]) -> int:
 
 
 @dataclass
+class MaiAlias:
+    """maimai 歌曲别名信息"""
+    shortid: int  # 曲目 ID
+    alias: str  # 别名字符串
+
+    create_time: int  # 创建时间戳
+    create_qq: int  # 创建者 QQ 号
+    create_qq_group: Optional[int] = None  # 创建者 QQ 群号（若有）
+
+
+@dataclass
 class MaiChartAch:
     """maimai 谱面成就信息"""
     achievement: float  # 成就率
@@ -111,9 +122,16 @@ class MaiChart:
     lv: float  # level 等级
     des: str = ""  # designer 谱师
     inote: str = ""  # note 音符数据
+    # 音符数量 (tap, hold, slide, touch, break)
+    notes: Tuple[int, int, int, int, int] = (-1, -1, -1, -1, -1)
+    diving_fish_lv: Optional[int] = None  # 水鱼拟合难度
+
     ach: Optional[MaiChartAch] = None  # 成就信息
 
-    diving_fish_lv: Optional[int] = None  # 水鱼拟合难度
+    @property
+    def note_count(self) -> int:
+        c = sum(self.notes)
+        return c if c >= 0 else -1
 
     @property
     def lv_str(self, plus: int = 6) -> str:
@@ -153,11 +171,10 @@ class MaiData:
     version_cn: Optional[int]  # 国服更新版本
     converter: str  # 谱面来源
     img_path: Path  # 图片文件路径
+    zip_path: Optional[Path] = None  # 如果存在的话，ADX 谱面 ZIP 文件路径
     _cached_image: Optional[Image.Image] = None  # 缓存的封面图片对象
 
     current_version: int = -1  # 当前版本，判断是否为b15
-
-    aliases: List[str] = field(default_factory=list)  # 歌曲别名列表
 
     _chart1: Optional[MaiChart] = None  # Easy, 在 DX 版本中已废弃
     _chart2: Optional[MaiChart] = None  # Basic
@@ -167,10 +184,12 @@ class MaiData:
     _chart6: Optional[MaiChart] = None  # Re: Master, 仅部分谱面追加
 
     # Utage 宴会场 专属字段
-    utage: bool = True  # Utage: Utage 标志
+    is_utage: bool = True  # Utage: Utage 标志
+    utage_tag: str = ""  # Utage: is_utage 标签
     buddy: bool = False  # Utage: 是否为 Buddy 谱面
-    utage_tag: str = ""  # Utage: utage 标签
     _chart7: Optional[MaiChart] = None  # Utage: Utage 谱面
+
+    aliases: List[MaiAlias] = field(default_factory=list)  # 歌曲别名列表
 
     @property
     def is_cabinet_dx(self) -> bool:
@@ -247,7 +266,7 @@ class MaiData:
             raise ValueError("Difficulty must be between 1 and 7")
         elif chart.difficulty == 7:
             # 一定为非 Buddy 的 Utage 谱面
-            self.utage = True
+            self.is_utage = True
             self.buddy = False
         setattr(self, f"_chart{chart.difficulty}", chart)
 
@@ -276,13 +295,11 @@ class MaiData:
             )
             self.set_chart_ach(diff, ach)
 
-
-def parse_adx_zip(zip_path: Path) -> MaiData:
-    ...
-
-
-def parse_txt(txt: str | Path, img: Optional[str | Path]) -> MaiData:
-    ...
+    def add_aliases(self, aliases: List[MaiAlias]):
+        """添加多个别名"""
+        for alias in aliases:
+            if alias.shortid == self.shortid and alias not in self.aliases:
+                self.aliases.append(alias)
 
 
 class MusicDataManager:

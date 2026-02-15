@@ -1,6 +1,6 @@
 import sys
 from pathlib import Path
-from typing import Dict, List
+from typing import List, Set, Tuple
 
 from loguru import logger
 from sqlalchemy import select
@@ -27,14 +27,6 @@ async def upsert_maidata(session: AsyncSession, data: utils.MaiData):
         .options(selectinload(models.MaiData.charts))
     )
     existing = result.scalar_one_or_none()
-    img_path_str = str(data.img_path).lower()
-    if '.zip' in img_path_str:
-        # 找到最后一个 .zip 的索引并截取，确保路径完整
-        idx = img_path_str.rfind('.zip')
-        # 转换为字符串存储到数据库
-        zip_path = str(data.img_path)[:idx + 4]
-    else:
-        zip_path = None
     if existing:
         # 更新已有数据
         existing.title = data.title
@@ -45,31 +37,17 @@ async def upsert_maidata(session: AsyncSession, data: utils.MaiData):
         existing.version = data.version
         existing.version_cn = data.version_cn
         existing.converter = data.converter
-        existing.zip_path = zip_path
-        existing.is_utage = data.utage
+        existing.zip_path = data.zip_path
+        existing.is_utage = data.is_utage
         existing.utage_tag = data.utage_tag
         existing.buddy = data.buddy
     else:
-        existing = models.MaiData(
-            shortid=data.shortid,
-            title=data.title,
-            bpm=data.bpm,
-            artist=data.artist,
-            genre=data.genre,
-            cabinet=data.cabinet,
-            version=data.version,
-            version_cn=data.version_cn,
-            converter=data.converter,
-            zip_path=zip_path,
-            is_utage=data.utage,
-            utage_tag=data.utage_tag,
-            buddy=data.buddy
-        )
+        existing = models.MaiDataModelFactory.mai_data(data)
         # 创建新数据
         session.add(existing)
 
     # 处理谱面数据
-    existing_charts = {chart.chart_number: chart for chart in existing.charts}
+    existing_charts = {chart.difficulty: chart for chart in existing.charts}
     for chart in data.charts:
         chart_num = chart.difficulty
         if chart_num in existing_charts:
@@ -78,16 +56,23 @@ async def upsert_maidata(session: AsyncSession, data: utils.MaiData):
             existing_chart.lv = chart.lv
             existing_chart.des = chart.des
             existing_chart.inote = chart.inote
+            existing_chart.note_count_tap = chart.notes[0]
+            existing_chart.note_count_hold = chart.notes[1]
+            existing_chart.note_count_slide = chart.notes[2]
+            existing_chart.note_count_touch = chart.notes[3]
+            existing_chart.note_count_break = chart.notes[4]
         else:
             # 添加新谱面
-            new_chart = models.MaiChart(
-                shortid=data.shortid,
-                chart_number=chart.difficulty,
-                lv=chart.lv,
-                des=chart.des,
-                inote=chart.inote
-            )
+            new_chart = models.MaiDataModelFactory.mai_chart(chart, data.shortid)
             session.add(new_chart)
+
+    # 处理别名数据
+    existing_set: Set[Tuple[int, str]] = {(a.shortid, a.alias) for a in existing.aliases}
+    for alias in data.aliases:
+        if (alias.shortid, alias.alias) not in existing_set:
+            new_alias = models.MaiDataModelFactory.mai_alias(alias)
+            existing.aliases.append(new_alias)
+            existing_set.add((alias.shortid, alias.alias))
 
 
 async def run_import(sql_alchemy: str, maidata_list: List[utils.MaiData]):
