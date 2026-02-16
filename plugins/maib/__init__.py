@@ -1,4 +1,3 @@
-import io
 import re
 from pathlib import Path
 from pydantic import BaseModel
@@ -15,9 +14,11 @@ try:
 
     # noinspection PyPep8Naming N812
     from . import db_utils as MaidataManager
-    from .img import simple_list, DrawInfo
+    from .img import simple_list, DrawInfo, get_image_bytes
     from .diving_fish import dev_player_record
-    from .utils import rate_alias_map, MaiData, MaiChart, MaiChartAch, parse_status, DIFFS_MAP, MusicDataManager
+    from .utils import rate_alias_map, MaiData, MaiChart, MaiChartAch, parse_status, DIFFS_MAP
+    from .json_manager import MusicDataManager, UserDataManager
+    from .b50_calc import maib50_calc
 
     require("nonebot_plugin_localstore")
     require("nonebot_plugin_datastore")
@@ -26,7 +27,6 @@ try:
 
     class Config(BaseModel):
         DIVING_FISH_DEVELOPER_TOKEN: Optional[str]
-        VERSION_YAML_PATH: str
 
 
     __plugin_meta__ = PluginMetadata(
@@ -39,13 +39,17 @@ try:
     cfg = get_plugin_config(Config)
     DEVELOPER_TOKEN = cfg.DIVING_FISH_DEVELOPER_TOKEN
 
-    with open(cfg.VERSION_YAML_PATH, "r", encoding="utf-8") as f:
+    with open(str(Path().cwd() / "versions.yaml"), "r", encoding="utf-8") as f:
         import yaml
         version_data = yaml.safe_load(f)
+    NEWEST_VERSION_JP = max(k for k in version_data.keys() if k < 2000)
+    NEWEST_VERSION_CN = max(version_data.keys())
 
 except (ImportError, ValueError, RuntimeError):
     pass
 
+
+plugin_cache_dir = get_plugin_cache_dir()
 
 # =================================
 # ADX 谱面下载
@@ -126,6 +130,29 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
 # 查歌
 # =================================
 
+async def generate_image(song_in_cn, maidata, user_id) -> bytes:
+    min_rating = (-1, -1)
+    if song_in_cn:
+        try:
+            records = await UserDataManager.get_user_music_data(maidata.shortid, user_id,
+                                                                plugin_cache_dir, DEVELOPER_TOKEN)
+            fit_diffs = await MusicDataManager.fit_level(maidata.shortid, plugin_cache_dir)
+            maidata.from_diving_fish_json(records, fit_diffs)
+        except Exception as e:
+            logger.error(f"获取用户成绩数据失败: {e}")
+        maib50 = await maib50_calc(plugin_cache_dir, user_id, NEWEST_VERSION_CN, DEVELOPER_TOKEN, cn=True)
+        min_rating = (
+            maib50[0][-1].get_dxrating(False) if len(maib50[0]) > 0 else 0,  # b35 中最低的 Rating
+            maib50[1][-1].get_dxrating(False) if len(maib50[1]) > 0 else 0,  # b15 中最低的 Rating
+        )
+
+    # 构建回复图片
+    img = DrawInfo(maidata, version_data, cn_level=1 if maidata.version_cn else 0,
+                   current_version=NEWEST_VERSION_CN, min_rating=min_rating)
+
+    return get_image_bytes(img.get_image())
+
+
 mai_info = on_regex(r"^(id|info)(\d+)", priority=10, block=True)  # `id11451`,`info11451`
 
 
@@ -133,7 +160,7 @@ mai_info = on_regex(r"^(id|info)(\d+)", priority=10, block=True)  # `id11451`,`i
 async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
     """处理命令: id11451 / info11451"""
     _, shortid = groups
-    user_id = event.get_user_id()  # 意图通过QQ查询乐曲数据
+    user_id = int(event.get_user_id())
     try:
         short_id = int(shortid)
     except (ValueError, TypeError):
@@ -144,19 +171,11 @@ async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
         await matcher.finish(f"没有找到 id{short_id} 的乐曲数据qwq")
         return
     maidata: MaiData = mdt.to_data()
-    song_in_cn = await MusicDataManager.contains_id(short_id, get_plugin_cache_dir())
-    if song_in_cn:
-        # 通过 QQ 获取用户绑定的信息
-        record_list = await dev_player_record(maidata.shortid, qq=user_id, developer_token=DEVELOPER_TOKEN)
-        maidata.from_diving_fish_json(record_list)  # 若水鱼有数据则进行填入
-    # 构建回复图片
-    img = DrawInfo(maidata, version_data, cn_level=1 if maidata.version_cn else 0).get_image()
-    output = io.BytesIO()
-    img.save(output, format="jpeg")
-    img_bytes = output.getvalue()
+    song_in_cn = await MusicDataManager.contains_id(short_id, plugin_cache_dir)
+    result = await generate_image(song_in_cn, maidata, user_id)
     # 发送消息：`11951. サイエンス [Image]`
     # 考虑支持回复自动下载
-    await matcher.finish(Message(f"{maidata.shortid}. {maidata.title}") + MessageSegment.image(img_bytes))
+    await matcher.finish(Message(f"{maidata.shortid}. {maidata.title}") + MessageSegment.image(result))
 
 
 mai_what_song = on_regex(r"^(\S+?)是什么歌$", priority=10, block=True)
@@ -166,7 +185,7 @@ mai_what_song = on_regex(r"^(\S+?)是什么歌$", priority=10, block=True)
 async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
     """处理命令: id11451 / info11451"""
     keyword = groups[0]
-    user_id = event.get_user_id()  # 意图通过QQ查询乐曲数据
+    user_id = int(event.get_user_id())  # 意图通过QQ查询乐曲数据
     mdt_list: List[MaidataManager.MaiData] = list(await MaidataManager.smart_search(keyword))
     mdt_list = [mdt for mdt in mdt_list if mdt.shortid < 100000]  # 忽略宴会场
     if not mdt_list:
@@ -177,26 +196,16 @@ async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
     elif len(mdt_list) > 4:
         await matcher.send(f"找到了 {len(mdt_list)} 首相应的乐曲！请查看以下是否有你的目标！")
         img = simple_list([mdt.to_data() for mdt in mdt_list])
-        output = io.BytesIO()
-        img.save(output, format="jpeg")
-        img_bytes = output.getvalue()
-        await matcher.finish(MessageSegment.image(img_bytes))
+        await matcher.finish(MessageSegment.image(get_image_bytes(img)))
         return
     else:
         msg = Message(f"找到了 {len(mdt_list)} 首相应的乐曲！请查看以下乐曲！")
     imgs = []
     for mdt in mdt_list:
         maidata: MaiData = mdt.to_data()
-        song_in_cn = await MusicDataManager.contains_id(maidata.shortid, get_plugin_cache_dir())
-        if song_in_cn:
-            # 通过 QQ 获取用户绑定的信息
-            record_list = await dev_player_record(maidata.shortid, qq=user_id, developer_token=DEVELOPER_TOKEN)
-            maidata.from_diving_fish_json(record_list)  # 若水鱼有数据则进行填入
-        img = DrawInfo(maidata, version_data, cn_level=1 if maidata.version_cn else 0).get_image()
-        output = io.BytesIO()
-        img.save(output, format="jpeg")
-        img_bytes = output.getvalue()
-        imgs.append(MessageSegment.image(img_bytes))
+        song_in_cn = await MusicDataManager.contains_id(maidata.shortid, plugin_cache_dir)
+        result = await generate_image(song_in_cn, maidata, user_id)
+        imgs.append(MessageSegment.image(result))
     await matcher.finish(msg + Message().join(imgs))
 
 # =================================
@@ -226,8 +235,8 @@ async def _(matcher: Matcher, groups: tuple = RegexGroup()):
 
     # 2. 判断定数是否越界，越界则解析为纯数字 id
     if level > 20:
-        level = 0  # 大于 20 则一定不为定数，驳回上述解析
         shortid = int(level)
+        level = 0  # 大于 20 则一定不为定数，驳回上述解析
         mai = await MaidataManager.get_song_by_id(shortid)
         level = mai.charts[-1].lv if mai else 0  # 取最高难度的定数
 
@@ -258,17 +267,13 @@ async def _(matcher: Matcher, groups: tuple = RegexGroup()):
                             break
                 level = level if level else charts[-1].lv
 
-    # 4. 尝试解析 歌名/别名
-    if level == 0:
-        pass  # todo: 未实现 歌名/别名解析
-
     # 解析结束
     if level == 0:
         await matcher.finish("小梨无法解析你提供的定数或歌曲信息喔TT")
         return
 
     # 调用 MaiChart 计算 DX Rating
-    ra = MaiChart(difficulty=0, lv=level, ach=MaiChartAch(achievement=achievement)).get_dxrating()
+    ra = MaiChart(shortid=-1, difficulty=0, lv=level, ach=MaiChartAch(achievement=achievement)).get_dxrating()
 
     await matcher.finish("小梨算出来咯！\n"
                          f"定数{level}*{achievement:.4f}% -> Rating: {ra}")
