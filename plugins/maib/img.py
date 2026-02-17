@@ -624,9 +624,10 @@ class DrawInfo(DrawFactory):
         gvv_la = gvv_title + 5
         gvv_mm = gvv_la + 9
 
+        p = 34 + margin
         du.text(x+t, gvv_title, text="流派", fill='#FFF', anchor='la', font=self.font_mdb[4])
-        du.text(x+t+38, gvv_title, text="JP", fill='#FFF', anchor='la', font=self.font_mdb[4])
-        du.text(x+t+73, gvv_title, text="CN", fill='#FFF', anchor='la', font=self.font_mdb[4])
+        du.text(x+t+p, gvv_title, text="JP", fill='#FFF', anchor='la', font=self.font_mdb[4])
+        du.text(x+t+p*2, gvv_title, text="CN", fill='#FFF', anchor='la', font=self.font_mdb[4])
 
         # Genre
         genre_text, genre_fill = genre_split_and_get_color(maidata.genre)
@@ -637,26 +638,26 @@ class DrawInfo(DrawFactory):
         # JP
         ver_jp_path = VER_PATH / f"{maidata.version}.png"
         if ver_jp_path.exists():
-            du.image(x+t+38, gvv_la, 34, 18, radius=0, png=ver_jp_path)
+            du.image(x+t+p, gvv_la, 34, 16, radius=0, png=ver_jp_path)
         else:
             text = self.ver_cfg.get(maidata.version, str(maidata.version))
             text = text.replace(' ', '\n')
-            du.text(x+t+38+19, gvv_mm, text=text,
+            du.text(x+t+p+17, gvv_mm, text=text,
                     fill='#FFF', anchor='mm', font=self.font_mdb[5])
         # CN: 需要考虑不存在
         if maidata.version_cn:
             ver_cn_path = VER_PATH / f"{maidata.version_cn}.png"
             if ver_cn_path.exists():
-                du.image(x+t+73, gvv_la, 34, 18, radius=0, png=ver_cn_path)
+                du.image(x+t+p*2, gvv_la, 34, 16, radius=0, png=ver_cn_path)
             else:
                 text = self.ver_cfg.get(maidata.version_cn, str(maidata.version_cn))
                 text = text.replace(' ', '\n')
-                du.text(x+t+73+19, gvv_mm, text=text,
+                du.text(x+t+p*2+17, gvv_mm, text=text,
                         fill='#FFF', anchor='mm', font=self.font_mdb[5])
         else:
-            du.text(x + t + 91, gvv_mm, text="X\n", fill='#F00', anchor='mm', font=self.font_mdb[4],
+            du.text(x+t+p*2+17, gvv_mm, text="X\n", fill='#F00', anchor='mm', font=self.font_mdb[4],
                     stroke=(0.8, '#FFF'))
-            du.text(x + t + 91, gvv_mm, text="\n国服无此乐曲", fill='#FFF', anchor='mm', font=self.font_mdb[4])
+            du.text(x+t+p*2+17, gvv_mm, text="\n国服无此乐曲", fill='#FFF', anchor='mm', font=self.font_mdb[4])
 
         y += cover_size + margin
 
@@ -860,7 +861,7 @@ if __name__ == "__main__":
         artist="ゴジマジP",
         genre="niconicoボーカロイド",
         cabinet='SD',
-        version=28,
+        version=2,
         version_cn=2022,
         converter="PreData",
         img_path=Path(r"C:\Users\sanji\AppData\Roaming\JetBrains\PyCharm2025.3\scratches\bg.png"),
