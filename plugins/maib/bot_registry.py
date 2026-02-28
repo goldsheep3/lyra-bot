@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Type, Optional, ClassVar, Any
+from typing import Type, Optional, Any
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.ext.asyncio.session import AsyncSession
 from contextlib import suppress
@@ -10,9 +10,9 @@ class PluginRegistry:
     # localstore 相关
     # =================================
 
-    _plugin_data_dir: Optional[Path]
-    _plugin_cache_dir: Optional[Path]
-    _plugin_config_dir: Optional[Path]
+    _plugin_data_dir: Optional[Path] = None
+    _plugin_cache_dir: Optional[Path] = None
+    _plugin_config_dir: Optional[Path] = None
 
     @classmethod
     def get_data_dir(cls) -> Optional[Path]:
@@ -47,8 +47,8 @@ class PluginRegistry:
     # datastore 相关
     # =================================
 
-    _Model: Optional[Type[DeclarativeBase]]
-    _get_session: Optional[Any]
+    _Model: Optional[Type[DeclarativeBase]] = None
+    _get_session: Optional[Any] = None
 
     @classmethod
     def get_model(cls) -> Type[DeclarativeBase]:
