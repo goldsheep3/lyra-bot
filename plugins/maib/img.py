@@ -163,6 +163,9 @@ class MS:
     def __init__(self, multiple: int):
         self.multiple = multiple
 
+    def set_multiple(self, multiple: float):
+        self.multiple = multiple // 1
+
     def x(self, x: int | float) -> int:
         return int(x * self.multiple)
 
@@ -202,6 +205,7 @@ def genre_split_and_get_color(genre: str) -> Tuple[str, str]:
         return genre, '#f64849'
     elif is_genre('chunithm'):
         genre = genre.replace('chu', '\nchu')
+        genre = genre.replace('CHU', '\nCHU')
         return genre, '#3584fe'
     elif is_genre('会', 'TA'):
         return genre, '#dc39b8'
@@ -219,7 +223,7 @@ class DrawUnit:
         self.draw: ImageDraw.ImageDraw = ImageDraw.Draw(self.img)
         self.ms: MS = multiple if isinstance(multiple, MS) else MS(multiple)
 
-        self.cn = cn
+        self.cn: Literal[0, 1, 2] = cn
 
     @staticmethod
     def limit_text(text: str, font: ImageFont.FreeTypeFont, max_width: float) -> str:
@@ -253,10 +257,11 @@ class DrawUnit:
 
         return current_text
 
-    def _text(self, x: float, y: float, text: str, fill: str, anchor: str, font: ImageFont.FreeTypeFont,
+    def _text(self, x: float, y: float, text: Optional[str], fill: Optional[str], anchor: str, font: ImageFont.FreeTypeFont,
               stroke_fill: Optional[str] = None, stroke_width: float = 0):
         """text 绘制简化方法"""
         xy, sw = self.ms.xy(x, y), self.ms.x(stroke_width)
+        text = text if text else ''
         self.draw.text(xy, text=text, fill=fill, anchor=anchor, font=font, stroke_width=sw, stroke_fill=stroke_fill)
 
     def text(self, x: float, y: float, text: str, fill: Optional[str], anchor: str, font: ImageFont.FreeTypeFont,
@@ -279,7 +284,7 @@ class DrawUnit:
         # 主文字层
         self._text(x, y, text=text, fill=fill, anchor=anchor, font=font, stroke_fill=stroke[1], stroke_width=stroke[0])
 
-    def double_text(self, x: float, y: float, text: str, fill: str, anchor: str, font: ImageFont.FreeTypeFont,
+    def double_text(self, x: float, y: float, text: str, fill: Optional[str], anchor: str, font: ImageFont.FreeTypeFont,
                     margin: int = 1, limit: int = -1, stroke: Tuple[float, str] = (0, ''),
                     shadow: Tuple[float, str] = (0, ''), shadow2: Tuple[float, str, float] = (0, '', 0)):
         text_list = text.split('\n')
@@ -540,13 +545,14 @@ class DrawFactory:
         plus = round(chart.lv % 1 * 10) >= plus_level
         du.level(x + 64, y + 7.4, diff, chart.lv, plus=plus, ignore_decimal=is_utage)
         # 达成率
-        du.ach(x + 2, y + 9, diff, chart.ach.achievement)
-        dxs, dxs_max, dxs_star = chart.ach.dxscore_tuple
-        du.dxscore(x + 38, y + 25, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
-        c, t, tl, tc = COMBO_DICT[chart.ach.combo]
-        du.evaluate(x + 3, y + 27, text=tc if self.du.cn == 2 else t, color=c)
-        c, t, tl, tc = SYNC_DICT[chart.ach.sync]
-        du.evaluate(x + 3, y + 32, text=tc if self.du.cn == 2 else t, color=c)
+        if chart.ach:
+            du.ach(x + 2, y + 9, diff, chart.ach.achievement)
+            dxs, dxs_max, dxs_star = chart.ach.dxscore_tuple
+            du.dxscore(x + 38, y + 25, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
+            c, t, tl, tc = COMBO_DICT[chart.ach.combo]
+            du.evaluate(x + 3, y + 27, text=tc if self.du.cn == 2 else t, color=c)
+            c, t, tl, tc = SYNC_DICT[chart.ach.sync]
+            du.evaluate(x + 3, y + 32, text=tc if self.du.cn == 2 else t, color=c)
 
         info_line5 = [
             f"谱师: {chart.des}",
@@ -577,13 +583,14 @@ class DrawFactory:
         plus = round(chart.lv % 1 * 10) >= plus_level
         du.level(x + 64, y + 7.4, diff, chart.lv, plus=plus, ignore_decimal=is_utage)
         # 达成率
-        du.ach(x + 46, y + 9, diff, chart.ach.achievement)
-        dxs, dxs_max, dxs_star = chart.ach.dxscore_tuple
-        du.dxscore_lite(x + 2, y + 21, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
-        c, t, tl, tc = COMBO_DICT[chart.ach.combo]
-        du.evaluate(x + 3, y + 12, text=tc if self.du.cn == 2 else t, color=c)
-        c, t, tl, tc = SYNC_DICT[chart.ach.sync]
-        du.evaluate(x + 3, y + 17, text=tc if self.du.cn == 2 else t, color=c)
+        if chart.ach:
+            du.ach(x + 46, y + 9, diff, chart.ach.achievement)
+            dxs, dxs_max, dxs_star = chart.ach.dxscore_tuple
+            du.dxscore_lite(x + 2, y + 21, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
+            c, t, tl, tc = COMBO_DICT[chart.ach.combo]
+            du.evaluate(x + 3, y + 12, text=tc if self.du.cn == 2 else t, color=c)
+            c, t, tl, tc = SYNC_DICT[chart.ach.sync]
+            du.evaluate(x + 3, y + 17, text=tc if self.du.cn == 2 else t, color=c)
 
         return width, height
 
@@ -609,7 +616,8 @@ class DrawInfo(DrawFactory):
         # ========== Module.1 曲绘和基本信息 ==========
         # 曲绘
         cover_size = 54
-        du.image(x, y, cover_size, cover_size, radius=5, outline='#FFF', outline_width=1, png=maidata.image)
+        img = maidata.image if maidata.image else Image.new('RGB', (10, 10), color='#999')
+        du.image(x, y, cover_size, cover_size, radius=5, outline='#FFF', outline_width=1, png=img)
         t = cover_size + margin
         # 标题
         du.text(x + t, y, text=maidata.title, fill='#FFF', anchor='la',
@@ -738,7 +746,7 @@ def info_box_mini(
 
     # 外框
     du.draw.rounded_rectangle(ms.size(0, 0, 43, 16), radius=ms.x(2.5), fill=diff.bg, outline=diff.frame,
-                              width=3, corners=(True,) * 4)
+                              width=3, corners=(True, True, True, True))
 
     # 难度 / 定数
     du_lite_1.difficulty(2, 4, diff, text=f"{diff.text_title_cn if all_cn else diff.text_title}  {level:.1f}")
@@ -758,7 +766,7 @@ def info_box_mini(
 
     # 外框
     du.draw.rounded_rectangle(ms.size(0, 0, 43, 16), radius=ms.x(2.5), fill=None, outline=diff.frame,
-                              width=3, corners=(True,) * 4)
+                              width=3, corners=(True, True, True, True))
 
     return img
 
@@ -790,7 +798,7 @@ def b50_box(
 
     # 外框
     du.draw.rounded_rectangle(ms.size(0, 0, 91, 36), radius=ms.x(2.5), fill=diff.bg, outline=diff.frame,
-                              width=3, corners=(True,) * 4)
+                              width=3, corners=(True, True, True, True))
 
     # 标题栏
     du.draw.rectangle(ms.size(0, 2, 91, 5), fill=diff.title_bg)
@@ -832,7 +840,7 @@ def b50_box(
 
     # 外框
     du.draw.rounded_rectangle(ms.size(0, 0, 91, 36), radius=ms.x(2.5), fill=None, outline=diff.frame,
-                              width=3, corners=(True,) * 4)
+                              width=3, corners=(True, True, True, True))
 
     return img
 
@@ -846,8 +854,8 @@ def simple_list(maidata_list: List[MaiData]) -> Image.Image:
     width, height = int(x2 - x1 + 10), int(y2 - y1 + 10)
     width = min(width, 200)
     img = Image.new('RGB', (width, height), color='#FFF')
-    img.draw = ImageDraw.Draw(img)
-    img.draw.text((2, 2), text, fill='#000', font=font)
+    img_draw = ImageDraw.Draw(img)
+    img_draw.text((2, 2), text, fill='#000', font=font)
 
     return img
 
@@ -895,5 +903,4 @@ if __name__ == "__main__":
     tk_image = ImageTk.PhotoImage(target)
     label = tk.Label(root, image=tk_image)
     label.pack()
-    label.image = tk_image
     root.mainloop()

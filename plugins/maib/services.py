@@ -5,14 +5,9 @@ from sqlalchemy import select, or_, delete
 from sqlalchemy.orm import selectinload
 
 from .models import MaiData, MaiChart, MaiAlias
+from .bot_registry import PluginRegistry
 
-try:
-    from nonebot import get_driver
-    get_driver()
-    from nonebot_plugin_datastore import create_session
-    get_session = create_session
-except (ImportError, ValueError, RuntimeError):
-    get_session = None
+get_session = PluginRegistry.get_session
 
 
 # --- 1. 通过 shortid 查询指定乐曲 ---

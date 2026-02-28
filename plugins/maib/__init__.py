@@ -13,8 +13,7 @@ try:
     from nonebot.internal.matcher import Matcher
     from nonebot.adapters.onebot.v11 import Bot, Event, Message, MessageSegment
 
-    # noinspection PyPep8Naming N812
-    from . import db_utils as MaidataManager
+    from . import services
     from .img import simple_list, DrawInfo
     from .diving_fish import dev_player_record
     from .utils import rate_alias_map, MaiData, MaiChart, MaiChartAch, parse_status, DIFFS_MAP, MusicDataManager
@@ -60,12 +59,15 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
 
     raw_short_id, archive_type = groups
     archive_type = archive_type.strip().lower()
-    short_id = int(raw_short_id) if raw_short_id.isdigit() else 0
+    short_id = int(raw_short_id) if raw_short_id.isdigit() else -1
 
     if short_id <= 0:
         # 只有在没有显式输入 ID 的情况下才尝试从回复提取
-        if hasattr(event, "reply") and event.reply:
-            replied_text = str(event.reply.message)
+        if hasattr(event, "reply"):
+            reply = getattr(event, "reply")  # 获取回复消息对象
+            if not reply:
+                return
+            replied_text = str(reply.message)
             match = re.search(r"(\d+)", replied_text)
             if match:
                 short_id = int(match.group(1))
@@ -77,8 +79,8 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
             return
 
     # 获取谱面信息
-    mdt = await MaidataManager.get_song_by_id(short_id)  # 不转换为 utils.MaiData，直接使用数据库对象中才包含的 zip_path
-    chart_file_path = Path(mdt.zip_path) if mdt else None
+    mdt = await services.get_song_by_id(short_id)  # 不转换为 utils.MaiData，直接使用数据库对象中才包含的 zip_path
+    chart_file_path = Path(mdt.zip_path) if mdt and mdt.zip_path else None
 
     if not chart_file_path or not chart_file_path.exists():
         logger.warning(f"谱面 id {short_id} 不存在")
@@ -139,7 +141,7 @@ async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
     except (ValueError, TypeError):
         return
     # 查询数据库获取曲目数据
-    mdt: MaidataManager.MaiData = await MaidataManager.get_song_by_id(short_id)
+    mdt: Optional[services.MaiData] = await services.get_song_by_id(short_id)
     if not mdt:
         await matcher.finish(f"没有找到 id{short_id} 的乐曲数据qwq")
         return
@@ -148,7 +150,8 @@ async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
     if song_in_cn:
         # 通过 QQ 获取用户绑定的信息
         record_list = await dev_player_record(maidata.shortid, qq=user_id, developer_token=DEVELOPER_TOKEN)
-        maidata.from_diving_fish_json(record_list)  # 若水鱼有数据则进行填入
+        if record_list:
+            maidata.from_diving_fish_json(record_list)  # 若水鱼有数据则进行填入
     # 构建回复图片
     img = DrawInfo(maidata, version_data, cn_level=1 if maidata.version_cn else 0).get_image()
     output = io.BytesIO()
@@ -167,7 +170,7 @@ async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
     """处理命令: id11451 / info11451"""
     keyword = groups[0]
     user_id = event.get_user_id()  # 意图通过QQ查询乐曲数据
-    mdt_list: List[MaidataManager.MaiData] = list(await MaidataManager.smart_search(keyword))
+    mdt_list: List[services.MaiData] = list(await services.smart_search(keyword))
     mdt_list = [mdt for mdt in mdt_list if mdt.shortid < 100000]  # 忽略宴会场
     if not mdt_list:
         await matcher.finish(f"没有找到包含「{keyword}」的乐曲数据qwq")
@@ -191,7 +194,8 @@ async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
         if song_in_cn:
             # 通过 QQ 获取用户绑定的信息
             record_list = await dev_player_record(maidata.shortid, qq=user_id, developer_token=DEVELOPER_TOKEN)
-            maidata.from_diving_fish_json(record_list)  # 若水鱼有数据则进行填入
+            if record_list:
+                maidata.from_diving_fish_json(record_list)  # 若水鱼有数据则进行填入
         img = DrawInfo(maidata, version_data, cn_level=1 if maidata.version_cn else 0).get_image()
         output = io.BytesIO()
         img.save(output, format="jpeg")
@@ -216,7 +220,7 @@ async def _(matcher: Matcher, groups: tuple = RegexGroup()):
     try:
         achievement = float(rate)
     except (ValueError, TypeError):
-        achievement = rate_alias_map.get(rate.lower())
+        achievement = rate_alias_map.get(rate.lower(), -100)
 
     # 1. 尝试以定数形式解析
     try:
@@ -228,7 +232,7 @@ async def _(matcher: Matcher, groups: tuple = RegexGroup()):
     if level > 20:
         level = 0  # 大于 20 则一定不为定数，驳回上述解析
         shortid = int(level)
-        mai = await MaidataManager.get_song_by_id(shortid)
+        mai = await services.get_song_by_id(shortid)
         level = mai.charts[-1].lv if mai else 0  # 取最高难度的定数
 
     # 3. 尝试以 id11451/info11451/id114514紫 形式解析
@@ -244,12 +248,13 @@ async def _(matcher: Matcher, groups: tuple = RegexGroup()):
             level_str = match.group(0)
             try:
                 shortid = int(level_str)
-                mai = await MaidataManager.get_song_by_id(shortid)
+                mai = await services.get_song_by_id(shortid)
             except (ValueError, TypeError):
                 mai = None
             if mai:
                 charts = mai.charts
-                diff = parse_status(diff_info.group(1), DIFFS_MAP)
+                s = diff_info.group(1) if diff_info else''
+                diff = parse_status(s, DIFFS_MAP)
                 if diff:
                     # 指定了难度颜色，尝试匹配
                     for c in charts:
