@@ -163,15 +163,18 @@ async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
     await matcher.finish(Message(f"{mdt.shortid}. {mdt.title}") + MessageSegment.image(img_bytes))
 
 
-mai_what_song = on_regex(r"^(\S+?)是什么歌$", priority=10, block=True)
+mai_what_song = on_regex(r"^(\S+?)是什么歌([?？]?)$", priority=10, block=True)
 
 
 @mai_what_song.handle()
 async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
     """处理命令: xxx是什么歌"""
-    keyword = groups[0]
+    keyword, all_tag = groups
     user_id = event.get_user_id()  # 意图通过QQ查询乐曲数据
-    mdt_list: List[services.MaiData] = list(await services.get_song_by_name_smart(keyword))
+    mdt_list: List[services.MaiData] = list((
+        await services.get_song_by_name_smart(keyword) if not all_tag else
+        await services.get_song_by_name_blur(keyword)
+    ))  # 不带问号为智能搜索，带问号进行强制搜索
     mdt_list = [mdt for mdt in mdt_list if mdt.shortid < 100000]  # 忽略宴会场
     if not mdt_list:
         await matcher.finish(f"没有找到包含「{keyword}」的乐曲数据qwq")
@@ -181,6 +184,7 @@ async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
         msg = Message(f"找到了乐曲 {mdt.shortid}. {mdt.title}")
     elif len(mdt_list) > 4:
         await matcher.send(f"找到了 {len(mdt_list)} 首相应的乐曲！请查看以下是否有你的目标！")
+        # 未来 b50 提上日程后，希望可以以 b50_box 承载曲目信息
         img = simple_list([mdt.to_data() for mdt in mdt_list])
         output = io.BytesIO()
         img.save(output, format="jpeg")
@@ -234,6 +238,7 @@ async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
 scorelist = on_regex(r'^([\u4E00-\u9FFF]{2,3}|\d+\.\d|\d+\+|\d+)\s*(完成表|进度|列表)$', priority=5, block=True)
 
 b50 = on_regex(r'b50', priority=1, block=True)
+
 
 # =================================
 # Rating 计算
