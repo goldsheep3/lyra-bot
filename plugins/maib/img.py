@@ -846,13 +846,15 @@ def b50_box(
 
 
 def simple_list(maidata_list: List[MaiData]) -> Image.Image:
-    """生成一个简单的列表图，展示多个曲目的 ShortID、标题和艺术家"""
-    text = '\n'.join([f"{maidata.shortid:6}. {maidata.title}" for maidata in maidata_list])
+    """生成一个简单的文本列表图，展示多个曲目的 ShortID、标题和艺术家"""
+    text = '\n'.join([f"{maidata.shortid:>6}. {maidata.title}"
+                      for maidata in maidata_list])
 
     font = MIS_DB.font_variant(size=16)
     x1, y1, x2, y2 = font.getbbox(text)
+    y2 *= len(maidata_list)  # 考虑多行文本的高度
     width, height = int(x2 - x1 + 10), int(y2 - y1 + 10)
-    width = min(width, 200)
+    width = max(width, 200)
     img = Image.new('RGB', (width, height), color='#FFF')
     img_draw = ImageDraw.Draw(img)
     img_draw.text((2, 2), text, fill='#000', font=font)
