@@ -854,7 +854,7 @@ def simple_list(maidata_list: List[MaiData]) -> Image.Image:
     x1, y1, x2, y2 = font.getbbox(text)
     y2 *= len(maidata_list)  # 考虑多行文本的高度
     width, height = int(x2 - x1 + 10), int(y2 - y1 + 10)
-    width = max(width, 200)
+    width = max(width, 25)
     img = Image.new('RGB', (width, height), color='#FFF')
     img_draw = ImageDraw.Draw(img)
     img_draw.text((2, 2), text, fill='#000', font=font)
