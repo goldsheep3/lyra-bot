@@ -1,6 +1,8 @@
 .venv/
 plugins/__pycache__/
 
+uv.lock
+
 *.pyc
 
 # PyCharm
