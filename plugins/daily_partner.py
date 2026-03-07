@@ -185,12 +185,17 @@ async def handle_huanlp(bot: Bot, event: GroupMessageEvent):
     original_partner_id = user_info.get("partner_id")
 
     if original_partner_id is None:
-        msg = await build_message(bot, group_id, user_id, "你已经离过婚或还没有老婆，不能换哦！")
+        msg = await build_message(bot, group_id, user_id, "（翻笔记）你现在不能换老婆了（叉腰）")
         await huanlp.finish(msg)
 
     if user_info.get("change_count", 0) >= MAX_CHANGE_COUNT:
-        msg = await build_message(bot, group_id, user_id, "你的更换次数已达上限！")
-        await huanlp.finish(msg)
+        if original_partner_id in data:
+            del data[original_partner_id]
+        user_info["partner_id"] = None
+        user_info["change_count"] += 1
+        write_data(file_path, data)
+        await huanlp.finish("换太多次啦！你现在没有香香软软的亲亲老婆了！😡😡")
+
 
     active_members = await get_active_members(bot, group_id)
     bot_id = str(bot.self_id)
@@ -244,8 +249,9 @@ async def handle_qiangqu(bot: Bot, event: GroupMessageEvent):
         await qiangqu.finish("小梨不能跟你们玩这种游戏啦！莉莉丝阿姐听说了会生气的qwq")
 
     # 检查目标是否可被强娶
-    if target_user_id in data:
-        msg = await build_message(bot, group_id, user_id, "不可以哦——破坏他人关系是不好的！")
+    # 被锁定为 None 的用户现在可以被强娶，但仅限强娶
+    if target_user_id in data and data[target_user_id].get("partner_id") is not None:
+        msg = await build_message(bot, group_id, user_id, "不可以哦——TA已经有老婆了，TA的老婆会闹情绪的！")
         await qiangqu.finish(msg)
 
     user_info = get_user_data(data, user_id)
