@@ -140,6 +140,10 @@ class MaiChart:
         frac_part = self.lv - int_part
         return f"{int_part}+" if frac_part * 10 >= plus else f"{self.lv}"
 
+    def get_ach(self) -> MaiChartAch:
+        """获取该谱面的成就信息，若无则返回默认值"""
+        return self.ach if self.ach else MaiChartAch(achievement=-101)
+
     def get_dxrating(self, ap_bonus: bool = False) -> int:
         """获取该谱面的 DX Rating"""
         if not self.ach:
@@ -259,6 +263,12 @@ class MaiData:
         """获取所有谱面"""
         return [chart for chart in [self._chart1, self._chart2, self._chart3, self._chart4,
                                     self._chart5, self._chart6, self._chart7] if chart]
+
+    def get_chart(self, diff: int) -> Optional[MaiChart]:
+        """获取对应难度的谱面"""
+        if not 1 <= diff <= 7:
+            raise ValueError("Difficulty must be between 1 and 7")
+        return getattr(self, f"_chart{diff}", None)
 
     def set_chart(self, chart: MaiChart):
         """设置对应谱面"""

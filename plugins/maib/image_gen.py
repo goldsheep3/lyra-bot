@@ -126,14 +126,14 @@ class Sync(IntEnum):
 
 
 COMBO_DICT = {
-    0: (EVAL_GN, '···', '···', '···'),
+    0: (EVAL_GN, '', '', ''),
     1: (EVAL_GN, 'FULL COMBO', 'FC', '全连击'),
     2: (EVAL_GN, 'FULL COMBO +', 'FC+', '全连击+'),
     3: (EVAL_GD, 'ALL PERFECT', 'AP', '完美无缺'),
     4: (EVAL_GD, 'ALL PERFECT +', 'AP+', '完美无缺+'),
 }
 SYNC_DICT = {
-    0: (EVAL_DB, '···', '···', '···'),
+    0: (EVAL_DB, '', '', ''),
     1: (EVAL_DB, 'SYNC PLAY', 'SYNC', '同步游玩'),
     2: (EVAL_BE, 'FULL SYNC', 'FS', '全完同步'),  # 原文如此
     3: (EVAL_BE, 'FULL SYNC +', 'FS+', '全完同步+'),
@@ -545,14 +545,14 @@ class DrawFactory:
         plus = round(chart.lv % 1 * 10) >= plus_level
         du.level(x + 64, y + 7.4, diff, chart.lv, plus=plus, ignore_decimal=is_utage)
         # 达成率
-        if chart.ach:
-            du.ach(x + 2, y + 9, diff, chart.ach.achievement)
-            dxs, dxs_max, dxs_star = chart.ach.dxscore_tuple
-            du.dxscore(x + 38, y + 25, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
-            c, t, tl, tc = COMBO_DICT[chart.ach.combo]
-            du.evaluate(x + 3, y + 27, text=tc if self.du.cn == 2 else t, color=c)
-            c, t, tl, tc = SYNC_DICT[chart.ach.sync]
-            du.evaluate(x + 3, y + 32, text=tc if self.du.cn == 2 else t, color=c)
+        ach = chart.get_ach()
+        du.ach(x + 2, y + 9, diff, ach.achievement)
+        dxs, dxs_max, dxs_star = ach.dxscore_tuple
+        du.dxscore(x + 38, y + 25, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
+        c, t, tl, tc = COMBO_DICT[ach.combo]
+        du.evaluate(x + 3, y + 27, text=tc if self.du.cn == 2 else t, color=c)
+        c, t, tl, tc = SYNC_DICT[ach.sync]
+        du.evaluate(x + 3, y + 32, text=tc if self.du.cn == 2 else t, color=c)
 
         info_line5 = [
             f"谱师: {chart.des}",
@@ -583,14 +583,14 @@ class DrawFactory:
         plus = round(chart.lv % 1 * 10) >= plus_level
         du.level(x + 64, y + 7.4, diff, chart.lv, plus=plus, ignore_decimal=is_utage)
         # 达成率
-        if chart.ach:
-            du.ach(x + 46, y + 9, diff, chart.ach.achievement)
-            dxs, dxs_max, dxs_star = chart.ach.dxscore_tuple
-            du.dxscore_lite(x + 2, y + 21, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
-            c, t, tl, tc = COMBO_DICT[chart.ach.combo]
-            du.evaluate(x + 3, y + 12, text=tc if self.du.cn == 2 else t, color=c)
-            c, t, tl, tc = SYNC_DICT[chart.ach.sync]
-            du.evaluate(x + 3, y + 17, text=tc if self.du.cn == 2 else t, color=c)
+        ach = chart.get_ach()
+        du.ach(x + 46, y + 9, diff, ach.achievement)
+        dxs, dxs_max, dxs_star = ach.dxscore_tuple
+        du.dxscore_lite(x + 2, y + 21, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
+        c, t, tl, tc = COMBO_DICT[ach.combo]
+        du.evaluate(x + 3, y + 12, text=tc if self.du.cn == 2 else t, color=c)
+        c, t, tl, tc = SYNC_DICT[ach.sync]
+        du.evaluate(x + 3, y + 17, text=tc if self.du.cn == 2 else t, color=c)
 
         return width, height
 
@@ -693,8 +693,6 @@ class DrawInfo(DrawFactory):
         # ========== Module.3 详细谱面数据 ==========
         now_x = x
         for i, chart in enumerate(maidata.charts):
-            if not chart.ach:
-                chart.ach = MaiChartAch(-101, 0, 0, 0, 0)
             if chart.difficulty >= 4:
                 _w, h = self.chart_box(now_x, y, chart, cabinet_dx=maidata.is_cabinet_dx)
             else:
