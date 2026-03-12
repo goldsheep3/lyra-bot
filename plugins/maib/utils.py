@@ -202,20 +202,18 @@ class MaiData:
     @property
     def is_b15(self) -> bool:
         version = self.version
+        limit = 0
 
         if self.current_version < 0:
             # 未绑定版本，直接返回 False
             return False
         elif self.current_version > 2000:
             # maiCN
-            limit = 0
             version = self.version_cn if self.version_cn is not None else self.version
         elif self.current_version >= 25:
             # maiJP: 25(CiRCLE) 开始，B15 扩展到两个版本周期
             limit = 1
-        else:
-            # maiJP
-            limit = 0
+
         return version >= self.current_version - limit
 
     @property
@@ -269,6 +267,15 @@ class MaiData:
         if not 1 <= diff <= 7:
             raise ValueError("Difficulty must be between 1 and 7")
         return getattr(self, f"_chart{diff}", None)
+
+    def get_chart_dxrating(self, diff: int) -> Optional[int]:
+        """获取对应难度的 DX Rating"""
+        # maiJP: 25(CiRCLE) 开始，增加 AP+1 奖励分
+        ap_bonus = 2000 > self.current_version >= 25
+        chart = self.get_chart(diff)
+        if chart:
+            return chart.get_dxrating(ap_bonus=ap_bonus)
+        return None
 
     def set_chart(self, chart: MaiChart):
         """设置对应谱面"""
@@ -385,7 +392,7 @@ class MusicDataManager:
         # 3. 缓存失效或缺失，尝试同步 API
         if not cache_is_valid:
             try:
-                from .diving_fish import music_data as fetch_api_data
+                from .network import sy_music_data as fetch_api_data
                 logger.info("正在请求查分器 API 更新数据...")
                 new_data = await fetch_api_data()
                 if not new_data:

@@ -1,5 +1,6 @@
 from plugins.maib.image_gen import *
-
+from plugins.maib.utils import MaiData, MaiChart, MaiChartAch, MaiAlias
+from random import randint
 
 if __name__ == "__main__":
     maidata = MaiData(
@@ -29,36 +30,19 @@ if __name__ == "__main__":
                 sync=Sync(i - 1)
             )
         ))
-
-    config_yaml_path = Path.cwd() / "versions.yaml"
-    with open(config_yaml_path, "r", encoding="utf-8") as f:
-        ver_cfg: Dict[int, str] = yaml.safe_load(f)
-
-    # target = DrawInfo(maidata, ver_cfg, multiple=0.3, cn_level=1).get_image()
+    #target = DrawInfo(maidata, multiple=0.3, cn_level=1).get_image()
     # target = info_box_mini(diff=4, level=5.0, achievement=99.5, combo=Combo(2), sync=Sync(3), all_cn=True, ms_multiple=MS(10))
 
-    target = b50_box(5,1,101,"おちゃめ機能",5.0,1000,99.5,Path(r"C:\Users\sanji\AppData\Roaming\JetBrains\PyCharm2025.3\scratches\bg.png"),(200,300,100),False,0)
-        # diff,
-        # cabinet_dx: bool,
-        # short_id: int,
-        # title: str,
-        # level: float,
-        # ra: int,
-        # achievement: float,
-        # bg_path: Path,
-        # dxscore: Tuple[int, int, int],
-        # new_song: bool,
-        # index: int,
-        # combo: Optional[Combo | int] = None,
-        # sync: Optional[Sync | int] = None,
-        # all_cn: bool = False,
-        # ms_multiple: int | MS = 10,
+    target = DrawB50Boxex([(maidata, randint(2, 6)) for _ in range(35)], [(maidata, randint(2, 6)) for _ in range(15)], multiple=1, cn_level=1, user_name="NameWCNM", user_avatar=None,
+                          current_version=25, ra=15254).get_image()
+    target.show()
 
-    from PIL import ImageTk
-    import tkinter as tk
 
-    root = tk.Tk()
-    tk_image = ImageTk.PhotoImage(target)
-    label = tk.Label(root, image=tk_image)
-    label.pack()
-    root.mainloop()
+    # from PIL import ImageTk
+    # import tkinter as tk
+
+    # root = tk.Tk()
+    # tk_image = ImageTk.PhotoImage(target)
+    # label = tk.Label(root, image=tk_image)
+    # label.pack()
+    # root.mainloop()

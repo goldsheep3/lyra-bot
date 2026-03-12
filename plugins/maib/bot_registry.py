@@ -5,6 +5,21 @@ from sqlalchemy.ext.asyncio.session import AsyncSession
 from contextlib import suppress
 
 
+_driver = None
+
+
+def get_nb2_driver():
+    global _driver
+    if _driver is not None:
+        return _driver
+    from nonebot import get_driver
+    try:
+        _driver = get_driver()
+    except ValueError:
+        pass
+    return _driver
+
+
 class PluginRegistry:
     # =================================
     # localstore 相关
@@ -34,6 +49,8 @@ class PluginRegistry:
 
     @classmethod
     def get_localstore(cls):
+        if not get_nb2_driver():
+            return
         with suppress(ImportError, RuntimeError, AttributeError):
             from nonebot import require
             require("nonebot_plugin_localstore")
@@ -71,6 +88,8 @@ class PluginRegistry:
 
     @classmethod
     def get_datastore(cls):
+        if not get_nb2_driver():
+            return
         with suppress(ImportError, RuntimeError, AttributeError):
             from nonebot import require
             require("nonebot_plugin_datastore")

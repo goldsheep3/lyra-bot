@@ -4,7 +4,7 @@ from pathlib import Path
 from pydantic import BaseModel
 from typing import Dict, Optional, List
 
-from . import services, image_gen, diving_fish
+from . import services, image_gen, network
 from .utils import rate_alias_map, MaiData, MaiChart, MaiChartAch, parse_status, DIFFS_MAP, MusicDataManager
 
 HAS_DRIVER = False
@@ -130,7 +130,7 @@ if HAS_DRIVER:
         song_in_cn = await MusicDataManager.contains_id(maidata.shortid, get_plugin_cache_dir())
         if song_in_cn:
             # 通过 QQ 获取用户绑定的信息
-            record_list = await diving_fish.dev_player_record(maidata.shortid, qq=user_id, developer_token=DEVELOPER_TOKEN)
+            record_list = await network.sy_dev_player_record(maidata.shortid, qq=user_id, developer_token=DEVELOPER_TOKEN)
             if record_list:
                 maidata.from_diving_fish_json(record_list)  # 若水鱼有数据则进行填入
         # 构建回复图片
