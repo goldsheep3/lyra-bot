@@ -163,6 +163,9 @@ class MS:
     def __init__(self, multiple: int):
         self.multiple = multiple
 
+    def set_multiple(self, multiple: float):
+        self.multiple = multiple // 1
+
     def x(self, x: int | float) -> int:
         return int(x * self.multiple)
 
@@ -202,6 +205,7 @@ def genre_split_and_get_color(genre: str) -> Tuple[str, str]:
         return genre, '#f64849'
     elif is_genre('chunithm'):
         genre = genre.replace('chu', '\nchu')
+        genre = genre.replace('CHU', '\nCHU')
         return genre, '#3584fe'
     elif is_genre('会', 'TA'):
         return genre, '#dc39b8'
@@ -219,7 +223,7 @@ class DrawUnit:
         self.draw: ImageDraw.ImageDraw = ImageDraw.Draw(self.img)
         self.ms: MS = multiple if isinstance(multiple, MS) else MS(multiple)
 
-        self.cn = cn
+        self.cn: Literal[0, 1, 2] = cn
 
     @staticmethod
     def limit_text(text: str, font: ImageFont.FreeTypeFont, max_width: float) -> str:
@@ -253,10 +257,11 @@ class DrawUnit:
 
         return current_text
 
-    def _text(self, x: float, y: float, text: str, fill: str, anchor: str, font: ImageFont.FreeTypeFont,
+    def _text(self, x: float, y: float, text: Optional[str], fill: Optional[str], anchor: str, font: ImageFont.FreeTypeFont,
               stroke_fill: Optional[str] = None, stroke_width: float = 0):
         """text 绘制简化方法"""
         xy, sw = self.ms.xy(x, y), self.ms.x(stroke_width)
+        text = text if text else ''
         self.draw.text(xy, text=text, fill=fill, anchor=anchor, font=font, stroke_width=sw, stroke_fill=stroke_fill)
 
     def text(self, x: float, y: float, text: str, fill: Optional[str], anchor: str, font: ImageFont.FreeTypeFont,
@@ -279,7 +284,7 @@ class DrawUnit:
         # 主文字层
         self._text(x, y, text=text, fill=fill, anchor=anchor, font=font, stroke_fill=stroke[1], stroke_width=stroke[0])
 
-    def double_text(self, x: float, y: float, text: str, fill: str, anchor: str, font: ImageFont.FreeTypeFont,
+    def double_text(self, x: float, y: float, text: str, fill: Optional[str], anchor: str, font: ImageFont.FreeTypeFont,
                     margin: int = 1, limit: int = -1, stroke: Tuple[float, str] = (0, ''),
                     shadow: Tuple[float, str] = (0, ''), shadow2: Tuple[float, str, float] = (0, '', 0)):
         text_list = text.split('\n')
@@ -540,13 +545,14 @@ class DrawFactory:
         plus = round(chart.lv % 1 * 10) >= plus_level
         du.level(x + 64, y + 7.4, diff, chart.lv, plus=plus, ignore_decimal=is_utage)
         # 达成率
-        du.ach(x + 2, y + 9, diff, chart.ach.achievement)
-        dxs, dxs_max, dxs_star = chart.ach.dxscore_tuple
-        du.dxscore(x + 38, y + 25, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
-        c, t, tl, tc = COMBO_DICT[chart.ach.combo]
-        du.evaluate(x + 3, y + 27, text=tc if self.du.cn == 2 else t, color=c)
-        c, t, tl, tc = SYNC_DICT[chart.ach.sync]
-        du.evaluate(x + 3, y + 32, text=tc if self.du.cn == 2 else t, color=c)
+        if chart.ach:
+            du.ach(x + 2, y + 9, diff, chart.ach.achievement)
+            dxs, dxs_max, dxs_star = chart.ach.dxscore_tuple
+            du.dxscore(x + 38, y + 25, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
+            c, t, tl, tc = COMBO_DICT[chart.ach.combo]
+            du.evaluate(x + 3, y + 27, text=tc if self.du.cn == 2 else t, color=c)
+            c, t, tl, tc = SYNC_DICT[chart.ach.sync]
+            du.evaluate(x + 3, y + 32, text=tc if self.du.cn == 2 else t, color=c)
 
         info_line5 = [
             f"谱师: {chart.des}",
@@ -577,13 +583,14 @@ class DrawFactory:
         plus = round(chart.lv % 1 * 10) >= plus_level
         du.level(x + 64, y + 7.4, diff, chart.lv, plus=plus, ignore_decimal=is_utage)
         # 达成率
-        du.ach(x + 46, y + 9, diff, chart.ach.achievement)
-        dxs, dxs_max, dxs_star = chart.ach.dxscore_tuple
-        du.dxscore_lite(x + 2, y + 21, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
-        c, t, tl, tc = COMBO_DICT[chart.ach.combo]
-        du.evaluate(x + 3, y + 12, text=tc if self.du.cn == 2 else t, color=c)
-        c, t, tl, tc = SYNC_DICT[chart.ach.sync]
-        du.evaluate(x + 3, y + 17, text=tc if self.du.cn == 2 else t, color=c)
+        if chart.ach:
+            du.ach(x + 46, y + 9, diff, chart.ach.achievement)
+            dxs, dxs_max, dxs_star = chart.ach.dxscore_tuple
+            du.dxscore_lite(x + 2, y + 21, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
+            c, t, tl, tc = COMBO_DICT[chart.ach.combo]
+            du.evaluate(x + 3, y + 12, text=tc if self.du.cn == 2 else t, color=c)
+            c, t, tl, tc = SYNC_DICT[chart.ach.sync]
+            du.evaluate(x + 3, y + 17, text=tc if self.du.cn == 2 else t, color=c)
 
         return width, height
 
@@ -609,7 +616,8 @@ class DrawInfo(DrawFactory):
         # ========== Module.1 曲绘和基本信息 ==========
         # 曲绘
         cover_size = 54
-        du.image(x, y, cover_size, cover_size, radius=5, outline='#FFF', outline_width=1, png=maidata.image)
+        img = maidata.image if maidata.image else Image.new('RGB', (10, 10), color='#999')
+        du.image(x, y, cover_size, cover_size, radius=5, outline='#FFF', outline_width=1, png=img)
         t = cover_size + margin
         # 标题
         du.text(x + t, y, text=maidata.title, fill='#FFF', anchor='la',
@@ -624,9 +632,10 @@ class DrawInfo(DrawFactory):
         gvv_la = gvv_title + 5
         gvv_mm = gvv_la + 9
 
+        p = 34 + margin
         du.text(x+t, gvv_title, text="流派", fill='#FFF', anchor='la', font=self.font_mdb[4])
-        du.text(x+t+38, gvv_title, text="JP", fill='#FFF', anchor='la', font=self.font_mdb[4])
-        du.text(x+t+73, gvv_title, text="CN", fill='#FFF', anchor='la', font=self.font_mdb[4])
+        du.text(x+t+p, gvv_title, text="JP", fill='#FFF', anchor='la', font=self.font_mdb[4])
+        du.text(x+t+p*2, gvv_title, text="CN", fill='#FFF', anchor='la', font=self.font_mdb[4])
 
         # Genre
         genre_text, genre_fill = genre_split_and_get_color(maidata.genre)
@@ -637,26 +646,26 @@ class DrawInfo(DrawFactory):
         # JP
         ver_jp_path = VER_PATH / f"{maidata.version}.png"
         if ver_jp_path.exists():
-            du.image(x+t+38, gvv_la, 34, 18, radius=0, png=ver_jp_path)
+            du.image(x+t+p, gvv_la, 34, 16, radius=0, png=ver_jp_path)
         else:
             text = self.ver_cfg.get(maidata.version, str(maidata.version))
             text = text.replace(' ', '\n')
-            du.text(x+t+38+19, gvv_mm, text=text,
+            du.text(x+t+p+17, gvv_mm, text=text,
                     fill='#FFF', anchor='mm', font=self.font_mdb[5])
         # CN: 需要考虑不存在
         if maidata.version_cn:
             ver_cn_path = VER_PATH / f"{maidata.version_cn}.png"
             if ver_cn_path.exists():
-                du.image(x+t+73, gvv_la, 34, 18, radius=0, png=ver_cn_path)
+                du.image(x+t+p*2, gvv_la, 34, 16, radius=0, png=ver_cn_path)
             else:
                 text = self.ver_cfg.get(maidata.version_cn, str(maidata.version_cn))
                 text = text.replace(' ', '\n')
-                du.text(x+t+73+19, gvv_mm, text=text,
+                du.text(x+t+p*2+17, gvv_mm, text=text,
                         fill='#FFF', anchor='mm', font=self.font_mdb[5])
         else:
-            du.text(x + t + 91, gvv_mm, text="X\n", fill='#F00', anchor='mm', font=self.font_mdb[4],
+            du.text(x+t+p*2+17, gvv_mm, text="X\n", fill='#F00', anchor='mm', font=self.font_mdb[4],
                     stroke=(0.8, '#FFF'))
-            du.text(x + t + 91, gvv_mm, text="\n国服无此乐曲", fill='#FFF', anchor='mm', font=self.font_mdb[4])
+            du.text(x+t+p*2+17, gvv_mm, text="\n国服无此乐曲", fill='#FFF', anchor='mm', font=self.font_mdb[4])
 
         y += cover_size + margin
 
@@ -737,7 +746,7 @@ def info_box_mini(
 
     # 外框
     du.draw.rounded_rectangle(ms.size(0, 0, 43, 16), radius=ms.x(2.5), fill=diff.bg, outline=diff.frame,
-                              width=3, corners=(True,) * 4)
+                              width=3, corners=(True, True, True, True))
 
     # 难度 / 定数
     du_lite_1.difficulty(2, 4, diff, text=f"{diff.text_title_cn if all_cn else diff.text_title}  {level:.1f}")
@@ -757,7 +766,7 @@ def info_box_mini(
 
     # 外框
     du.draw.rounded_rectangle(ms.size(0, 0, 43, 16), radius=ms.x(2.5), fill=None, outline=diff.frame,
-                              width=3, corners=(True,) * 4)
+                              width=3, corners=(True, True, True, True))
 
     return img
 
@@ -789,7 +798,7 @@ def b50_box(
 
     # 外框
     du.draw.rounded_rectangle(ms.size(0, 0, 91, 36), radius=ms.x(2.5), fill=diff.bg, outline=diff.frame,
-                              width=3, corners=(True,) * 4)
+                              width=3, corners=(True, True, True, True))
 
     # 标题栏
     du.draw.rectangle(ms.size(0, 2, 91, 5), fill=diff.title_bg)
@@ -831,22 +840,22 @@ def b50_box(
 
     # 外框
     du.draw.rounded_rectangle(ms.size(0, 0, 91, 36), radius=ms.x(2.5), fill=None, outline=diff.frame,
-                              width=3, corners=(True,) * 4)
+                              width=3, corners=(True, True, True, True))
 
     return img
 
 
 def simple_list(maidata_list: List[MaiData]) -> Image.Image:
-    """生成一个简单的列表图，展示多个曲目的 ShortID、标题和艺术家"""
-    text = '\n'.join([f"{maidata.shortid:6}. {maidata.title}" for maidata in maidata_list])
-
+    """生成一个简单的文本列表图，展示多个曲目的信息"""
+    text = '\n'.join([f"{maidata.shortid}.\t{maidata.title}"
+                      for maidata in maidata_list])
     font = MIS_DB.font_variant(size=16)
-    x1, y1, x2, y2 = font.getbbox(text)
+
+    x1, y1, x2, y2 = ImageDraw.Draw(Image.new('RGB', (1, 1), color='#FFF')).multiline_textbbox((0, 0), text=text, font=font)
     width, height = int(x2 - x1 + 10), int(y2 - y1 + 10)
-    width = min(width, 200)
     img = Image.new('RGB', (width, height), color='#FFF')
-    img.draw = ImageDraw.Draw(img)
-    img.draw.text((2, 2), text, fill='#000', font=font)
+    img_draw = ImageDraw.Draw(img)
+    img_draw.text((2, 2), text, fill='#000', font=font)
 
     return img
 
@@ -860,7 +869,7 @@ if __name__ == "__main__":
         artist="ゴジマジP",
         genre="niconicoボーカロイド",
         cabinet='SD',
-        version=28,
+        version=2,
         version_cn=2022,
         converter="PreData",
         img_path=Path(r"C:\Users\sanji\AppData\Roaming\JetBrains\PyCharm2025.3\scratches\bg.png"),
@@ -894,5 +903,4 @@ if __name__ == "__main__":
     tk_image = ImageTk.PhotoImage(target)
     label = tk.Label(root, image=tk_image)
     label.pack()
-    label.image = tk_image
     root.mainloop()

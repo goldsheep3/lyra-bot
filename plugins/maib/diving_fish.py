@@ -70,8 +70,8 @@ async def _make_request(
     except httpx.HTTPError as e:
         # 增加更详细的错误输出，方便调试
         error_msg = f"API请求失败: {e}"
-        if hasattr(e, "response") and e.response:
-            error_msg += f" | 响应内容: {e.response.text}"
+        if response := getattr(e, "response", None):
+            error_msg += f" | 响应内容: {response.text}"
         logger.error(error_msg)
         return None
 
@@ -87,7 +87,7 @@ async def music_data() -> Optional[List[Dict[str, Any]]]:
 
 
 async def dev_player_record(shortid: int, qq: int | str,
-                            developer_token: str) -> Optional[Dict[str, List[Dict[str, Any]]]]:
+                            developer_token: Optional[str] = None) -> Optional[Dict[str, List[Dict[str, Any]]]]:
     """`/dev/player/record`  获取用户单曲成绩信息"""
     data_body = {
         "music_id": str(shortid),

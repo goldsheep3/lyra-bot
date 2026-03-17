@@ -1,22 +1,13 @@
 from pathlib import Path
 from typing import List, Optional
+
 from sqlalchemy import ForeignKey, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-try:
-    # 尝试获取 driver 以确认是否为 NoneBot
-    import nonebot
-    nonebot.get_driver()
-    from nonebot_plugin_datastore import get_plugin_data
-    plugin_data = get_plugin_data()
-    Model = plugin_data.Model
-except (ImportError, ValueError):
-    plugin_data = None
-
-    class Model(DeclarativeBase):
-        pass
-
 from . import utils
+from .bot_registry import PluginRegistry
+
+Model = PluginRegistry.get_model()
 
 
 class MaiData(Model):
@@ -36,7 +27,7 @@ class MaiData(Model):
 
     # 文件与来源
     converter: Mapped[Optional[str]]
-    zip_path: Mapped[Optional[str]]
+    zip_path: Mapped[str]
 
     # Utage 特有字段 (常规曲目设为 None)
     is_utage: Mapped[bool] = mapped_column(default=False, index=True)  # Utage 区分标志
@@ -57,17 +48,17 @@ class MaiData(Model):
             shortid=self.shortid,
             title=self.title,
             bpm=self.bpm,
-            artist=self.artist,
+            artist=self.artist if self.artist else '',
             genre=self.genre,
             cabinet=self.cabinet,
             version=self.version,
             version_cn=self.version_cn,
-            converter=self.converter,
+            converter=self.converter if self.converter else '',
             img_path=Path(self.zip_path) / "bg.png",
             aliases=[alias.to_data() for alias in self.aliases],
             is_utage=self.is_utage,
-            buddy=self.buddy if self.is_utage else False,
-            utage_tag=self.utage_tag if self.is_utage else None,
+            buddy=all((self.buddy, self.is_utage)),
+            utage_tag=self.utage_tag if self.is_utage and isinstance(self.utage_tag, str) else '',
         )
         # 添加谱面数据
         for chart in self.charts:

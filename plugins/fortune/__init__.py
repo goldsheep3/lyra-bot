@@ -1,134 +1,56 @@
-import re
 from datetime import datetime
-from typing import Dict, List
 
-from nonebot import require, logger
-from nonebot.rule import to_me
-from nonebot.plugin import on_regex, PluginMetadata
+from nonebot import require
+from nonebot.plugin import on_regex
 from nonebot.internal.matcher import Matcher
+from nonebot.params import RegexGroup
+from nonebot.permission import SUPERUSER
+from nonebot.adapters.onebot.v11 import Event, Message, MessageEvent
+from nonebot.adapters.onebot.v11.permission import GROUP_ADMIN
 
-from nonebot.adapters.onebot.v11 import MessageEvent, MessageSegment
-from nonebot.adapters.onebot.v11.permission import GROUP_ADMIN, GROUP_OWNER
+from .utils import get_fortune, get_fortune_items, add_fortune_item, build_fortune_message
 
 require("nonebot_plugin_localstore")
-from nonebot_plugin_localstore import get_plugin_data_file as get_data_file
-
-from .core import get_fortune, get_fortunes, get_text_index
-from .msg import build_fortune_message
-from .default import SUB_FORTUNE_DEFAULT
-from .history import save_fortune_history
-from .lib import load_yaml_data
 
 
-__plugin_meta__ = PluginMetadata(
-    name="简单运势",
-    description="一个基于MD5哈希的运势查询插件。",
-    usage="发送「今日运势」「运势」「抽签」「签到」「打卡」即可获得今日专属运势。",
-)
+jrys = on_regex(r"^(今日运势|运势|抽签|签到|打卡|jrys)$", block=True)
+jrys_history = on_regex(r"^历史运势$", block=True)
 
+add_item = on_regex(r"^添加运势\s+(.+)$", permission=SUPERUSER | GROUP_ADMIN, block=True)
 
-on_fortune = on_regex(r"^(今日运势|运势|抽签|签到|打卡)$", block=True)
-
-
-@on_fortune.handle()
+@jrys.handle()
 async def _(event: MessageEvent, matcher: Matcher):
     # 获取基本信息
-    user_id: str = str(event.user_id)
-    group_id: int = getattr(event, "group_id", -1)
-    today: datetime = datetime.now()
+    user_id: int = event.user_id
+    group_id: int | None = getattr(event, "group_id", None)
+    today_timestamp: int = int(datetime.today().replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
 
-    # 尝试根据群号获取运势规则
-    try:
-        main_desc_data = load_yaml_data(get_data_file("main_fortune_desc.yml"), {}, logger)
-        if not main_desc_data:
-            """覆写默认主运势描述数据"""
-            from .default import DESC_DEFAULT
-            with open(get_data_file("main_fortune_desc.yml"), 'w', encoding='utf-8') as f:
-                f.write(DESC_DEFAULT.strip())
-            main_desc_data = load_yaml_data(get_data_file("main_fortune_desc.yml"), {}, logger)
-        default_sub_titles = [item.strip() for item in SUB_FORTUNE_DEFAULT[4:].split(",")]
-        if group_id < 0:
-            sub_titles = default_sub_titles
-        else:
-            sub_titles_data: Dict[int, List[str]] = load_yaml_data(get_data_file("sub_fortune_titles.yml"), {}, logger)
-            sub_titles = sub_titles_data.get(group_id, default_sub_titles)
-    except Exception as e:
-        logger.error(f"获取本地运势数据时发生错误。{e}")
+    if not group_id:
+        await matcher.finish("不可以悄悄查运势喔！=w=")
         return
-    # 运势判定并生成消息
-    try:
-        main_title = get_fortune(user_id, today)
-        sub_fortunes = get_fortunes(user_id, today, sub_titles)
-        output = build_fortune_message(main_title, sub_fortunes, main_fortune_desc=main_desc_data)
-    except Exception as e:
-        logger.error(f"生成运势时发生错误。{e}")
-        return
-    # 保存运势数据
-    history_path = get_data_file(f"fortune_history_data_{user_id}.csv")
-    save_fortune_history(history_path, today, group_id, list(sub_titles), logger)
-    # 发送消息
-    await matcher.finish(MessageSegment.text(output))
+
+    fortune_items: list[str] = [str(today_timestamp), *(await get_fortune_items(group_id))]
+    fortunes: list[str] = get_fortune(today_timestamp, user_id, fortune_items)
+
+    message: Message = await build_fortune_message(today_timestamp, user_id, list(zip(fortune_items, fortunes)))
+
+    await matcher.finish(message)
 
 
-on_fortune_setting = on_regex(r"^运势\s*(\S{2})(?:\s+(\S+))?$",
-                              rule=to_me(), permission=GROUP_ADMIN | GROUP_OWNER, block=True)
-
-@on_fortune_setting.handle()
+@jrys_history.handle()
 async def _(event: MessageEvent, matcher: Matcher):
-    def wlog(message: str, group: int, user: str, time: datetime):
-        with open(get_data_file("op_edit.log"), 'a', encoding='utf-8') as file:
-            file.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] [{str(group)}] {message} (from {user})\n")
-        logger.info(f"[{str(group)}] {message} (from {user})")
+    await matcher.finish("历史运势功能正在开发中，敬请期待！=w=\n截止目前，历史运势还未被记录（")
+    
 
-    # 获取基本信息
-    user_id: str = str(event.user_id)
-    group_id: int = getattr(event, "group_id", -1)
-    today: datetime = datetime.now()
-
-    sub_titles_data: Dict[int, List[str]] = load_yaml_data(get_data_file("sub_fortune_titles.yml"), {}, logger)
-
-    match = re.search(r"^运势\s*(\S{2})(?:\s+(\S+))?$", str(event.get_message()))
-    action = match.group(0)
-    if action in ("配置","设置","查看"):
-        sub_titles = sub_titles_data.get(group_id, [item.strip() for item in SUB_FORTUNE_DEFAULT[4:].split(",")])
-        output = f"小梨来啦！现在 {str(group_id)} 的特别运势包含以下几个项目：\n" + ";".join(sub_titles) + ";"
-        wlog(f"查看运势配置: {";".join(sub_titles)};", group_id, user_id, today)
-        await matcher.finish(MessageSegment.text(output))
-
-    elif action in ("添加","新增"):
-        sub_titles = sub_titles_data.get(group_id, [item.strip() for item in SUB_FORTUNE_DEFAULT[4:].split(",")])
-        new_title = match.group(1)
-        if new_title in sub_titles:
-            await matcher.finish(MessageSegment.text(f"小梨提醒你，「{new_title}」已经存在啦！不要重复添加哟。"))
-            return
-        sub_titles.append(new_title)
-        sub_titles_data[group_id] = sub_titles
-        with open(get_data_file("sub_fortune_titles.yml"), 'w', encoding='utf-8') as f:
-            import yaml
-            yaml.dump(sub_titles_data, f, allow_unicode=True)
-        wlog(f"添加运势项目: {new_title};", group_id, user_id, today)
-        await matcher.finish(MessageSegment.text(f"小梨已经帮你添加「{new_title}」到特别运势项目里啦！"))
-
-    elif action in ("删除",):
-        sub_titles = sub_titles_data.get(group_id, [item.strip() for item in SUB_FORTUNE_DEFAULT[4:].split(",")])
-        new_title = match.group(1)
-        if new_title not in sub_titles:
-            await matcher.finish(MessageSegment.text(f"小梨提醒你，「{new_title}」本就不存在哦！"))
-            return
-        sub_titles.remove(new_title)
-        sub_titles_data[group_id] = sub_titles
-        with open(get_data_file("sub_fortune_titles.yml"), 'w', encoding='utf-8') as f:
-            import yaml
-            yaml.dump(sub_titles_data, f, allow_unicode=True)
-        wlog(f"删除运势项目: {new_title};", group_id, user_id, today)
-        await matcher.finish(MessageSegment.text(f"小梨已经帮你删除「{new_title}」啦！"))
-
-    elif action in ("帮助",):
-        await matcher.finish(MessageSegment.text("""想调整小梨的特别运势项目，请见：
-查看配置：发送“运势 配置/设置/查看”
-添加项目：发送“运势 添加/新增 <项目名称>”
-删除项目：发送“运势 删除 <项目名称>”
-不同群聊相同名称的运势项目结果相同哦。"""))
-
+@add_item.handle()
+async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
+    item = groups[0].strip()
+    group_id: int | None = getattr(event, "group_id", None)
+    if not group_id:
+        # 静默返回
+        return
+    success = await add_fortune_item(group_id, item)
+    if success:
+        await matcher.finish(f"新增运势！{item}")
     else:
-        return
+        await matcher.finish("该运势项已经存在啦！")
