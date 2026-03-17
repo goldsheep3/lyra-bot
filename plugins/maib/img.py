@@ -33,6 +33,11 @@ DXRATING_PATH = PIC_PATH / "dxrating"
 PLATE_PATH = PIC_PATH / "plate"
 VER_PATH = PIC_PATH / "ver"
 
+# Genre 流派常量
+GENRE_PATH = ASSETS_PATH / "genre.yaml"
+with open(GENRE_PATH, 'r', encoding='utf-8') as f:
+    GENRE_CONFIG: Dict[str, Dict[str, str]] = yaml.safe_load(f)
+
 # 基础颜色常量
 COLOR_DXSCORE_GN = '#0A5'
 COLOR_DXSCORE_OR = '#C72'
@@ -183,33 +188,13 @@ class MS:
         return MS(int(self.multiple * other))
 
 
-def genre_split_and_get_color(genre: str) -> Tuple[str, str]:
+def get_genre(genre_id: int, cn_level: int) -> Tuple[str, str]:
     """分割流派字符串"""
-    def is_genre(*args) -> bool: return any(g in genre.lower() for g in args)
-
-    if is_genre('nico', 'ニコ'):
-        if '&' in genre:
-            genre = genre.replace('&', '$\n')
-        elif 'niconico' in genre:
-            genre = genre.replace('niconico', 'niconico&\n')
-        elif 'ニコニコ' in genre:
-            genre = genre.replace('ニコニコ', 'ニコニコ&\n')
-        return genre, '#02c8d3'  # niconico&VOCALOID
-    elif is_genre('pops', '流行'):
-        return genre, '#ff972a'
-    elif is_genre('project'):
-        return genre, '#ad59ee'
-    elif is_genre('game', 'ゲーム', '其他游戏'):
-        return genre, '#4be070'
-    elif is_genre('maimai', '舞萌'):
-        return genre, '#f64849'
-    elif is_genre('chunithm'):
-        genre = genre.replace('chu', '\nchu')
-        genre = genre.replace('CHU', '\nCHU')
-        return genre, '#3584fe'
-    elif is_genre('会', 'TA'):
-        return genre, '#dc39b8'
-    return genre, COLOR_THEME
+    genre_info = GENRE_CONFIG.get(str(genre_id), {})
+    target = {0: 'jp', 1: 'intl', 2: 'cn'}
+    genre = genre_info.get(target.get(cn_level, 'jp'), 'N/A')
+    color = genre_info.get('color', COLOR_THEME)
+    return genre, color
 
 
 # ========================================
@@ -545,13 +530,13 @@ class DrawFactory:
         plus = round(chart.lv % 1 * 10) >= plus_level
         du.level(x + 64, y + 7.4, diff, chart.lv, plus=plus, ignore_decimal=is_utage)
         # 达成率
-        if chart.ach:
-            du.ach(x + 2, y + 9, diff, chart.ach.achievement)
-            dxs, dxs_max, dxs_star = chart.ach.dxscore_tuple
+        if chart._ach:
+            du.ach(x + 2, y + 9, diff, chart._ach.achievement)
+            dxs, dxs_max, dxs_star = chart._ach.dxscore_tuple
             du.dxscore(x + 38, y + 25, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
-            c, t, tl, tc = COMBO_DICT[chart.ach.combo]
+            c, t, tl, tc = COMBO_DICT[chart._ach.combo]
             du.evaluate(x + 3, y + 27, text=tc if self.du.cn == 2 else t, color=c)
-            c, t, tl, tc = SYNC_DICT[chart.ach.sync]
+            c, t, tl, tc = SYNC_DICT[chart._ach.sync]
             du.evaluate(x + 3, y + 32, text=tc if self.du.cn == 2 else t, color=c)
 
         info_line5 = [
@@ -583,13 +568,13 @@ class DrawFactory:
         plus = round(chart.lv % 1 * 10) >= plus_level
         du.level(x + 64, y + 7.4, diff, chart.lv, plus=plus, ignore_decimal=is_utage)
         # 达成率
-        if chart.ach:
-            du.ach(x + 46, y + 9, diff, chart.ach.achievement)
-            dxs, dxs_max, dxs_star = chart.ach.dxscore_tuple
+        if chart._ach:
+            du.ach(x + 46, y + 9, diff, chart._ach.achievement)
+            dxs, dxs_max, dxs_star = chart._ach.dxscore_tuple
             du.dxscore_lite(x + 2, y + 21, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
-            c, t, tl, tc = COMBO_DICT[chart.ach.combo]
+            c, t, tl, tc = COMBO_DICT[chart._ach.combo]
             du.evaluate(x + 3, y + 12, text=tc if self.du.cn == 2 else t, color=c)
-            c, t, tl, tc = SYNC_DICT[chart.ach.sync]
+            c, t, tl, tc = SYNC_DICT[chart._ach.sync]
             du.evaluate(x + 3, y + 17, text=tc if self.du.cn == 2 else t, color=c)
 
         return width, height
@@ -638,7 +623,7 @@ class DrawInfo(DrawFactory):
         du.text(x+t+p*2, gvv_title, text="CN", fill='#FFF', anchor='la', font=self.font_mdb[4])
 
         # Genre
-        genre_text, genre_fill = genre_split_and_get_color(maidata.genre)
+        genre_text, genre_fill = get_genre(maidata.genre, cn_level=self.cn_level)
         du.text(x+t+17, gvv_mm, text=genre_text, fill='#FFF', anchor='mm', font=self.font_mdb[5],
                 shadow=(1.5, '#FFF'))
         du.text(x+t+17, gvv_mm, text=genre_text, fill=genre_fill, anchor='mm', font=self.font_mdb[5],
@@ -693,8 +678,8 @@ class DrawInfo(DrawFactory):
         # ========== Module.3 详细谱面数据 ==========
         now_x = x
         for i, chart in enumerate(maidata.charts):
-            if not chart.ach:
-                chart.ach = MaiChartAch(-101, 0, 0, 0, 0)
+            if not chart._ach:
+                chart._ach = MaiChartAch(-101, 0, 0, 0, 0)
             if chart.difficulty >= 4:
                 _w, h = self.chart_box(now_x, y, chart, cabinet_dx=maidata.is_cabinet_dx)
             else:
@@ -867,7 +852,7 @@ if __name__ == "__main__":
         title="おちゃめ機能",
         bpm=150,
         artist="ゴジマジP",
-        genre="niconicoボーカロイド",
+        genre=1,
         cabinet='SD',
         version=2,
         version_cn=2022,
@@ -881,7 +866,7 @@ if __name__ == "__main__":
             difficulty=i,
             lv=3.6 + i * 1.8,
             des="chartDes",
-            ach=MaiChartAch(
+            _ach=MaiChartAch(
                 achievement=70 + 2.63 ** (i/1.7),
                 dxscore=200 + i * 100,
                 dxscore_max=300 + i * 100,

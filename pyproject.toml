@@ -3,7 +3,23 @@ name = "LyraBot"
 version = "0.0.1"
 description = "A QQ Bot"
 readme = "README.md"
-requires-python = ">=3.9, <4.0"
+requires-python = ">=3.12, <4.0"
+dependencies = [
+    "aiofiles>=25.1.0",
+    "fastapi>=0.133.1",
+    "httpx>=0.28.1",
+    "mcrcon>=0.7.0",
+    "nonebot-adapter-onebot>=2.4.6",
+    "nonebot-plugin-datastore>=1.3.1",
+    "nonebot-plugin-localstore>=0.7.4",
+    "nonebot2>=2.4.4",
+    "numpy>=2.4.2",
+    "orjson>=3.11.7",
+    "paramiko>=4.0.0",
+    "pillow>=12.1.1",
+    "pyyaml>=6.0.3",
+    "sqlalchemy>=2.0.47",
+]
 
 [tool.nonebot]
 adapters = [

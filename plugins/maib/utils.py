@@ -92,6 +92,8 @@ class MaiChartAch:
     dxscore_max: int = 0  # DX 分数最大值
     combo: int = 0  # 连击
     sync: int = 0  # 同步游玩
+    server: str = "JP"  # 服务器标识 (JP/INTL/CN)
+    update_time: int = 0  # 更新时间戳
 
     @property
     def dxscore_star_count(self) -> int:
@@ -120,13 +122,15 @@ class MaiChart:
     """maimai 谱面信息"""
     difficulty: int  # diff 难度编号
     lv: float  # level 等级
+    lv_cn: Optional[float] = None  # 国服定数
     des: str = ""  # designer 谱师
     inote: str = ""  # note 音符数据
     # 音符数量 (tap, hold, slide, touch, break)
     notes: Tuple[int, int, int, int, int] = (-1, -1, -1, -1, -1)
     diving_fish_lv: Optional[int] = None  # 水鱼拟合难度
 
-    ach: Optional[MaiChartAch] = None  # 成就信息
+    _ach: Optional[MaiChartAch] = None  # 成就信息
+    _ach_cn: Optional[MaiChartAch] = None  # 国服成就信息
 
     @property
     def note_count(self) -> int:
@@ -134,28 +138,58 @@ class MaiChart:
         return c if c >= 0 else -1
 
     @property
-    def lv_str(self, plus: int = 6) -> str:
-        """获取该谱面的等级字符串表示"""
-        int_part = int(self.lv)
-        frac_part = self.lv - int_part
-        return f"{int_part}+" if frac_part * 10 >= plus else f"{self.lv}"
+    def dxscore_max(self) -> int:
+        return self.note_count * 3 if self.note_count >= 0 else 0
 
-    def get_dxrating(self, ap_bonus: bool = False) -> int:
-        """获取该谱面的 DX Rating"""
-        if not self.ach:
+    @property
+    def lv_str(self, plus: int = 6, server: str = "JP") -> str:
+        """获取该谱面的等级字符串表示"""
+        level = self.lv_cn if server == "CN" else self.lv
+        if level is None:
+            return "N/A"
+        int_part = int(level)
+        frac_part = level - int_part
+        return f"{int_part}+" if frac_part * 10 >= plus else f"{level}"
+
+    def get_dxrating(self, ap_bonus: bool = False, server: str = "JP") -> int:
+        """获取谱面 DX Rating"""
+        ach = self.get_achievement(server=server)
+        if not ach:
             return 0
 
         # 使用 next() 找到第一个满足条件的因子
         factor = next(
-            (f for threshold, f in RATE_FACTOR_TABLE if self.ach.achievement >= threshold),
+            (f for threshold, f in RATE_FACTOR_TABLE if ach.achievement >= threshold),
             0.0  # 默认值
         )
-        ra = int(self.lv * self.ach.achievement * factor)
+        ra = int(self.lv * ach.achievement * factor)
         # AP 额外奖励
-        if ap_bonus and self.ach.combo >= 3:  # 3 代表 All Perfect
+        if ap_bonus and ach.combo >= 3:  # 3 代表 All Perfect
             ra += 1
         return ra
 
+    def get_achievement(self, server: str = "JP", prefer_non_empty: bool = False) -> Optional[MaiChartAch]:
+        """获取谱面成绩"""
+        if prefer_non_empty:
+            # 优先返回非空成就信息
+            if server == "CN" and self._ach_cn:
+                return self._ach_cn
+            elif server == "JP" and self._ach:
+                return self._ach
+        else:
+            # 无优先级，直接返回对应服务器的成就信息
+            if server == "CN":
+                return self._ach_cn
+            elif server == "JP":
+                return self._ach
+        return None
+
+    def set_achievement(self, ach: MaiChartAch):
+        """设置成就信息"""
+        if ach.server == "CN":
+            self._ach_cn = ach
+        elif ach.server == "JP":
+            self._ach = ach
 
 @dataclass
 class MaiData:
@@ -165,7 +199,7 @@ class MaiData:
     title: str  # 曲名
     bpm: int  # BPM
     artist: str  # 艺术家
-    genre: str  # 流派
+    genre: int  # 流派
     cabinet: str  # 谱面类型
     version: int  # 日服更新版本
     version_cn: Optional[int]  # 国服更新版本

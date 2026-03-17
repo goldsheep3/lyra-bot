@@ -1,10 +1,19 @@
 import io
 import re
+import yaml
 from pathlib import Path
 from pydantic import BaseModel
 from typing import Dict, Optional, List
 
-version_data: Dict[int, str] = {}
+from . import services
+from .img import simple_list, DrawInfo
+from .diving_fish import dev_player_record
+from .utils import rate_alias_map, MaiData, MaiChart, MaiChartAch, parse_status, DIFFS_MAP, MusicDataManager
+
+
+with open(Path().cwd() / "assets" / "version.yaml", "r", encoding="utf-8") as f:
+    version_data: Dict[int, str] = yaml.safe_load(f)
+
 
 try:
     from nonebot import require, logger, on_regex, get_plugin_config
@@ -13,11 +22,6 @@ try:
     from nonebot.internal.matcher import Matcher
     from nonebot.adapters.onebot.v11 import Bot, Event, Message, MessageSegment
 
-    from . import services
-    from .img import simple_list, DrawInfo
-    from .diving_fish import dev_player_record
-    from .utils import rate_alias_map, MaiData, MaiChart, MaiChartAch, parse_status, DIFFS_MAP, MusicDataManager
-
     require("nonebot_plugin_localstore")
     require("nonebot_plugin_datastore")
     from nonebot_plugin_localstore import get_plugin_data_dir, get_plugin_cache_dir
@@ -25,8 +29,6 @@ try:
 
     class Config(BaseModel):
         DIVING_FISH_DEVELOPER_TOKEN: Optional[str]
-        VERSION_YAML_PATH: str
-
 
     __plugin_meta__ = PluginMetadata(
         name="lyra-maib",
@@ -37,10 +39,6 @@ try:
 
     cfg = get_plugin_config(Config)
     DEVELOPER_TOKEN = cfg.DIVING_FISH_DEVELOPER_TOKEN
-
-    with open(cfg.VERSION_YAML_PATH, "r", encoding="utf-8") as f:
-        import yaml
-        version_data = yaml.safe_load(f)
 
 except (ImportError, ValueError, RuntimeError):
     pass
@@ -310,7 +308,9 @@ async def _(matcher: Matcher, groups: tuple = RegexGroup()):
         return
 
     # 调用 MaiChart 计算 DX Rating
-    ra = MaiChart(difficulty=0, lv=level, ach=MaiChartAch(achievement=achievement)).get_dxrating()
+    chart = MaiChart(difficulty=0, lv=level)
+    chart.set_achievement(MaiChartAch(achievement=achievement))
+    ra = chart.get_dxrating()
 
     await matcher.finish("小梨算出来咯！\n"
                          f"定数{level}*{achievement:.4f}% -> Rating: {ra}")
