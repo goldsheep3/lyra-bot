@@ -92,30 +92,7 @@ async def get_shortids_by_lv(min_lv: float, max_lv: float) -> Sequence[int]:
         return result.scalars().all()
 
 
-# --- 6. 根据谱面难度 (lv) 筛选 shortid 列表 ---
-async def get_shortids_by_version(version: int, cn: bool = False, r: int = 0) -> Sequence[int]:
-    """
-    查询定数在指定范围内的所有乐曲 ID
-    其中 r 若=0则只查询本身， >0则查询包含在内的后续版本， <0则查询包含在内的前续版本
-    """
-    async with get_session() as session:
-        where_version = MaiData.version_cn if (cn or version >= 2000) else MaiData.version
-        if r == 0:
-            where_target = where_version == version
-        elif r > 0:
-            where_target = where_version >= version
-        else:
-            where_target = where_version <= version
-        statement = (
-            select(MaiData.shortid)
-            .where(where_target)
-            .distinct()
-        )
-        result = await session.execute(statement)
-        return result.scalars().all()
-
-
-# --- 别名 ---
+# --- 6. 别名的添加 ---
 async def add_alias(shortid: int, alias_text: str, qq: int, group_id: Optional[int] = None) -> bool:
     """添加别名，若已存在则返回 False"""
     async with get_session() as session:
@@ -137,6 +114,7 @@ async def add_alias(shortid: int, alias_text: str, qq: int, group_id: Optional[i
         return True
 
 
+# --- 7. 别名的鉴权和删除 ---
 async def get_alias_info(alias_text: str) -> List[MaiAlias]:
     """获取别名详情"""
     async with get_session() as session:

@@ -202,18 +202,11 @@ def genre_split_and_get_color(genre: str) -> Tuple[str, str]:
         return genre, '#f64849'
     elif is_genre('chunithm'):
         genre = genre.replace('chu', '\nchu')
-        genre = genre.replace('CHU', '\nCHU')
         return genre, '#3584fe'
     elif is_genre('会', 'TA'):
         return genre, '#dc39b8'
     return genre, COLOR_THEME
 
-
-def get_image_bytes(img: Image.Image) -> bytes:
-    import io
-    output = io.BytesIO()
-    img.save(output, format="jpeg")
-    return output.getvalue()
 
 # ========================================
 # 元件方法
@@ -529,8 +522,8 @@ class DrawFactory:
         """获取绘制完成的图像"""
         return self.img
 
-    def chart_box(self, x, y, chart: MaiChart, maidata: MaiData, plus_level: int = 6, current_version: int = -1,
-                  min_rating: Tuple[int, int] = (-1, -1)) -> Tuple[int, int]:
+    def chart_box(self, x, y, chart: MaiChart, cabinet_dx: bool, plus_level: int = 6,
+                  is_utage: bool = False) -> Tuple[int, int]:
         """组件：谱面信息框"""
         du = self.du
         diff = DIFFICULTIES[chart.difficulty]
@@ -542,10 +535,10 @@ class DrawFactory:
         du.rounded_rect(x, y, width, height, radius=4, fill=None, outline=diff.frame, width=1)
         # 难度、DX
         du.difficulty(x + 2.5, y + 4.3, diff)
-        du.draw_dx_badge(x + 85, y + 2) if maidata.is_cabinet_dx else du.draw_sd_badge(x + 85, y + 2)
+        du.draw_dx_badge(x + 85, y + 2) if cabinet_dx else du.draw_sd_badge(x + 85, y + 2)
         # 等级 LV
         plus = round(chart.lv % 1 * 10) >= plus_level
-        du.level(x + 64, y + 7.4, diff, chart.lv, plus=plus, ignore_decimal=maidata.is_utage)
+        du.level(x + 64, y + 7.4, diff, chart.lv, plus=plus, ignore_decimal=is_utage)
         # 达成率
         du.ach(x + 2, y + 9, diff, chart.ach.achievement)
         dxs, dxs_max, dxs_star = chart.ach.dxscore_tuple
@@ -557,19 +550,8 @@ class DrawFactory:
 
         info_line5 = [
             f"谱师: {chart.des}",
-            f"拟合定数: {chart.fit_level}" if chart.fit_level else '',
+            f"拟合定数: {chart.diving_fish_lv}" if chart.diving_fish_lv else '',
         ]
-
-        if current_version:
-            # 推分建议
-            is_b15 = maidata.is_b15(current_version)
-            min_ra = min_rating[1] if is_b15 else min_rating[0]
-            target = chart.get_dxrating_advice()
-            if max(target.values()) > min_ra > 0:
-                info_line5.append("推分建议:")
-                for achievement, rating in target.items():
-                    if rating > min_ra:
-                        info_line5.append(f"  {achievement:4} -> {rating}  ( +{rating-min_ra} )")
 
         du.rounded_rect(x + 64, y + 9, 42, 25, fill=bcm(diff.bg, '#0009'), radius=1.5)
         du.infos(x + 65.5, y + 21.65, lines=(info_line5 + [''] * 5)[:5], line_height=4.5, limit_width=-1,
@@ -577,7 +559,8 @@ class DrawFactory:
 
         return width, height
 
-    def chart_box_lite(self, x, y, chart: MaiChart, maidata: MaiData, plus_level: int = 6) -> Tuple[int, int]:
+    def chart_box_lite(self, x, y, chart: MaiChart, cabinet_dx: bool, plus_level: int = 6,
+                       is_utage: bool = False) -> Tuple[int, int]:
         """组件：谱面信息框 Lite"""
         du = self.du
         diff = DIFFICULTIES[chart.difficulty]
@@ -589,10 +572,10 @@ class DrawFactory:
         du.rounded_rect(x, y, width, height, radius=4, fill=None, outline=diff.frame, width=1)
         # 难度、DX
         du.difficulty(x + 2.5, y + 4.3, diff)
-        du.draw_dx_badge(x + 85, y + 2) if maidata.is_cabinet_dx else du.draw_sd_badge(x + 85, y + 2)
+        du.draw_dx_badge(x + 85, y + 2) if cabinet_dx else du.draw_sd_badge(x + 85, y + 2)
         # 等级 LV
         plus = round(chart.lv % 1 * 10) >= plus_level
-        du.level(x + 64, y + 7.4, diff, chart.lv, plus=plus, ignore_decimal=maidata.is_utage)
+        du.level(x + 64, y + 7.4, diff, chart.lv, plus=plus, ignore_decimal=is_utage)
         # 达成率
         du.ach(x + 46, y + 9, diff, chart.ach.achievement)
         dxs, dxs_max, dxs_star = chart.ach.dxscore_tuple
@@ -609,12 +592,10 @@ class DrawInfo(DrawFactory):
     """实现 `info11951` 图像的绘制"""
 
     def __init__(self, maidata: MaiData, version_config: Dict[int, str], multiple: float = 1,
-                 cn_level: Literal[0, 1, 2] = 0, current_version: int = -1, min_rating: Tuple[int, int] = (-1, -1)):
+                 cn_level: Literal[0, 1, 2] = 0):
         super().__init__(width=240, height=240, ms_multiple=int(10 * multiple), cn_level=cn_level)
         self.maidata = maidata
         self.ver_cfg = version_config
-        self.current_version = current_version
-        self.min_rating = min_rating
         self._info()
 
     def _info(self):
@@ -704,12 +685,11 @@ class DrawInfo(DrawFactory):
         now_x = x
         for i, chart in enumerate(maidata.charts):
             if not chart.ach:
-                chart.set_achievement(MaiChartAch(-101, 0, 0, 0, 0))
+                chart.ach = MaiChartAch(-101, 0, 0, 0, 0)
             if chart.difficulty >= 4:
-                _w, h = self.chart_box(now_x, y, chart, maidata=maidata, current_version=self.current_version,
-                                       min_rating=self.min_rating)
+                _w, h = self.chart_box(now_x, y, chart, cabinet_dx=maidata.is_cabinet_dx)
             else:
-                _w, h = self.chart_box_lite(now_x, y, chart, maidata=maidata)
+                _w, h = self.chart_box_lite(now_x, y, chart, cabinet_dx=maidata.is_cabinet_dx)
             if (i + 1) % 2 == 1:
                 now_x = 123
                 if len(maidata.charts) - i == 1:
@@ -889,7 +869,6 @@ if __name__ == "__main__":
 
     for i in range(2, 7):
         maidata.set_chart(MaiChart(
-            shortid=101,
             difficulty=i,
             lv=3.6 + i * 1.8,
             des="chartDes",

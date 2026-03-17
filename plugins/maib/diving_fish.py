@@ -1,6 +1,7 @@
 import httpx
 from typing import Optional, Dict, List, Any
 
+from .utils import MaiChartAch
 
 try:
     from nonebot import get_driver, logger
@@ -56,29 +57,23 @@ async def _make_request(
     if developer_token:
         headers["Developer-Token"] = developer_token
 
-    response = await client.request(
-        method=method,
-        url=url,
-        json=json_data,
-        params=params,
-        headers=headers
-    )
     try:
+        response = await client.request(
+            method=method,
+            url=url,
+            json=json_data,
+            params=params,
+            headers=headers
+        )
         response.raise_for_status()
+        return response.json()
     except httpx.HTTPError as e:
-        try:
-            error_msg = response.json().get("message", None) if response else None
-        except:
-            error_msg = None
-        if error_msg:
-            logger.warning(error_msg)
-            return str(response.status_code) + ": " + error_msg
+        # 增加更详细的错误输出，方便调试
         error_msg = f"API请求失败: {e}"
         if hasattr(e, "response") and e.response:
             error_msg += f" | 响应内容: {e.response.text}"
-        logger.warning(error_msg)
-        return "未知错误"
-    return response.json()
+        logger.error(error_msg)
+        return None
 
 
 async def music_data() -> Optional[List[Dict[str, Any]]]:
@@ -86,29 +81,6 @@ async def music_data() -> Optional[List[Dict[str, Any]]]:
     result = await _make_request(
         method="GET",
         url=f"{BASE_API_URL}/music_data"
-    )
-
-    return result
-
-
-async def chart_stats() -> Optional[List[Dict[str, Any]]]:
-    """`/chart_stats` 获取公开乐曲统计数据"""
-    result = await _make_request(
-        method="GET",
-        url=f"{BASE_API_URL}/chart_stats"
-    )
-
-    return result
-
-
-async def dev_player_records(qq: int | str,
-                             developer_token: str) -> Optional[Dict[str, List[Dict[str, Any]]]]:
-    """`/dev/player/records`  获取用户完整成绩信息"""
-
-    result = await _make_request(
-        method="GET",
-        url=f"{BASE_API_URL}/dev/player/records?qq={qq}",
-        developer_token=developer_token
     )
 
     return result

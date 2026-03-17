@@ -102,7 +102,6 @@ class MaiChart(Model):
     def to_data(self) -> utils.MaiChart:
         """转换为 utils.MaiChart 对象"""
         return utils.MaiChart(
-            shortid=self.shortid,
             difficulty=self.difficulty,
             lv=self.lv,
             des=self.des,
