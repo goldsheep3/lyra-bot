@@ -158,6 +158,13 @@ async def sy_query_player(qq: Union[int, str], b50: bool = True):
         project_name="diving-fish*/query/player"
     )
 
+async def sy_chart_stats():
+    """获取公开乐曲统计数据"""
+    return await request_json(
+        ENDPOINTS["diving_fish"] + "/chart_stats",
+        project_name="diving-fish*/chart_stats"
+    )
+
 async def sy_dev_player_records(qq: Union[int, str], developer_token: Optional[str] = None):
     """获取完整成绩信息"""
     return await request_json(
