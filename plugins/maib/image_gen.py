@@ -16,10 +16,6 @@ from .utils import MaiData, MaiChart
 # 模块版本
 MODEL_VERSION: str = "260214"
 
-# versions.yaml 映射资源常量
-VERSIONS_CONFIG_PATH = Path(__file__).parent.parent.parent / "versions.yaml"
-VERSIONS = yaml.safe_load(VERSIONS_CONFIG_PATH.read_text(encoding="utf-8"))
-
 # assets 资源常量
 ASSETS_PATH = Path.cwd() / "assets"
 
@@ -37,6 +33,16 @@ PIC_PATH = ASSETS_PATH / "pic"
 DXRATING_PATH = PIC_PATH / "dxrating"
 PLATE_PATH = PIC_PATH / "plate"
 VER_PATH = PIC_PATH / "ver"
+
+# Version 版本和 Genre 流派常量
+VERSIONS_CONFIG_PATH = ASSETS_PATH / "versions.yaml"
+VERSIONS_CONFIG = yaml.safe_load(VERSIONS_CONFIG_PATH.read_text(encoding="utf-8"))
+GENRE_CONFIG_PATH = ASSETS_PATH / "genre.yaml"
+GENRE_CONFIG = yaml.safe_load(GENRE_CONFIG_PATH.read_text(encoding="utf-8"))
+
+GENRE_PATH = ASSETS_PATH / "genre.yaml"
+with open(GENRE_PATH, 'r', encoding='utf-8') as f:
+    GENRE_CONFIG: dict[str, dict[str, str]] = yaml.safe_load(f)
 
 # 基础颜色常量
 COLOR_DXSCORE_GN = '#0A5'
@@ -259,33 +265,13 @@ def get_full_width_text(text: str) -> str:
     return text.translate(CHAR_FULL_WIDTH_TABLE)
 
 
-def genre_split_and_get_color(genre: str) -> Tuple[str, str]:
-    """分割流派字符串"""
-    def is_genre(*args) -> bool: return any(g in genre.lower() for g in args)
-
-    if is_genre('nico', 'ニコ'):
-        if '&' in genre:
-            genre = genre.replace('&', '$\n')
-        elif 'niconico' in genre:
-            genre = genre.replace('niconico', 'niconico&\n')
-        elif 'ニコニコ' in genre:
-            genre = genre.replace('ニコニコ', 'ニコニコ&\n')
-        return genre, '#02c8d3'  # niconico&VOCALOID
-    elif is_genre('pops', '流行'):
-        return genre, '#ff972a'
-    elif is_genre('project'):
-        return genre, '#ad59ee'
-    elif is_genre('game', 'ゲーム', '其他游戏'):
-        return genre, '#4be070'
-    elif is_genre('maimai', '舞萌'):
-        return genre, '#f64849'
-    elif is_genre('chunithm'):
-        genre = genre.replace('chu', '\nchu')
-        genre = genre.replace('CHU', '\nCHU')
-        return genre, '#3584fe'
-    elif is_genre('会', 'TA'):
-        return genre, '#dc39b8'
-    return genre, COLOR_THEME
+def get_genre(genre_id: int, cn_level: Literal[0, 1, 2]) -> Tuple[str, str]:
+    """获取流派信息"""
+    genre_info = GENRE_CONFIG.get(str(genre_id), {})
+    target = {0: 'jp', 1: 'intl', 2: 'cn'}
+    genre = genre_info.get(target.get(cn_level, 'jp'), 'N/A')
+    color = genre_info.get('color', COLOR_THEME)
+    return genre, color
 
 
 # ========================================
@@ -602,7 +588,7 @@ class DrawFactory:
         self.img = img.resize(ms.xy(width, height), Image.Resampling.LANCZOS)
 
         # 绘图单元
-        self.cn_level = cn_level
+        self.cn_level: Literal[0, 1, 2] = cn_level
         self.du = DrawUnit(self.img, multiple=ms, cn=cn_level)
 
     def get_image(self) -> Image.Image:
@@ -658,7 +644,7 @@ class DrawFactory:
 
         info_line5 = [
             f"谱师: {chart.des}",
-            f"拟合定数: {chart.diving_fish_lv}" if chart.diving_fish_lv else '',
+            f"拟合定数: {chart.lv_synh}" if chart.lv_synh else '',
         ]
 
         du.rounded_rect(x + 64, y + 9, 42, 25, fill=bcm(diff.bg, '#0009'), radius=1.5)
@@ -778,7 +764,6 @@ class DrawFactory:
 
         du.rounded_rect(x + 53, y + 25, 42, 5, fill=bcm(diff.bg, '#0009'), radius=2)
         du.rounded_rect(x + 53, y + 25, 16, 5, fill='#006', radius=2)
-        is_b15 = data.is_b15 if is_b15 is None else is_b15
         b_type = '15' if is_b15 else '35'
         du.text(x+61, y+27.5, f"b{b_type} #{index}", fill='#FFF', anchor='mm', font=MIS_DB.font_variant(size=ms.x(3))) 
         du.text(x+70, y+27.5, f"{chart.lv:.1f} > {data.get_chart_dxrating(diff_number)}", fill='#FFF', anchor='lm', font=MIS_DB.font_variant(size=ms.x(3)))
@@ -813,6 +798,7 @@ class DrawInfo(DrawFactory):
         # ShortID, BPM
         du.text(x + t, y + 23, text=f"ID {maidata.shortid}", fill='#FFF', anchor='la', font=self.font_mdb[6])
         du.text(x + t + 30, y + 23, text=f"BPM {maidata.bpm}", fill='#FFF', anchor='la', font=self.font_mdb[6])
+        du.text(x + t + 60, y + 23, text=f"数据来源: {maidata.converter}", fill='#FFF', anchor='la', font=self.font_mdb[6])
         # Genre, Version
         gvv_title = y + 34
         gvv_la = gvv_title + 5
@@ -824,7 +810,7 @@ class DrawInfo(DrawFactory):
         du.text(x+t+p*2, gvv_title, text="CN", fill='#FFF', anchor='la', font=self.font_mdb[4])
 
         # Genre
-        genre_text, genre_fill = genre_split_and_get_color(maidata.genre)
+        genre_text, genre_fill = get_genre(maidata.genre, cn_level=self.cn_level)
         du.text(x+t+17, gvv_mm, text=genre_text, fill='#FFF', anchor='mm', font=self.font_mdb[5],
                 shadow=(1.5, '#FFF'))
         du.text(x+t+17, gvv_mm, text=genre_text, fill=genre_fill, anchor='mm', font=self.font_mdb[5],
@@ -834,7 +820,7 @@ class DrawInfo(DrawFactory):
         if ver_jp_path.exists():
             du.image(x+t+p, gvv_la, 34, 16, radius=0, png=ver_jp_path)
         else:
-            text = VERSIONS.get(maidata.version, str(maidata.version))
+            text = VERSIONS_CONFIG.get(maidata.version, str(maidata.version))
             text = text.replace(' ', '\n')
             du.text(x+t+p+17, gvv_mm, text=text,
                     fill='#FFF', anchor='mm', font=self.font_mdb[5])
@@ -844,7 +830,7 @@ class DrawInfo(DrawFactory):
             if ver_cn_path.exists():
                 du.image(x+t+p*2, gvv_la, 34, 16, radius=0, png=ver_cn_path)
             else:
-                text = VERSIONS.get(maidata.version_cn, str(maidata.version_cn))
+                text = VERSIONS_CONFIG.get(maidata.version_cn, str(maidata.version_cn))
                 text = text.replace(' ', '\n')
                 du.text(x+t+p*2+17, gvv_mm, text=text,
                         fill='#FFF', anchor='mm', font=self.font_mdb[5])
@@ -878,7 +864,7 @@ class DrawInfo(DrawFactory):
 
         # ========== Module.3 详细谱面数据 ==========
         now_x = x
-        for i, chart in enumerate(maidata.charts):
+        for i, chart in enumerate(maidata.charts.values()):
             if chart.difficulty >= 4:
                 _w, h = self.chart_box(now_x, y, chart, cabinet_dx=maidata.is_cabinet_dx)
             else:

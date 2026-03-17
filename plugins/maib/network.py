@@ -2,7 +2,7 @@ import asyncio
 import httpx
 import orjson
 from pathlib import Path
-from typing import Optional, Any, Union
+from typing import Optional, Any
 from loguru import logger
 
 try:
@@ -23,15 +23,6 @@ try:
             logger.info("HTTPX Client 已关闭")
 except (ImportError, ValueError):
     pass
-else:
-    # 确保 Nonebot 运行
-    try:
-        from nonebot import require
-        require("nonebot_plugin_localstore")
-        from nonebot_plugin_localstore import get_plugin_cache_file
-        _sy_etag_cache_file = get_plugin_cache_file("sy_etag.txt")
-    except Exception:
-        _sy_etag_cache_file = None
     
 
 
@@ -104,7 +95,9 @@ async def request_image(url: str, method: str = "GET", developer_token: Optional
 
 # --- 4. 具体接口实现 ---
 
-async def sy_music_data(etag: Optional[str] = None) -> tuple[str | None, dict | None]:
+MUSIC_DATA_UNIT_TYPE = dict[str, int | str | list[str] | list[int] | list[dict[str, list[int] | str]] | dict[str, str | int | bool]]
+
+async def sy_music_data(etag: str | None = None) -> tuple[str | None, list[MUSIC_DATA_UNIT_TYPE] | None]:
     """获取公开乐曲数据"""
     headers = {"If-None-Match": etag} if etag else {}
     response = await _request(ENDPOINTS["diving_fish"] + "/music_data", project_name="diving-fish*/music_data", headers=headers)
@@ -121,35 +114,84 @@ async def sy_music_data(etag: Optional[str] = None) -> tuple[str | None, dict | 
             logger.error(f"解析水鱼数据失败: {e}")
     return None, None
 
-async def sy_music_data_from_file(file_path: Path) -> Optional[dict]:
-    """获取公开乐曲数据，直接操作文件"""
-    etag = None
-    if file_path.exists() and _sy_etag_cache_file and _sy_etag_cache_file.exists():
-        etag = _sy_etag_cache_file.read_text(encoding="utf-8").strip()
+async def sy_music_data_from_file(dir_path: Path, max_retries: int = 3) -> list[MUSIC_DATA_UNIT_TYPE] | None:
+    """获取公开乐曲数据"""
+    data_path = dir_path / "music_data.json"
+    etag_path = dir_path / "music_data.etag"
+    
+    attempts = 0
+    while attempts <= max_retries:
+        attempts += 1
+        
+        # 1. 获取本地 ETag
+        current_etag = None
+        if etag_path.exists() and data_path.exists():
+            current_etag = etag_path.read_text(encoding="utf-8").strip()
 
-    etag, data = await sy_music_data(etag=etag)
+        # 2. 请求网络数据
+        new_etag, remote_data = await sy_music_data(etag=current_etag)
 
-    if (etag and not data):
-        # etag 匹配，直接读取文件
-        if file_path.exists():
+        # 3. 处理新数据（远程更新）
+        if remote_data:
             try:
-                return orjson.loads(file_path.read_bytes())
+                dir_path.mkdir(parents=True, exist_ok=True)
+                data_path.write_bytes(orjson.dumps(remote_data))
+                if new_etag:
+                    etag_path.write_text(new_etag, encoding="utf-8")
             except Exception as e:
-                logger.error(f"读取本地乐曲缓存失败: {e}")
-    elif data:
-        # 产生新返回，进行写入
-        try:
-            file_path.write_bytes(orjson.dumps(data))
-            if _sy_etag_cache_file and etag:
-                _sy_etag_cache_file.write_text(etag, encoding="utf-8")
-            return data
-        except Exception as e:
-            logger.error(f"保存乐曲数据至本地失败: {e}")
-            return data # 虽然保存失败，但本次内存里的数据是好的，可以返回
+                logger.error(f"保存数据失败: {e}")
+            # 无论保存成功与否，该数据都可用
+            return remote_data
 
+        # 4. 处理缓存数据（ETag 命中）
+        if new_etag and not remote_data:
+            if data_path.exists():
+                try:
+                    return orjson.loads(data_path.read_bytes())
+                except Exception as e:
+                    logger.warning(f"本地缓存损坏，清除 ETag 并重试: {e}")
+                    etag_path.unlink(missing_ok=True)
+                    continue # 触发下一次循环，重新下载
+            else:
+                # 理论上不应到达这里（有 ETag 没数据），清除 ETag 重试
+                etag_path.unlink(missing_ok=True)
+                continue
+
+        # 5. 异常降级：如果 ETag 为 None 或其他未知情况
+        # 尝试读取本地现有数据作为最后的保障
+        if data_path.exists():
+            try:
+                return orjson.loads(data_path.read_bytes())
+            except:
+                pass
+        
+        break # 无效状态，跳出循环
     return None
 
-async def sy_query_player(qq: Union[int, str], b50: bool = True):
+
+CHART_STATS_TYPE = dict[str,
+                        dict[str, list[dict[str, int | str | float | list[int]]]] |  # `charts`, 其中对应谱面的拟合难度为 `fit_diff: float`
+                        dict[str, dict[str, float | list[float]]]]  # `diff_data`, 基于难度总体而不是某个谱面的数据统计
+
+async def sy_chart_stats() -> Optional[CHART_STATS_TYPE]:
+    """获取公开乐曲统计数据"""
+    return await request_json(
+        ENDPOINTS["diving_fish"] + "/chart_stats",
+        project_name="diving-fish*/chart_stats"
+    )
+
+RECORD_UNIT_TYPE = dict[str, int | str]
+PLAYER_RECORDS_TYPE = dict[str, int | str | list[RECORD_UNIT_TYPE]]
+
+async def sy_dev_player_records(qq: int | str, developer_token: Optional[str] = None) -> Optional[PLAYER_RECORDS_TYPE]:
+    """获取完整成绩信息"""
+    return await request_json(
+        ENDPOINTS["diving_fish"] + f"/dev/player/records?qq={str(qq)}", 
+        project_name="diving-fish*/dev/player/records",
+        developer_token=developer_token
+    )
+
+async def sy_query_player(qq: int | str, b50: bool = True) -> Optional[PLAYER_RECORDS_TYPE]:
     """查询 B50 / B40"""
     return await request_json(
         ENDPOINTS["diving_fish"] + "/query/player",
@@ -158,35 +200,25 @@ async def sy_query_player(qq: Union[int, str], b50: bool = True):
         project_name="diving-fish*/query/player"
     )
 
-async def sy_chart_stats():
-    """获取公开乐曲统计数据"""
-    return await request_json(
-        ENDPOINTS["diving_fish"] + "/chart_stats",
-        project_name="diving-fish*/chart_stats"
-    )
-
-async def sy_dev_player_records(qq: Union[int, str], developer_token: Optional[str] = None):
-    """获取完整成绩信息"""
-    return await request_json(
-        ENDPOINTS["diving_fish"] + f"/dev/player/records?qq={str(qq)}", 
-        project_name="diving-fish*/dev/player/records",
-        developer_token=developer_token
-    )
-
 async def sy_dev_player_record(shortid: int | str | list[int | str], qq: int | str,
-                            developer_token: Optional[str] = None):
+                               developer_token: Optional[str] = None) -> Optional[list[RECORD_UNIT_TYPE]]:
     """获取用户单曲成绩信息"""
     music_id = str(shortid) if isinstance(shortid, (int, str)) else [str(id) for id in shortid]
-    return await request_json(
-        ENDPOINTS["diving_fish"] + "/dev/player/record", 
+    result: Optional[dict[str, list[RECORD_UNIT_TYPE]]] = await request_json(
+        ENDPOINTS["diving_fish"] + "/dev/player/record",
+        method="POST",
         json={"qq": str(qq), "music_id": music_id},
         project_name="diving-fish*/dev/player/record",
         developer_token=developer_token
     )
+    if result and len(result) == 1:
+        return next(iter(result.values()))
+    return None
+    
 
 # 水鱼之外的：
 
-async def maichart_index():
+async def maichart_index() -> Optional[dict[str, str]]:
     """获取谱面索引 (带 Fallback 机制)"""
     MAICHART_INDEX_URL = "/Neskol/Maichart-Converts/refs/heads/master/index.json"
     # 尝试直连
@@ -196,13 +228,14 @@ async def maichart_index():
         res = await request_json(ENDPOINTS["maichart_proxy"] + MAICHART_INDEX_URL, project_name="maichart_proxy*/index.json")
     return res or {}
 
-async def lx_alias_list():
+async def lx_alias_list() -> Optional[dict[str, list[dict[int, list[str]]]]]:
     """获取落雪别名库"""
     return await request_json(
         ENDPOINTS["lxns"] + "/alias/list", 
         project_name="lxns*/alias/list"
     )
-async def yuzuchan_alias_list():
+
+async def yuzuchan_alias_list() -> Optional[dict[str, int | list[dict[str, str | int | list[str]]]]]:
     """获取 YuzuChaN 别名库"""
     return await request_json(
         ENDPOINTS["yuzuchan"] + "/maimaidxalias",

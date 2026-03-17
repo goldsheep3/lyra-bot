@@ -1,11 +1,12 @@
 import io
 import re
+import yaml
 from pathlib import Path
 from pydantic import BaseModel
 from typing import Dict, Optional, List
 
 from . import services, image_gen, network
-from .utils import rate_alias_map, MaiData, MaiChart, MaiChartAch, parse_status, DIFFS_MAP, MusicDataManager
+from .utils import rate_alias_map, MaiData, MaiChart, MaiChartAch, parse_status, DIFFS_MAP, MaiDataCNCache
 
 HAS_DRIVER = False
 
@@ -21,6 +22,7 @@ else:
     from nonebot.params import RegexGroup
     from nonebot.internal.matcher import Matcher
     from nonebot.adapters.onebot.v11 import Bot, Event, Message, MessageSegment
+
     require("nonebot_plugin_localstore")
     require("nonebot_plugin_datastore")
     from nonebot_plugin_localstore import get_plugin_cache_dir
@@ -36,11 +38,7 @@ else:
     )
     DEVELOPER_TOKEN = get_plugin_config(Config).DIVING_FISH_DEVELOPER_TOKEN
 
-def load_version_data():
-    with open(Path(__file__).parent.parent.parent / "versions.yaml", "r", encoding="utf-8") as f:
-        from yaml import safe_load
-        return safe_load(f)
-version_data = load_version_data()
+version_data = yaml.safe_load((Path.cwd() / "assets" / "versions.yaml").read_text(encoding="utf-8"))
 
 if HAS_DRIVER:
 
@@ -127,12 +125,12 @@ if HAS_DRIVER:
         """提取的共用查歌并生成图片的逻辑"""
         user_id = str(user_id)
         maidata: MaiData = mdt.to_data()
-        song_in_cn = await MusicDataManager.contains_id(maidata.shortid, get_plugin_cache_dir())
+        song_in_cn = await MaiDataCNCache.contains_id(maidata.shortid, get_plugin_cache_dir())
         if song_in_cn:
             # 通过 QQ 获取用户绑定的信息
             record_list = await network.sy_dev_player_record(maidata.shortid, qq=user_id, developer_token=DEVELOPER_TOKEN)
             if record_list:
-                maidata.from_diving_fish_json(record_list)  # 若水鱼有数据则进行填入
+                maidata.parse_sy_player_record(record_list)  # 若水鱼有数据则进行填入
         # 构建回复图片
         output = io.BytesIO()
         img = image_gen.DrawInfo(maidata, version_data, cn_level=1 if maidata.version_cn else 0).get_image()
@@ -302,7 +300,10 @@ if HAS_DRIVER:
             return
 
         # 调用 MaiChart 计算 DX Rating
-        ra = MaiChart(difficulty=0, lv=level, ach=MaiChartAch(achievement=achievement)).get_dxrating()
+        chart = MaiChart(shortid=0, difficulty=0, lv=level)
+        chart.set_ach(MaiChartAch(shortid=0, difficulty=0, server="CN", achievement=achievement))
+        ra = chart.get_dxrating()
 
         await matcher.finish("小梨算出来咯！\n"
-                            f"定数{level}*{achievement:.4f}% -> Rating: {ra}")
+                            f"定数{level}*{achievement:.4f}% -> Rating: {ra}"
+                            "\n该 ra 不考虑 AP 的额外分数哦！" if achievement > 100.5 else "")

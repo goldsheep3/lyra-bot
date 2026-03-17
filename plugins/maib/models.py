@@ -1,8 +1,8 @@
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from sqlalchemy import ForeignKey, UniqueConstraint
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from . import utils
 from .bot_registry import PluginRegistry
@@ -18,8 +18,8 @@ class MaiData(Model):
     title: Mapped[str] = mapped_column(index=True)
     bpm: Mapped[int]
     artist: Mapped[Optional[str]]
-    genre: Mapped[str]
-    cabinet: Mapped[str]
+    genre: Mapped[int]  # 重点重构
+    cabinet: Mapped[Literal["SD", "DX"]]
 
     # 版本信息
     version: Mapped[int]
@@ -30,9 +30,9 @@ class MaiData(Model):
     zip_path: Mapped[str]
 
     # Utage 特有字段 (常规曲目设为 None)
-    is_utage: Mapped[bool] = mapped_column(default=False, index=True)  # Utage 区分标志
-    utage_tag: Mapped[Optional[str]]
-    buddy: Mapped[Optional[bool]]
+    is_utage: Mapped[bool] = mapped_column(default=False, index=True)  
+    utage_tag: Mapped[str] = mapped_column(default='')
+    buddy: Mapped[bool] = mapped_column(default=False)
 
     # 关系映射
     charts: Mapped[List["MaiChart"]] = relationship(back_populates="maidata", cascade="all, delete-orphan")
@@ -77,7 +77,10 @@ class MaiChart(Model):
     shortid: Mapped[int] = mapped_column(ForeignKey("maidata.shortid", ondelete="CASCADE"))
     difficulty: Mapped[int]  # 通常为 2~7
     lv: Mapped[float] = mapped_column(index=True)
+    lv_cn: Mapped[Optional[float]] = mapped_column(index=True)  # 重点重构
+    lv_synh: Mapped[Optional[float]] = mapped_column(index=True)  # 水鱼拟合定数
     des: Mapped[str]
+    inote: Mapped[str]
 
     # Note 统计数据
     note_count_tap: Mapped[int]
@@ -86,25 +89,44 @@ class MaiChart(Model):
     note_count_touch: Mapped[int]
     note_count_break: Mapped[int]
 
-    inote: Mapped[str]
 
     maidata: Mapped["MaiData"] = relationship(back_populates="charts")
+    achs: Mapped[List["MaiChartAch"]] = relationship(back_populates="charts")
 
     def to_data(self) -> utils.MaiChart:
         """转换为 utils.MaiChart 对象"""
         return utils.MaiChart(
+            shortid=self.shortid,
             difficulty=self.difficulty,
             lv=self.lv,
+            lv_cn=self.lv_cn,
+            lv_synh=self.lv_synh,
             des=self.des,
-            notes=(
-                self.note_count_tap,
-                self.note_count_hold,
-                self.note_count_slide,
-                self.note_count_touch,
-                self.note_count_break
-            ),
-            inote=self.inote
+            inote=self.inote,
+            note_count_tap=self.note_count_tap,
+            note_count_hold=self.note_count_hold,
+            note_count_slide=self.note_count_slide,
+            note_count_touch=self.note_count_touch,
+            note_count_break=self.note_count_break
         )
+
+
+class MaiChartAch(Model):
+    """MaiChartAch 成绩数据"""
+    __tablename__ = "chart_achs"
+    __table_args__ = (UniqueConstraint("shortid", "difficulty"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    shortid: Mapped[int] = mapped_column(ForeignKey("maidata.shortid", ondelete="RESTRICT"))
+    difficulty: Mapped[int]
+    server: Mapped[Literal["JP", "INTL", "CN"]]  # 服务器标识
+    achievement: Mapped[float]  # 成就率
+    dxscore: Mapped[int] = mapped_column(default=0)  # DX 分数
+    combo: Mapped[int] = mapped_column(default=0)  # 连击
+    sync: Mapped[int] = mapped_column(default=0)  # 同步游玩
+    update_time: Mapped[int] = mapped_column()  # 更新时间戳
+
+    chart: Mapped["MaiChart"] = relationship(back_populates="chart_achs")
 
 
 class MaiAlias(Model):
@@ -165,13 +187,15 @@ class MaiDataModelFactory:
             shortid=shortid,
             difficulty=chart.difficulty,
             lv=chart.lv,
+            lv_cn=chart.lv_cn,
+            lv_synh=chart.lv_synh,
             des=chart.des,
             inote=chart.inote,
-            note_count_tap=chart.notes[0],
-            note_count_hold=chart.notes[1],
-            note_count_slide=chart.notes[2],
-            note_count_touch=chart.notes[3],
-            note_count_break=chart.notes[4]
+            note_count_tap=chart.note_count_tap,
+            note_count_hold=chart.note_count_hold,
+            note_count_slide=chart.note_count_slide,
+            note_count_touch=chart.note_count_touch,
+            note_count_break=chart.note_count_break
         )
 
     @staticmethod

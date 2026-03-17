@@ -1,12 +1,14 @@
 import time
-import json
+import asyncio
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Optional, List, Tuple, Any, Set
+from typing import Dict, Optional, List, Set, Tuple, Any, Literal, cast
 
 from PIL import Image
 from loguru import logger
+
+from .network import RECORD_UNIT_TYPE, sy_music_data_from_file
 
 
 # 完成率别名映射
@@ -67,6 +69,9 @@ DF_FS_MAP = {v: i + 1 for i, v in enumerate(['sync', 'fs', 'fsp', 'fsd', 'fsdp']
 # 难度颜色字符串解析映射
 DIFFS_MAP = {v: i + 1 for i, v in enumerate(["蓝", "绿", "黄", "红", "紫", "白"])}
 
+# 服务器标识类型
+SERVER_TAG = Literal["JP", "INTL", "CN"]
+
 
 def parse_status(target: str, mapping: Dict[str, int]) -> int:
     """通过映射表常量进行数值获取"""
@@ -87,15 +92,20 @@ class MaiAlias:
 @dataclass
 class MaiChartAch:
     """maimai 谱面成就信息"""
+
+    shortid: int  # 曲目 ID
+    difficulty: int  # 难度编号
+    server: SERVER_TAG  # 服务器标识
     achievement: float  # 成就率
     dxscore: int = 0  # DX 分数
-    dxscore_max: int = 0  # DX 分数最大值
+    dxscore_max: int = -1  # DX 分数上限
     combo: int = 0  # 连击
     sync: int = 0  # 同步游玩
+    update_time: int = 0  # 更新时间戳
 
     @property
     def dxscore_star_count(self) -> int:
-        if self.dxscore_max == 0 or self.dxscore_max < self.dxscore:
+        if self.dxscore_max < self.dxscore:
             return 0
         dxs_percent = self.dxscore / self.dxscore_max * 100
 
@@ -118,15 +128,39 @@ class MaiChartAch:
 @dataclass
 class MaiChart:
     """maimai 谱面信息"""
+
+    shortid: int  # 曲目 ID
     difficulty: int  # diff 难度编号
     lv: float  # level 等级
+    lv_cn: Optional[float] = None  # 国服定数
+    lv_synh: Optional[float] = None  # 水鱼拟合难度
     des: str = ""  # designer 谱师
     inote: str = ""  # note 音符数据
-    # 音符数量 (tap, hold, slide, touch, break)
-    notes: Tuple[int, int, int, int, int] = (-1, -1, -1, -1, -1)
-    diving_fish_lv: Optional[int] = None  # 水鱼拟合难度
 
-    ach: Optional[MaiChartAch] = None  # 成就信息
+    # Note 统计数据
+    note_count_tap: int = -1
+    note_count_hold: int = -1
+    note_count_slide: int = -1
+    note_count_touch: int = -1
+    note_count_break: int = -1
+
+    # 成就信息，键为服务器标识
+    _achs: dict[SERVER_TAG, MaiChartAch | None] = {
+        "JP": None,
+        "INTL": None,
+        "CN": None,
+    }
+
+    @property
+    def notes(self) -> Tuple[int, int, int, int, int]:
+        """返回一个包含所有 Note 统计数据的元组"""
+        return (
+            self.note_count_tap,
+            self.note_count_hold,
+            self.note_count_slide,
+            self.note_count_touch,
+            self.note_count_break
+        )
 
     @property
     def note_count(self) -> int:
@@ -134,29 +168,42 @@ class MaiChart:
         return c if c >= 0 else -1
 
     @property
-    def lv_str(self, plus: int = 6) -> str:
+    def dxscore_max(self) -> int:
+        return self.note_count * 3 if self.note_count >= 0 else -1
+
+    @property
+    def lv_str(self, server: SERVER_TAG = "JP", plus: int = 6) -> str:
         """获取该谱面的等级字符串表示"""
-        int_part = int(self.lv)
-        frac_part = self.lv - int_part
-        return f"{int_part}+" if frac_part * 10 >= plus else f"{self.lv}"
+        level = self.lv_cn if server == "CN" else self.lv
+        if level is None:
+            return "N/A"
+        int_part = int(level)
+        frac_part = level - int_part
+        return f"{int_part}+" if frac_part * 10 >= plus else f"{level}"
 
-    def get_ach(self) -> MaiChartAch:
-        """获取该谱面的成就信息，若无则返回默认值"""
-        return self.ach if self.ach else MaiChartAch(achievement=-101)
+    def get_ach(self, server: SERVER_TAG = "JP") -> MaiChartAch:
+        """获取谱面成绩"""
+        ach = self._achs.get(server, None)
+        return ach if ach else MaiChartAch(shortid=self.shortid, difficulty=self.difficulty, server=server, achievement=-100)
 
-    def get_dxrating(self, ap_bonus: bool = False) -> int:
-        """获取该谱面的 DX Rating"""
-        if not self.ach:
+    def set_ach(self, ach: MaiChartAch):
+        """设置谱面成绩"""
+        self._achs[ach.server] = ach
+
+    def get_dxrating(self, server: SERVER_TAG = "JP", ap_bonus: bool = False) -> int:
+        """获取谱面 DX Rating"""
+        ach = self.get_ach(server=server)
+        if not ach:
             return 0
 
         # 使用 next() 找到第一个满足条件的因子
         factor = next(
-            (f for threshold, f in RATE_FACTOR_TABLE if self.ach.achievement >= threshold),
+            (f for threshold, f in RATE_FACTOR_TABLE if ach.achievement >= threshold),
             0.0  # 默认值
         )
-        ra = int(self.lv * self.ach.achievement * factor)
+        ra = int(self.lv * ach.achievement * factor)
         # AP 额外奖励
-        if ap_bonus and self.ach.combo >= 3:  # 3 代表 All Perfect
+        if ap_bonus and ach.combo >= 3:  # 3 代表 All Perfect
             ra += 1
         return ra
 
@@ -169,52 +216,30 @@ class MaiData:
     title: str  # 曲名
     bpm: int  # BPM
     artist: str  # 艺术家
-    genre: str  # 流派
-    cabinet: str  # 谱面类型
+    genre: int  # 流派
+    cabinet: Literal['SD', 'DX']  # 谱面类型
+    
     version: int  # 日服更新版本
     version_cn: Optional[int]  # 国服更新版本
+    
     converter: str  # 谱面来源
     img_path: Path  # 图片文件路径
     zip_path: Optional[Path] = None  # 如果存在的话，ADX 谱面 ZIP 文件路径
     _cached_image: Optional[Image.Image] = None  # 缓存的封面图片对象
 
-    current_version: int = -1  # 当前版本，判断是否为b15
-
-    _chart1: Optional[MaiChart] = None  # Easy, 在 DX 版本中已废弃
-    _chart2: Optional[MaiChart] = None  # Basic
-    _chart3: Optional[MaiChart] = None  # Advanced
-    _chart4: Optional[MaiChart] = None  # Expert
-    _chart5: Optional[MaiChart] = None  # Master
-    _chart6: Optional[MaiChart] = None  # Re: Master, 仅部分谱面追加
-
     # Utage 宴会场 专属字段
-    is_utage: bool = True  # Utage: Utage 标志
+    is_utage: bool = False  # Utage: Utage 标志
     utage_tag: str = ""  # Utage: is_utage 标签
     buddy: bool = False  # Utage: 是否为 Buddy 谱面
-    _chart7: Optional[MaiChart] = None  # Utage: Utage 谱面
+
+    # 0~6 分别对应 Easy, Basic, Advanced, Expert, Master, Re: Master, Utage
+    _charts: list[MaiChart | None] = [None] * 8
 
     aliases: List[MaiAlias] = field(default_factory=list)  # 歌曲别名列表
 
     @property
     def is_cabinet_dx(self) -> bool:
-        return self.cabinet.upper() == "DX"
-
-    @property
-    def is_b15(self) -> bool:
-        version = self.version
-        limit = 0
-
-        if self.current_version < 0:
-            # 未绑定版本，直接返回 False
-            return False
-        elif self.current_version > 2000:
-            # maiCN
-            version = self.version_cn if self.version_cn is not None else self.version
-        elif self.current_version >= 25:
-            # maiJP: 25(CiRCLE) 开始，B15 扩展到两个版本周期
-            limit = 1
-
-        return version >= self.current_version - limit
+        return self.cabinet == "DX"
 
     @property
     def wholebpm(self) -> int: return self.bpm
@@ -257,25 +282,15 @@ class MaiData:
         return None
 
     @property
-    def charts(self) -> List[MaiChart]:
+    def charts(self) -> dict[int, MaiChart]:
         """获取所有谱面"""
-        return [chart for chart in [self._chart1, self._chart2, self._chart3, self._chart4,
-                                    self._chart5, self._chart6, self._chart7] if chart]
+        return {chart.difficulty: chart for chart in self._charts if chart}
 
     def get_chart(self, diff: int) -> Optional[MaiChart]:
         """获取对应难度的谱面"""
         if not 1 <= diff <= 7:
             raise ValueError("Difficulty must be between 1 and 7")
-        return getattr(self, f"_chart{diff}", None)
-
-    def get_chart_dxrating(self, diff: int) -> Optional[int]:
-        """获取对应难度的 DX Rating"""
-        # maiJP: 25(CiRCLE) 开始，增加 AP+1 奖励分
-        ap_bonus = 2000 > self.current_version >= 25
-        chart = self.get_chart(diff)
-        if chart:
-            return chart.get_dxrating(ap_bonus=ap_bonus)
-        return None
+        return self._charts[diff-1]  # diff 从 1 开始，列表索引从 0 开始
 
     def set_chart(self, chart: MaiChart):
         """设置对应谱面"""
@@ -285,25 +300,57 @@ class MaiData:
             # 一定为非 Buddy 的 Utage 谱面
             self.is_utage = True
             self.buddy = False
-        setattr(self, f"_chart{chart.difficulty}", chart)
+        elif chart.difficulty == 1 or 3 <= chart.difficulty <= 6:
+            # 非 BASIC / ADVANCED 一定为非 Utage
+            self.is_utage = False
+            self.buddy = False
+        self._charts[chart.difficulty - 1] = chart  # diff 从 1 开始，列表索引从 0 开始
+
+    def is_b15(self, current_version: int) -> bool:
+        version = self.version
+        limit = 0
+
+        if current_version < 0:
+            # 未绑定版本，直接返回 False
+            return False
+        elif current_version > 2000:
+            # maiCN
+            version = self.version_cn if self.version_cn is not None else self.version
+        elif current_version >= 25:
+            # maiJP: 25(CiRCLE) 开始，B15 扩展到两个版本周期
+            limit = 1
+
+        return version >= current_version - limit
+
+    def get_chart_dxrating(self, diff: int, current_version: int = 0) -> Optional[int]:
+        """获取对应难度的 DX Rating"""
+        # maiJP: 25(CiRCLE) 开始，增加 AP+1 奖励分
+        ap_bonus = 2000 > current_version >= 25
+        chart = self.get_chart(diff)
+        if chart:
+            return chart.get_dxrating(ap_bonus=ap_bonus)
+        return None
 
     def set_chart_ach(self, diff: int, ach: MaiChartAch):
         """设置对应谱面的成就信息"""
-        chart_obj = getattr(self, f"_chart{diff}", None)
-        if chart_obj:
-            chart_obj.ach = ach
+        # diff 从 1 开始，列表索引从 0 开始
+        if chart_obj := self.get_chart(diff):
+            chart_obj.set_ach(ach)
 
-    def from_diving_fish_json(self, data: Dict[str, List[Dict[str, Any]]], dxscore_max: int = 0) -> None:
+    def parse_sy_player_record(self, records: list[RECORD_UNIT_TYPE], dxscore_max: int = 0) -> None:
         """解析来自水鱼查分器的响应体数据，填充 MaiChartAch 分数信息"""
-        records: List[Dict[str, Any]] = data.get(str(self.shortid), [])
         for record in records:
-            diff = record.get("level_index", 3) + 2  # 水鱼难度编号转换为 MaiChart 难度编号
-            achievement = record.get("achievements", 0.0000)
+            diff = cast(int, record.get("level_index", 3)) + 2  # 水鱼难度编号转换为 MaiChart 难度编号
+            achievement = cast(float, record.get("achievements", 0.0000))
             dxscore = 0 if dxscore_max == 0 else dxscore_max
-            combo = parse_status(record.get("fc", ""), DF_FC_MAP)
-            sync = parse_status(record.get("fs", ""), DF_FS_MAP)
+            combo = parse_status(cast(str, record.get("fc", "")), DF_FC_MAP)
+            sync = parse_status(cast(str, record.get("fs", "")), DF_FS_MAP)
+            shortid: int = cast(int, record.get("song_id", self.shortid))
 
             ach = MaiChartAch(
+                shortid=shortid,
+                difficulty=diff,
+                server="CN",
                 achievement=achievement,
                 dxscore=dxscore,
                 dxscore_max=dxscore_max,
@@ -321,107 +368,58 @@ class MaiData:
                 existing_alias_names.add(alias.alias)
 
 
-class MusicDataManager:
-    """乐曲数据管理器（单例）"""
+class MaiDataCNCache:
+    """乐曲数据内存缓存与索引管理器"""
     _data: List[Dict[str, Any]] = []
     _ids: Set[int] = set()
     _last_update: float = 0
-    _expire_seconds: int = 24 * 3600  # 24小时
+    _expire_seconds: int = 3600  # 内存失效阈值（例如1小时后允许再次触发同步检查）
+    _lock = asyncio.Lock()
 
     @classmethod
     async def get_all_data(cls, cache_path: Path) -> List[Dict[str, Any]]:
-        """获取完整的乐曲列表（带内存缓存检查）"""
-        current_time = time.time()
-
-        # 1. 检查内存缓存是否有效
-        if cls._data and (current_time - cls._last_update < cls._expire_seconds):
+        """获取数据（仅在内存失效时调用上层同步函数）"""
+        now = time.time()
+        
+        # 1. 内存命中：数据存在且未过时，直接返回
+        if cls._data and (now - cls._last_update < cls._expire_seconds):
             return cls._data
 
-        # 2. 内存失效，执行磁盘/API 加载逻辑
-        data = await cls._load_data(cache_path)
-
-        # 3. 更新内存状态并返回
-        cls._update_memory_state(data)
-        return cls._data
+        # 2. 内存穿透：加锁防止并发重复同步
+        async with cls._lock:
+            # 双重检查
+            if cls._data and (now - cls._last_update < cls._expire_seconds):
+                return cls._data
+            
+            # 调用上层简化的同步函数
+            new_data = await sy_music_data_from_file(cache_path)
+            
+            if new_data is not None:
+                cls._refresh_memory_state(new_data)
+            elif not cls._data:
+                # 如果 API/文件都失败且内存也无数据，则抛出异常
+                raise RuntimeError("无法获取乐曲数据：同步函数返回为空且本地无缓存")
+                
+            return cls._data
 
     @classmethod
     async def contains_id(cls, music_id: int, cache_path: Path) -> bool:
-        """高性能判断 ID 是否在查分器列表中"""
+        """高性能判断 ID 是否存在"""
         await cls.get_all_data(cache_path)
         return music_id in cls._ids
 
     @classmethod
-    def _update_memory_state(cls, data: List[Dict[str, Any]]):
-        """刷新内存缓存的时间戳和 ID 索引"""
+    def _refresh_memory_state(cls, data: List[Dict[str, Any]]):
+        """解析并刷新内存索引"""
         cls._data = data
-        cls._ids = {
-            int(d['id']) for d in data
-            if d.get('id') is not None and str(d['id']).isdigit()
-        }
-        cls._last_update = time.time()
-        logger.debug(f"MusicCache 内存已刷新: 记录数={len(cls._data)}, 索引数={len(cls._ids)}")
-
-    @classmethod
-    async def _load_data(cls, path: Path) -> List[Dict[str, Any]]:
-        """内部逻辑：处理磁盘读取、API 更新及容错降级"""
-        music_data: List[Dict[str, Any]] = []
-        current_time = int(time.time())
-
-        # 1. 检索本地文件
-        json_files = sorted(
-            list(path.glob("diving-fish-music-data_*.json")),
-            key=lambda x: int(x.stem.split('_')[-1]) if x.stem.split('_')[-1].isdigit() else 0,
-            reverse=True
-        )
-
-        latest_file = json_files[0] if json_files else None
-        cache_is_valid = False
-
-        # 2. 尝试读取本地有效缓存
-        if latest_file:
-            ts = int(latest_file.stem.split('_')[-1])
-            if (current_time - ts) < cls._expire_seconds:
-                try:
-                    with open(latest_file, 'r', encoding='utf-8') as f:
-                        music_data = json.load(f)
-                    cache_is_valid = True
-                    logger.info(f"使用本地有效期内缓存: {latest_file.name}")
-                except Exception as e:
-                    logger.error(f"本地缓存读取失败: {e}")
-
-        # 3. 缓存失效或缺失，尝试同步 API
-        if not cache_is_valid:
+        # 使用更健壮的类型转换，过滤非数字 ID
+        temp_ids = set()
+        for item in data:
             try:
-                from .network import sy_music_data as fetch_api_data
-                logger.info("正在请求查分器 API 更新数据...")
-                new_data = await fetch_api_data()
-                if not new_data:
-                    raise ValueError("API 返回数据为空")
-
-                # API 成功：保存文件并准备清理旧缓存
-                music_data = new_data
-                new_file = path / f"diving-fish-music-data_{current_time}.json"
-                with open(new_file, 'w', encoding='utf-8') as f:
-                    json.dump(music_data, f, ensure_ascii=False, indent=4)
-                logger.success(f"数据更新成功并保存至: {new_file.name}")
-
-                # 清理旧文件
-                for f in json_files:
-                    try:
-                        f.unlink()
-                    except OSError:
-                        pass
-
-            except Exception as e:
-                logger.error(f"API 更新失败: {e}")
-                # 容错降级：API 挂了就去翻翻旧的能不能用
-                if latest_file and not music_data:
-                    try:
-                        with open(latest_file, 'r', encoding='utf-8') as f:
-                            music_data = json.load(f)
-                        logger.warning(f"API 故障，已降级复用过期缓存: {latest_file.name}")
-                    except Exception as e:
-                        logger.critical(f"本地无任何可用数据！{e}")
-                        raise FileNotFoundError("无法获取乐曲数据，API 及本地缓存均不可用。") from e
-
-        return music_data
+                mid = item.get('id')
+                if mid is not None:
+                    temp_ids.add(int(mid))
+            except (ValueError, TypeError):
+                continue
+        cls._ids = temp_ids
+        cls._last_update = time.time()

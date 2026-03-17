@@ -44,6 +44,7 @@ async def get_song_by_name(keyword: str) -> Sequence[MaiData]:
         return result.scalars().all()
 
 # --- [模糊] 通过曲名/别名查询谱面 ---
+# TODO 考虑 SQLite FTS5 实现中文、日文罗马字等智能模糊搜索
 async def get_song_by_name_blur(keyword: str) -> Sequence[MaiData]:
     """曲名/别名的模糊搜索，返回所有匹配的乐曲数据"""
     async with get_session() as session:
