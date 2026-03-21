@@ -44,6 +44,8 @@ class MaiChartAch(Model):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     shortid: Mapped[int] = mapped_column(ForeignKey("maidata.shortid", ondelete="RESTRICT"))
+    chart_id: Mapped[int] = mapped_column(ForeignKey("charts.id", ondelete="CASCADE"))
+
     difficulty: Mapped[int]
     server: Mapped[Literal["JP", "INTL", "CN"]]  # 服务器标识
     achievement: Mapped[float]  # 成就率
@@ -52,7 +54,7 @@ class MaiChartAch(Model):
     sync: Mapped[int] = mapped_column(default=0)  # 同步游玩
     update_time: Mapped[int] = mapped_column()  # 更新时间戳
 
-    chart: Mapped["MaiChart"] = relationship(back_populates="chart_achs")
+    chart: Mapped["MaiChart"] = relationship(back_populates="achs")
 
     def to_data(self) -> utils.MaiChartAch:
         """转换为 utils.MaiChartAch 对象"""
@@ -90,7 +92,7 @@ class MaiChart(Model):
     note_count_break: Mapped[int]
 
     maidata: Mapped["MaiData"] = relationship(back_populates="charts")
-    achs: Mapped[List["MaiChartAch"]] = relationship(back_populates="charts")
+    achs: Mapped[List["MaiChartAch"]] = relationship(back_populates="chart", cascade="all, delete-orphan")
 
     def to_data(self) -> utils.MaiChart:
         """转换为 utils.MaiChart 对象"""

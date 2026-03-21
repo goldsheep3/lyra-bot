@@ -23,6 +23,5 @@ else:
         config=Config,
     )
 
-    from . import matcher
+    from . import matcher, models, utils, fetch 
     matcher.DEVELOPER_TOKEN = get_plugin_config(Config).DIVING_FISH_DEVELOPER_TOKEN
-    

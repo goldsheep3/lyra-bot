@@ -19,9 +19,6 @@ from nonebot_plugin_localstore import get_plugin_cache_dir
 
 DEVELOPER_TOKEN: Optional[str] = None
 
-version_data = yaml.safe_load((Path(__file__).parent / "assets" / "versions.yaml").read_text(encoding="utf-8"))
-
-
 # =================================
 # ADX 谱面下载
 # =================================
@@ -116,7 +113,7 @@ async def get_song_image(mdt: services.MaiData, user_id: str | int) -> bytes:
             maidata.parse_sy_player_record(record_list)  # 若水鱼有数据则进行填入
     # 构建回复图片
     output = io.BytesIO()
-    img = image_gen.DrawInfo(maidata, version_data, cn_level=1 if maidata.version_cn else 0).get_image()
+    img = image_gen.DrawInfo(maidata, cn_level=1 if maidata.version_cn else 0).get_image()
     img.save(output, format="jpeg")
     return output.getvalue()
 

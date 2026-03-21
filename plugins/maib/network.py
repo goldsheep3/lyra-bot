@@ -65,6 +65,8 @@ async def _request(url: str, method: str = "GET", developer_token: Optional[str]
     for i in range(retries):
         try:
             response = await client.request(method=method, url=url, **kwargs)
+            if response.status_code == 304:
+                return response
             response.raise_for_status()
             return response
         except Exception as e:

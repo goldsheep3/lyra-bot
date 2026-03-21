@@ -16,7 +16,6 @@ from .note_count import count_to_tuple
 
 
 ASSETS_PATH = Path(__file__).parent / "assets"
-RAW_METADATA_PATTERN = re.compile(r'&(\w+)=([\s\S]*?)(?=\s*&|$)')
 
 
 async def parse_version(version_str: str, version_dict: dict[int, str]) -> int:
@@ -88,14 +87,18 @@ async def parse_genre(genre_str: str, genre_dict_fixed: dict[str, int]) -> int:
 
 async def get_chart(raw_metadata: dict, short_id: int, chart_num: int) -> MaiChart | None:
     """辅助函数：获取谱面信息"""
+
     lv_key = f'lv_{chart_num}'
     des_key = f'des_{chart_num}'
     inote_key = f'inote_{chart_num}'
     if lv_key in raw_metadata:
+        lv_str = raw_metadata.get(lv_key, '0').rstrip('?')
+        if not lv_str:
+            return None  # lv 为空，视为无该难度谱面
         chart = MaiChart(
             shortid=short_id,
             difficulty=chart_num,
-            lv=float(raw_metadata.get(lv_key, '0').rstrip('?')),
+            lv=float(lv_str),
             des=str(raw_metadata.get(des_key, '')),
             inote=str(raw_metadata.get(inote_key, '')),
         )
@@ -170,8 +173,7 @@ async def parse_maidata(raw_metadata: dict[str, str],
     else:
         # 非 Utage 谱面
         for chart_num in range(2, 7):
-            chart = await get_chart(raw_metadata, shortid, chart_num)
-            setattr(mai, f'_chart{chart_num}', chart)
+            mai.set_chart(await get_chart(raw_metadata, shortid, chart_num))
 
     return mai
 
@@ -180,7 +182,18 @@ async def process_chart_files(chart_files: list[Path],
                               genres_config: dict[int, dict[str, str]]) -> list[MaiData]:
     """处理文件夹中所有 zip 文件，提取 maidata.txt 中的元数据"""
     logger.info(f"数据同步-谱面处理开始：共 {len(chart_files)} 个 zip 文件")
-    genres_config_rev = {v['name'].lower(): k for k, v in genres_config.items()}
+
+    genres_config_rev = {}
+    for k, v in genres_config.items():
+        if isinstance(v, dict):
+            # 遍历该流派下的所有语言版本（jp, intl, cn）
+            for lang in ['jp', 'intl', 'cn']:
+                if lang_val := v.get(lang):
+                    clean_key = lang_val.lower().replace('\n', '').strip()
+                    genres_config_rev[clean_key] = k
+        else:
+            logger.warning(f"流派配置加载警告：ID 为 {k} 的配置格式不正确")
+
     result = dict()
     for chart_path in chart_files:
         if not chart_path.exists():
@@ -196,8 +209,15 @@ async def process_chart_files(chart_files: list[Path],
                     content = f.read().decode('utf-8')
 
             # 提取元数据
-            metadata_matches = re.findall(RAW_METADATA_PATTERN, content)
-            raw_metadata = {k: v.strip() for k, v in metadata_matches}
+            parts = content.replace('\r\n', '\n').split('&')
+            raw_metadata = {}
+
+            for part in parts:
+                if '=' in part:
+                    # 只分割第一个 '='，防止注释或内容里有等号
+                    k, v = part.split('=', 1)
+                    # 去掉首尾空格和换行
+                    raw_metadata[k.strip()] = v.strip()
 
             if not raw_metadata:
                 # 未提取到元数据
@@ -219,6 +239,7 @@ async def process_chart_files(chart_files: list[Path],
 
         except Exception as e:
             logger.warning(f"数据同步-谱面处理失败 {chart_file_name}: {e}")
+            raise e
 
     logger.success(f"数据同步-谱面处理完成：合计处理到 {len(result)} 条谱面数据")
     return list(result.values())
@@ -375,7 +396,7 @@ async def maintenance_task():
             if maidata.shortid in aliases_dict:
                 maidata.add_aliases(aliases_dict[maidata.shortid])
 
-        # 5. 存储到数据库
+    # 5. 存储到数据库
         get_session = PluginRegistry.get_session
         async with get_session() as session:
             total = len(maidata_list)
@@ -396,3 +417,4 @@ async def maintenance_task():
         
     except Exception as e:
         logger.error(f"数据重整理失败: {e}")
+
