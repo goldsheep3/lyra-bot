@@ -17,7 +17,7 @@ from .utils import MaiData, MaiChart
 MODEL_VERSION: str = "260214"
 
 # assets 资源常量
-ASSETS_PATH = Path.cwd() / "assets"
+ASSETS_PATH = Path(__file__).parent / "assets"
 
 # 字体常量
 FONT_PATH = ASSETS_PATH / "fonts"
@@ -37,10 +37,10 @@ VER_PATH = PIC_PATH / "ver"
 # Version 版本和 Genre 流派常量
 VERSIONS_CONFIG_PATH = ASSETS_PATH / "versions.yaml"
 VERSIONS_CONFIG = yaml.safe_load(VERSIONS_CONFIG_PATH.read_text(encoding="utf-8"))
-GENRE_CONFIG_PATH = ASSETS_PATH / "genre.yaml"
+GENRE_CONFIG_PATH = ASSETS_PATH / "genres.yaml"
 GENRE_CONFIG = yaml.safe_load(GENRE_CONFIG_PATH.read_text(encoding="utf-8"))
 
-GENRE_PATH = ASSETS_PATH / "genre.yaml"
+GENRE_PATH = ASSETS_PATH / "genres.yaml"
 with open(GENRE_PATH, 'r', encoding='utf-8') as f:
     GENRE_CONFIG: dict[str, dict[str, str]] = yaml.safe_load(f)
 

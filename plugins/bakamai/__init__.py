@@ -25,16 +25,14 @@ from nonebot_plugin_localstore import get_plugin_data_file
 class Config(BaseModel):
     bakamai_allowed_groups: list[int] = []
 
-    bakamai_ssh_host: str
-    bakamai_ssh_port: int
-    bakamai_ssh_username: str
-    bakamai_ssh_password: str
-
-    bakamai_mcserver_whitelist_path: str
-
-    bakamai_rcon_host: str
-    bakamai_rcon_port: int
-    bakamai_rcon_password: str
+    bakamai_ssh_host: str = ""
+    bakamai_ssh_port: int = 0
+    bakamai_ssh_username: str = ""
+    bakamai_ssh_password: str = ""
+    bakamai_mcserver_whitelist_path: str = ""
+    bakamai_rcon_host: str = ""
+    bakamai_rcon_port: int = 0
+    bakamai_rcon_password: str = ""
 
 
 cfg = get_plugin_config(Config)

@@ -2,7 +2,7 @@ import sys
 import yaml
 from pathlib import Path
 
-from tools.maidata import downloader, md5_check, fetch, save
+from tools.maidata import fetch, save
 
 
 if __name__ == "__main__":
@@ -19,7 +19,7 @@ if __name__ == "__main__":
     ]
     # 版本映射配置
     versions_yaml_path = Path.cwd() / "assets" / "versions.yaml"
-    genre_yaml_path = Path.cwd() / "assets" / "genre.yaml"
+    genre_yaml_path = Path.cwd() / "assets" / "genres.yaml"
     # .env 文件路径
     env_file_path = Path.cwd() / ".env.prod"
 

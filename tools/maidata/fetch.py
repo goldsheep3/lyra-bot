@@ -114,16 +114,16 @@ def parse_genre(genre_str: str, genre_dict_fixed: Dict[str, int]) -> Optional[in
     return g
 
 
-def parse_maidata(raw_metadata: Dict[str, str], versions_config: Dict[int, str], genre_config: Dict[int, Dict[str, str]] | Dict[str, int], zip_path: Path) -> MaiData:
+def parse_maidata(raw_metadata: Dict[str, str], versions_config: Dict[int, str], genres_config: Dict[int, Dict[str, str]] | Dict[str, int], zip_path: Path) -> MaiData:
     """通过 maidata.txt 元数据解析 MaiData"""
 
     def raw_get(key_list, return_type: type = str, default: Any = ""):
         return get_by_list(raw_metadata, key_list, default, return_type)
 
-    if isinstance(genre_config.values()[0], dict):
-        genre_dict = {v['name'].lower().strip(): k for k, v in genre_config.items()}
+    if isinstance(genres_config.values()[0], dict):
+        genre_dict = {v['name'].lower().strip(): k for k, v in genres_config.items()}
     else:
-        genre_dict = genre_config
+        genre_dict = genres_config
 
     shortid = raw_get(['shortid', 'id'], int, 0)
     title = raw_get(['title'])
@@ -277,7 +277,7 @@ def sync_aliases(maidata_list: List[MaiData]):
                     aliases_list.append(MaiAlias(shortid=shortid, alias=alias, create_qq=-1, create_time=now))
                     aliases_set.add((shortid, alias))  # 添加到集合中以去重
 
-    yuzuchan_aliases: Dict[str, List[Dict[str, List[str]] | Any] | Any] = get_yuzuchan_aliases()
+    yuzuchan_aliases: dict = get_yuzuchan_aliases()
     if yuzuchan_aliases:
         for aliases in yuzuchan_aliases.get("content", []):
             shortid = aliases.get('SongID', 0)

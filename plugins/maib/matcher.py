@@ -19,7 +19,7 @@ from nonebot_plugin_localstore import get_plugin_cache_dir
 
 DEVELOPER_TOKEN: Optional[str] = None
 
-version_data = yaml.safe_load((Path.cwd() / "assets" / "versions.yaml").read_text(encoding="utf-8"))
+version_data = yaml.safe_load((Path(__file__).parent / "assets" / "versions.yaml").read_text(encoding="utf-8"))
 
 
 # =================================

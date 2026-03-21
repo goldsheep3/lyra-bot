@@ -4,11 +4,12 @@ import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Optional, List, Set, Tuple, Any, Literal, cast
+from functools import singledispatchmethod
 
 from PIL import Image
 from loguru import logger
 
-from .network import RECORD_UNIT_TYPE, sy_music_data_from_file
+from .network import sy_music_data_from_file
 
 
 # 完成率别名映射
@@ -145,11 +146,13 @@ class MaiChart:
     note_count_break: int = -1
 
     # 成就信息，键为服务器标识
-    _achs: dict[SERVER_TAG, MaiChartAch | None] = {
-        "JP": None,
-        "INTL": None,
-        "CN": None,
-    }
+    _achs: dict[SERVER_TAG, MaiChartAch | None] = field(
+            default_factory=lambda: {
+                "JP": None,
+                "INTL": None,
+                "CN": None,
+            }
+        )
 
     @property
     def notes(self) -> Tuple[int, int, int, int, int]:
@@ -171,8 +174,7 @@ class MaiChart:
     def dxscore_max(self) -> int:
         return self.note_count * 3 if self.note_count >= 0 else -1
 
-    @property
-    def lv_str(self, server: SERVER_TAG = "JP", plus: int = 6) -> str:
+    def get_lv_str(self, server: SERVER_TAG = "JP", plus: int = 6) -> str:
         """获取该谱面的等级字符串表示"""
         level = self.lv_cn if server == "CN" else self.lv
         if level is None:
@@ -207,6 +209,23 @@ class MaiChart:
             ra += 1
         return ra
 
+    def set_notes_with_tuple(self, notes: tuple[int, int, int, int, int]):
+        """设置 Note 统计数据"""
+        (
+            self.note_count_tap,
+            self.note_count_hold,
+            self.note_count_slide,
+            self.note_count_touch,
+            self.note_count_break
+        ) = notes
+
+    def set_notes(self, tap: int, hold: int, slide: int, touch: int, break_note: int):
+        """设置 Note 统计数据"""
+        self.note_count_tap = tap
+        self.note_count_hold = hold
+        self.note_count_slide = slide
+        self.note_count_touch = touch
+        self.note_count_break = break_note
 
 @dataclass
 class MaiData:
@@ -233,7 +252,7 @@ class MaiData:
     buddy: bool = False  # Utage: 是否为 Buddy 谱面
 
     # 0~6 分别对应 Easy, Basic, Advanced, Expert, Master, Re: Master, Utage
-    _charts: list[MaiChart | None] = [None] * 8
+    _charts: list[MaiChart | None] = field(default_factory=lambda: [None] * 7)
 
     aliases: List[MaiAlias] = field(default_factory=list)  # 歌曲别名列表
 
@@ -292,15 +311,17 @@ class MaiData:
             raise ValueError("Difficulty must be between 1 and 7")
         return self._charts[diff-1]  # diff 从 1 开始，列表索引从 0 开始
 
-    def set_chart(self, chart: MaiChart):
+    def set_chart(self, chart: Optional[MaiChart]):
         """设置对应谱面"""
+        if chart is None:
+            return   # 兼容谱面返回 None 的情况，忽略而不设置
         if not 1 <= chart.difficulty <= 7:
             raise ValueError("Difficulty must be between 1 and 7")
         elif chart.difficulty == 7:
             # 一定为非 Buddy 的 Utage 谱面
             self.is_utage = True
             self.buddy = False
-        elif chart.difficulty == 1 or 3 <= chart.difficulty <= 6:
+        elif chart.difficulty == 1 or 4 <= chart.difficulty <= 6:
             # 非 BASIC / ADVANCED 一定为非 Utage
             self.is_utage = False
             self.buddy = False
@@ -337,15 +358,15 @@ class MaiData:
         if chart_obj := self.get_chart(diff):
             chart_obj.set_ach(ach)
 
-    def parse_sy_player_record(self, records: list[RECORD_UNIT_TYPE], dxscore_max: int = 0) -> None:
+    def parse_sy_player_record(self, records: list, dxscore_max: int = 0) -> None:
         """解析来自水鱼查分器的响应体数据，填充 MaiChartAch 分数信息"""
         for record in records:
-            diff = cast(int, record.get("level_index", 3)) + 2  # 水鱼难度编号转换为 MaiChart 难度编号
-            achievement = cast(float, record.get("achievements", 0.0000))
+            diff = record.get("level_index", 3) + 2  # 水鱼难度编号转换为 MaiChart 难度编号
+            achievement = record.get("achievements", 0.0000)
             dxscore = 0 if dxscore_max == 0 else dxscore_max
-            combo = parse_status(cast(str, record.get("fc", "")), DF_FC_MAP)
-            sync = parse_status(cast(str, record.get("fs", "")), DF_FS_MAP)
-            shortid: int = cast(int, record.get("song_id", self.shortid))
+            combo = parse_status(record.get("fc", ""), DF_FC_MAP)
+            sync = parse_status(record.get("fs", ""), DF_FS_MAP)
+            shortid: int = record.get("song_id", self.shortid)
 
             ach = MaiChartAch(
                 shortid=shortid,

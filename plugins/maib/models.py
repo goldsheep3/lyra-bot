@@ -40,7 +40,7 @@ class MaiAlias(Model):
 class MaiChartAch(Model):
     """MaiChartAch 成绩数据"""
     __tablename__ = "chart_achs"
-    __table_args__ = (UniqueConstraint("shortid", "difficulty"),)
+    __table_args__ = (UniqueConstraint("shortid", "difficulty", "server"),)
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     shortid: Mapped[int] = mapped_column(ForeignKey("maidata.shortid", ondelete="RESTRICT"))

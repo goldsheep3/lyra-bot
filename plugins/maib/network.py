@@ -95,9 +95,7 @@ async def request_image(url: str, method: str = "GET", developer_token: Optional
 
 # --- 4. 具体接口实现 ---
 
-MUSIC_DATA_UNIT_TYPE = dict[str, int | str | list[str] | list[int] | list[dict[str, list[int] | str]] | dict[str, str | int | bool]]
-
-async def sy_music_data(etag: str | None = None) -> tuple[str | None, list[MUSIC_DATA_UNIT_TYPE] | None]:
+async def sy_music_data(etag: str | None = None) -> tuple[str | None, list | None]:
     """获取公开乐曲数据"""
     headers = {"If-None-Match": etag} if etag else {}
     response = await _request(ENDPOINTS["diving_fish"] + "/music_data", project_name="diving-fish*/music_data", headers=headers)
@@ -114,7 +112,7 @@ async def sy_music_data(etag: str | None = None) -> tuple[str | None, list[MUSIC
             logger.error(f"解析水鱼数据失败: {e}")
     return None, None
 
-async def sy_music_data_from_file(dir_path: Path, max_retries: int = 3) -> list[MUSIC_DATA_UNIT_TYPE] | None:
+async def sy_music_data_from_file(dir_path: Path, max_retries: int = 3) -> list | None:
     """获取公开乐曲数据"""
     data_path = dir_path / "music_data.json"
     etag_path = dir_path / "music_data.etag"
@@ -169,21 +167,14 @@ async def sy_music_data_from_file(dir_path: Path, max_retries: int = 3) -> list[
     return None
 
 
-CHART_STATS_TYPE = dict[str,
-                        dict[str, list[dict[str, int | str | float | list[int]]]] |  # `charts`, 其中对应谱面的拟合难度为 `fit_diff: float`
-                        dict[str, dict[str, float | list[float]]]]  # `diff_data`, 基于难度总体而不是某个谱面的数据统计
-
-async def sy_chart_stats() -> Optional[CHART_STATS_TYPE]:
+async def sy_chart_stats():
     """获取公开乐曲统计数据"""
     return await request_json(
         ENDPOINTS["diving_fish"] + "/chart_stats",
         project_name="diving-fish*/chart_stats"
     )
 
-RECORD_UNIT_TYPE = dict[str, int | str]
-PLAYER_RECORDS_TYPE = dict[str, int | str | list[RECORD_UNIT_TYPE]]
-
-async def sy_dev_player_records(qq: int | str, developer_token: Optional[str] = None) -> Optional[PLAYER_RECORDS_TYPE]:
+async def sy_dev_player_records(qq: int | str, developer_token: Optional[str] = None):
     """获取完整成绩信息"""
     return await request_json(
         ENDPOINTS["diving_fish"] + f"/dev/player/records?qq={str(qq)}", 
@@ -191,7 +182,7 @@ async def sy_dev_player_records(qq: int | str, developer_token: Optional[str] = 
         developer_token=developer_token
     )
 
-async def sy_query_player(qq: int | str, b50: bool = True) -> Optional[PLAYER_RECORDS_TYPE]:
+async def sy_query_player(qq: int | str, b50: bool = True):
     """查询 B50 / B40"""
     return await request_json(
         ENDPOINTS["diving_fish"] + "/query/player",
@@ -201,10 +192,10 @@ async def sy_query_player(qq: int | str, b50: bool = True) -> Optional[PLAYER_RE
     )
 
 async def sy_dev_player_record(shortid: int | str | list[int | str], qq: int | str,
-                               developer_token: Optional[str] = None) -> Optional[list[RECORD_UNIT_TYPE]]:
+                               developer_token: Optional[str] = None) -> Optional[list]:
     """获取用户单曲成绩信息"""
     music_id = str(shortid) if isinstance(shortid, (int, str)) else [str(id) for id in shortid]
-    result: Optional[dict[str, list[RECORD_UNIT_TYPE]]] = await request_json(
+    result = await request_json(
         ENDPOINTS["diving_fish"] + "/dev/player/record",
         method="POST",
         json={"qq": str(qq), "music_id": music_id},
@@ -218,7 +209,7 @@ async def sy_dev_player_record(shortid: int | str | list[int | str], qq: int | s
 
 # 水鱼之外的：
 
-async def maichart_index() -> Optional[dict[str, str]]:
+async def maichart_index() -> dict[str, str] | None:
     """获取谱面索引 (带 Fallback 机制)"""
     MAICHART_INDEX_URL = "/Neskol/Maichart-Converts/refs/heads/master/index.json"
     # 尝试直连
@@ -228,14 +219,14 @@ async def maichart_index() -> Optional[dict[str, str]]:
         res = await request_json(ENDPOINTS["maichart_proxy"] + MAICHART_INDEX_URL, project_name="maichart_proxy*/index.json")
     return res or {}
 
-async def lx_alias_list() -> Optional[dict[str, list[dict[int, list[str]]]]]:
+async def lx_alias_list() -> dict | None:
     """获取落雪别名库"""
     return await request_json(
         ENDPOINTS["lxns"] + "/alias/list", 
         project_name="lxns*/alias/list"
     )
 
-async def yuzuchan_alias_list() -> Optional[dict[str, int | list[dict[str, str | int | list[str]]]]]:
+async def yuzuchan_alias_list() -> dict | None:
     """获取 YuzuChaN 别名库"""
     return await request_json(
         ENDPOINTS["yuzuchan"] + "/maimaidxalias",
