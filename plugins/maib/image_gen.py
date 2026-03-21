@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from PIL import Image, ImageDraw, ImageFont, ImageChops
 
-from .utils import ASSETS_PATH, GENRES_DATA, VERSIONS_DATA, MaiData, MaiChart
+from .utils import ASSETS_PATH, GENRES_DATA, VERSIONS_DATA, MaiData, MaiChart, MaiB50Manager
 
 # ========================================
 # 基础常量
@@ -669,6 +669,58 @@ class DrawFactory:
 
         return width, height
 
+    def chart_box_mini(self, x, y, chart: MaiChart, cabinet_dx: bool, plus_level: int = 6,
+                       is_utage: bool = False) -> Tuple[int, int]:
+        """组件：谱面信息框 Mini (更紧凑的布局，适用于多行并列或背景填充)"""
+        du = self.du
+        diff = get_difficulty(chart.difficulty)
+        ach = chart.get_ach()
+
+        # 定义 Mini 尺寸：宽度略窄，高度大幅度压缩 (从 25 降至 16)
+        width, height = 86, 16 
+
+        # 1. 绘制底色与装饰感边框
+        # 背景填充
+        du.rounded_rect(x, y, width, height, radius=2.5, fill=diff.bg)
+        # 顶部切线装饰（保留 Lite 风格的视觉逻辑，但缩减高度）
+        du.cut_line(x, y, width, height, radius=2.5, line_y=y + 1, line_h=3.5, fill=diff.title_bg)
+        # 外边框（最后压一层确保清晰）
+        du.rounded_rect(x, y, width, height, radius=2.5, fill=None, outline=diff.frame, width=1)
+
+        # 2. 难度文本与 DX 标识 (左侧区域)
+        # 稍微下移以对齐视觉中心
+        du.difficulty(x + 2, y + 3.5, diff)
+        # DX 标识移到右侧偏上，避免遮挡
+        du.draw_badge(x + 72, y + 1.5, is_cabinet_dx=cabinet_dx)
+
+        # 3. 等级 LV (紧跟在难度后面)
+        plus = round(chart.lv % 1 * 10) >= plus_level
+        # 坐标微调，使等级和难度文字在同一水平线附近
+        du.level(x + 52, y + 6.5, diff, chart.lv, plus=plus, ignore_decimal=is_utage)
+
+        # 4. 达成率 (居中偏右布局)
+        du.ach(x + 36, y + 8, diff, ach.achievement)
+
+        # 5. 奖牌状态 (FC/Sync) - 采用水平并列或极窄间距
+        # 在 Mini 模式下，如果空间有限，FC 和 Sync 通常并排显示或缩小字体
+        c_combo, t_combo, _tl, tc_combo = COMBO_DICT[ach.combo]
+        c_sync, t_sync, _tl, tc_sync = SYNC_DICT[ach.sync]
+        
+        # 使用 self.du.cn 判定语言，2 为全中文
+        text_combo = tc_combo if du.cn == 2 else t_combo
+        text_sync = tc_sync if du.cn == 2 else t_sync
+
+        # 绘制奖牌：水平排列在底部
+        du.evaluate(x + 2, y + 11.5, text=text_combo, color=c_combo)
+        du.evaluate(x + 22, y + 11.5, text=text_sync, color=c_sync)
+
+        # 6. DX 分数 (Mini 版通常只保留星星或极简分数)
+        dxs, dxs_max, dxs_star = ach.dxscore_tuple
+        # 这里仅在右下角保留 DX Star 标识，不再显示完整进度条以节省空间
+        du.dxscore_lite(x + 48, y + 11.5, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
+
+        return width, height
+
     def mini_box(self, x: int, y: int, data: MaiData, diff_number: int) -> Tuple[int, int]:
         """组件：Mini 成绩框"""
         du = self.du
@@ -874,15 +926,12 @@ class DrawInfo(DrawFactory):
 class DrawB50Boxex(DrawFactory):
     """实现 `b50` 图像的绘制"""
 
-    # TODO 后面肯定要打包一个 utils 类管理两个列表和版本/DXRating规则！
-    def __init__(self, b35: list[tuple[MaiData, int]], b15: list[tuple[MaiData, int]],
-                 current_version: int, ra: int, user_name: str, user_avatar: Optional[Image.Image] = None,
+    def __init__(self, b50manager: MaiB50Manager, user_name: str, user_avatar: Optional[Image.Image] = None,
                  multiple: float = 1, cn_level: Literal[0, 1, 2] = 0):
         super().__init__(width=411, height=580, ms_multiple=int(10 * multiple), cn_level=cn_level)
-        self._b50(b35, b15, current_version, ra, user_name, user_avatar)
+        self._b50(b50manager, user_name, user_avatar)
 
-    def _b50(self, b35: list[tuple[MaiData, int]], b15: list[tuple[MaiData, int]], current_version: int, ra: int,
-             user_name: str, user_avatar: Optional[Image.Image]):
+    def _b50(self, b50manager: MaiB50Manager, user_name: str, user_avatar: Optional[Image.Image]):
         """实现 `b50` 图像的绘制"""
         x, y = 7, 7
         margin = 3
@@ -893,91 +942,33 @@ class DrawB50Boxex(DrawFactory):
         du.image(x, y, 32, 32, radius=5, outline='#FFF', outline_width=1, png=user_avatar)
         # DX Rating
         
-        if 2000 > current_version >= 26:
-            # CiRCLE PLUS 修改了部分图标，增加了极彩框
-            dxra_fram_path = Path(PIC_PATH / "dxrating" / f"JP_CIRP_{get_range_index_left_closed(BOUNDARIES_DX_RATING_NEW, ra)}.png")
-            if not dxra_fram_path.exists():
-                dxra_fram_path = Path(PIC_PATH / "dxrating" / f"JP_{get_range_index_left_closed(BOUNDARIES_DX_RATING_NEW, ra)}.png")
-        else:
-            dxra_fram_path = Path(PIC_PATH / "dxrating" / f"JP_{get_range_index_left_closed(BOUNDARIES_DX_RATING, ra)}.png")
+        dxra_fram_path = PIC_PATH / "dxrating" / b50manager.dxrating_filename
         if dxra_fram_path.exists():
             du.image(x+36, y, 70, 14, radius=0, png=dxra_fram_path)
         # Username
         du.rounded_rect(x+36, y+15, 100, 17, fill='#333', radius=2)
         du.text(x+36, y+23.5, text=' ' + get_full_width_text(user_name), fill='#FFF', anchor='lm',
                 font=MIS_DB.font_variant(size=self.ms.x(10)))
-        
-
         y += 32 + margin * 2
+
+        b35, b15 = b50manager.get_lists()
 
         for i, (maidata, diff) in enumerate(b35, start=1):
             tx = x + i % 4 * (97 + 3)
             ty = y + i // 4 * (36 + 3)
             _w, _h = self.b50_box(tx, ty, maidata, diff_number=diff, index=i, is_b15=False)
-
         y += (len(b35) + 3) // 4 * (36 + 3) + margin
 
         for i, (maidata, diff) in enumerate(b15, start=1):
             tx = x + i % 4 * (97 + 3)
             ty = y + i // 4 * (36 + 3)
             _w, _h = self.b50_box(tx, ty, maidata, diff_number=diff, index=i, is_b15=True)
-
         y += (len(b15) + 3) // 4 * (36 + 3)
 
         _w, h = self.copyright_bar(0, y, 411)
         # 切割
         self.img = self.img.crop((0, 0, self.ms.x(411), self.ms.x(y + h)))
         self.img = self.img.convert('RGB')
-        
-
-
-# todo info_box_mini 等元件的新写法转换
-def info_box_mini(
-        diff: int | Difficulty,
-        level: float,
-        achievement: float,
-        combo: Optional[Combo | int] = None,
-        sync: Optional[Sync | int] = None,
-        all_cn: bool = False,
-        ms_multiple: int | MS = 10,
-) -> Image.Image:
-    """InfoBox Mini: 适用于 InfoBoard 信息板显示非目标查询曲目信息的曲目细节"""
-    # 参数处理
-    ms = ms_multiple if isinstance(ms_multiple, MS) else MS(ms_multiple)
-    diff = diff if isinstance(diff, Difficulty) else DIFFICULTIES[diff]
-
-    img = Image.new('RGBA', (ms.x(43) + 2, ms.x(16) + 2), color='#FFFFFF00')
-    # 绘图单元
-    du = DrawUnit(img, multiple=ms)
-    ms_multiple_value = (ms_multiple.multiple if isinstance(ms_multiple, MS) else ms_multiple)
-    du_lite_1 = DrawUnit(img, multiple=int(ms_multiple_value / 1.25))
-    du_lite_2 = DrawUnit(img, multiple=int(ms_multiple_value / 1.5))
-
-    # 外框
-    du.draw.rounded_rectangle(ms.size(0, 0, 43, 16), radius=ms.x(2.5), fill=diff.bg, outline=diff.frame,
-                              width=3, corners=(True, True, True, True))
-
-    # 难度 / 定数
-    du_lite_1.difficulty(2, 4, diff, text=f"{diff.text_title_cn if all_cn else diff.text_title}  {level:.1f}")
-
-    # 达成率
-    du_lite_2.ach_value(16, 11.5, ach_percent=achievement)
-
-    du_evaluate = du_lite_2 if all_cn else du_lite_1
-    # FC/FC+/AP/AP+
-    if combo:
-        c, t, tl, tc = COMBO_DICT[combo]
-        du_evaluate.evaluate(2, 15, text=tc if all_cn else tl, color=c)
-    # SYNC/FS/FS+/FDX/FDX+
-    if sync:
-        c, t, tl, tc = SYNC_DICT[sync]
-        du_evaluate.evaluate(2, 21, text=tc if all_cn else tl, color=c)
-
-    # 外框
-    du.draw.rounded_rectangle(ms.size(0, 0, 43, 16), radius=ms.x(2.5), fill=None, outline=diff.frame,
-                              width=3, corners=(True, True, True, True))
-
-    return img
 
 
 def simple_list(maidata_list: List[MaiData]) -> Image.Image:

@@ -96,7 +96,7 @@ class MaiChart(Model):
 
     def to_data(self) -> utils.MaiChart:
         """转换为 utils.MaiChart 对象"""
-        return utils.MaiChart(
+        maichart = utils.MaiChart(
             shortid=self.shortid,
             difficulty=self.difficulty,
             lv=self.lv,
@@ -110,6 +110,9 @@ class MaiChart(Model):
             note_count_touch=self.note_count_touch,
             note_count_break=self.note_count_break
         )
+        for ach in self.achs:
+            maichart.set_ach(ach.to_data())
+        return maichart
 
 
 class MaiData(Model):

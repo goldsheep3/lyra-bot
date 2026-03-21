@@ -1,6 +1,5 @@
-import time
 import yaml
-import asyncio
+import bisect
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -79,6 +78,9 @@ GENRES_DATA = yaml.safe_load(GENRES_YAML_PATH.read_text(encoding="utf-8"))
 VERSIONS_YAML_PATH = ASSETS_PATH / "versions.yaml"
 VERSIONS_DATA = yaml.safe_load(VERSIONS_YAML_PATH.read_text(encoding="utf-8"))
 
+# DXRating 版本分界线
+BOUNDARIES_DX_RATING = [0, 1000, 2000, 5000, 7000, 10000, 12000, 13000, 14000, 14500, 15000]
+BOUNDARIES_DX_RATING_NEW = [0, 1000, 2000, 5000, 7000, 10000, 12000, 13000, 14000, 14250, 14500, 14750, 15000, 15250, 15500, 15750, 16000, 16250, 16500, 16750]
 
 def parse_status(target: str, mapping: Dict[str, int]) -> int:
     """通过映射表常量进行数值获取"""
@@ -395,58 +397,93 @@ class MaiData:
                 existing_alias_names.add(alias.alias)
 
 
-class MaiDataCNCache:
-    """乐曲数据内存缓存与索引管理器"""
-    _data: List[Dict[str, Any]] = []
-    _ids: Set[int] = set()
-    _last_update: float = 0
-    _expire_seconds: int = 3600  # 内存失效阈值（例如1小时后允许再次触发同步检查）
-    _lock = asyncio.Lock()
+class MaiB50Manager:
+    def __init__(self, current_version: int):
+        self.current_version = current_version
+        # 存储格式: (rating, maidata, diff)
+        self._b35: List[Tuple[int, 'MaiData', int]] = []
+        self._b15: List[Tuple[int, 'MaiData', int]] = []
 
-    @classmethod
-    async def get_all_data(cls, cache_path: Path) -> List[Dict[str, Any]]:
-        """获取数据（仅在内存失效时调用上层同步函数）"""
-        now = time.time()
+    @property
+    def dxrating(self) -> int:
+        """获取当前 B50 的总 Rating"""
+        return sum(item[0] for item in self._b35 + self._b15)
+
+    @property
+    def dxrating_filename(self) -> str:
+        """根据当前 DX Rating 获取对应的外框文件名"""
+        ra = self.dxrating
+        ver = self.current_version
         
-        # 1. 内存命中：数据存在且未过时，直接返回
-        if cls._data and (now - cls._last_update < cls._expire_seconds):
-            return cls._data
+        # 1. 确定使用的边界和前缀
+        is_cirp = 26 <= ver < 2000
+        bounds = BOUNDARIES_DX_RATING_NEW if is_cirp else BOUNDARIES_DX_RATING
+        
+        # 定位索引
+        idx = max(0, bisect.bisect_right(bounds, ra) - 1)
+        
+        if idx < 8:
+            # 金框之前不区分
+            return f"JP_{idx}.png"
+        if is_cirp:
+            return f"JP_CIRP_{idx}.png"
+        return f"JP_{idx}.png"
 
-        # 2. 内存穿透：加锁防止并发重复同步
-        async with cls._lock:
-            # 双重检查
-            if cls._data and (now - cls._last_update < cls._expire_seconds):
-                return cls._data
-            
-            # 调用上层简化的同步函数
-            new_data = await sy_music_data_from_file(cache_path)
-            
-            if new_data is not None:
-                cls._refresh_memory_state(new_data)
-            elif not cls._data:
-                # 如果 API/文件都失败且内存也无数据，则抛出异常
-                raise RuntimeError("无法获取乐曲数据：同步函数返回为空且本地无缓存")
-                
-            return cls._data
+    def get_b35_list(self) -> list[tuple['MaiData', int]]:
+        """获取当前 B35 的曲目列表"""
+        return [(item[1], item[2]) for item in self._b35]
 
-    @classmethod
-    async def contains_id(cls, music_id: int, cache_path: Path) -> bool:
-        """高性能判断 ID 是否存在"""
-        await cls.get_all_data(cache_path)
-        return music_id in cls._ids
+    def get_b15_list(self) -> list[tuple['MaiData', int]]:
+        """获取当前 B15 的曲目列表"""
+        return [(item[1], item[2]) for item in self._b15]
 
-    @classmethod
-    def _refresh_memory_state(cls, data: List[Dict[str, Any]]):
-        """解析并刷新内存索引"""
-        cls._data = data
-        # 使用更健壮的类型转换，过滤非数字 ID
-        temp_ids = set()
-        for item in data:
-            try:
-                mid = item.get('id')
-                if mid is not None:
-                    temp_ids.add(int(mid))
-            except (ValueError, TypeError):
-                continue
-        cls._ids = temp_ids
-        cls._last_update = time.time()
+    def get_lists(self) -> tuple[list[tuple['MaiData', int]], list[tuple['MaiData', int]]]:
+        """获取当前 B35 和 B15 的曲目列表"""
+        return self.get_b35_list(), self.get_b15_list()
+
+    def get_b50_list(self) -> list[tuple['MaiData', int]]:
+        """获取当前 B50 的曲目列表，格式为 (MaiData, diff)"""
+        b50 = self._b35 + self._b15
+        b50.sort(key=lambda x: x[0], reverse=True)  # 按照 DX Rating 从高到低排序
+        return [(item[1], item[2]) for item in b50]
+
+    def _process_entry(self, maidata: 'MaiData', diff: int) -> Optional[Tuple[int, 'MaiData', int]]:
+        ra = maidata.get_chart_dxrating(diff, current_version=self.current_version)
+        return (ra, maidata, diff) if ra is not None else None
+
+    def add_entry(self, maidata: 'MaiData', diff: int):
+        """添加单个条目"""
+        entry = self._process_entry(maidata, diff)
+        if not entry:
+            return
+
+        is_new = maidata.is_b15(self.current_version)
+        target = self._b15 if is_new else self._b35
+        max_len = 15 if is_new else 35
+
+        # 逻辑：如果没满直接加；如果满了且比最小值大，则替换最小值
+        if len(target) < max_len:
+            target.append(entry)
+            target.sort(key=lambda x: x[0], reverse=True)
+        else:
+            # target[-1] 是当前最小值（因为已排序）
+            if entry[0] > target[-1][0]:
+                target[-1] = entry
+                target.sort(key=lambda x: x[0], reverse=True)
+
+    def add_entries(self, entries: List[Tuple['MaiData', int]]):
+        """添加多个条目"""
+        new_entries = []
+        old_entries = []
+        
+        for md, diff in entries:
+            entry = self._process_entry(md, diff)
+            if not entry: continue
+            if md.is_b15(self.current_version):
+                new_entries.append(entry)
+            else:
+                old_entries.append(entry)
+
+        # 合并当前数据与新数据，排序并截取前 N 个
+        self._b15 = sorted(self._b15 + new_entries, key=lambda x: x[0], reverse=True)[:15]
+        self._b35 = sorted(self._b35 + old_entries, key=lambda x: x[0], reverse=True)[:35]

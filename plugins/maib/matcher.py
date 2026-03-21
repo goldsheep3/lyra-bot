@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Optional, List
 
 from . import services, image_gen, network
-from .utils import rate_alias_map, MaiData, MaiChart, MaiChartAch, parse_status, DIFFS_MAP, MaiDataCNCache
+from .utils import rate_alias_map, MaiData, MaiChart, MaiChartAch, parse_status, DIFFS_MAP
 
 from nonebot import require, logger, on_regex
 from nonebot.params import RegexGroup
@@ -105,8 +105,7 @@ async def get_song_image(mdt: services.MaiData, user_id: str | int) -> bytes:
     """提取的共用查歌并生成图片的逻辑"""
     user_id = str(user_id)
     maidata: MaiData = mdt.to_data()
-    song_in_cn = await MaiDataCNCache.contains_id(maidata.shortid, get_plugin_cache_dir())
-    if song_in_cn:
+    if maidata.version_cn is not None:
         # 通过 QQ 获取用户绑定的信息
         record_list = await network.sy_dev_player_record(maidata.shortid, qq=user_id, developer_token=DEVELOPER_TOKEN)
         if record_list:
