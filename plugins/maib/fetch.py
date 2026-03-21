@@ -6,6 +6,7 @@ import zipfile
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
+from thefuzz import process
 from nonebot import logger
 from nonebot_plugin_datastore.db import post_db_init
 
@@ -71,7 +72,6 @@ async def parse_genre(genre_str: str, genre_dict_fixed: dict[str, int]) -> int:
     # 2. 模糊匹配 (容错几个字符)
     if g is None:
         try:
-            from thefuzz import process
             # 提取相似度最高的一个，阈值设为 80 (可以根据实际效果调整)
             best_match = process.extractOne(g_str, list(genre_dict_fixed.keys()))
             if best_match and best_match[1] >= 80:
