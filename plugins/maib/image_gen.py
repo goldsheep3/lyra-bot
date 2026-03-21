@@ -7,17 +7,14 @@ from dataclasses import dataclass
 
 from PIL import Image, ImageDraw, ImageFont, ImageChops
 
-from .utils import MaiData, MaiChart
+from .utils import ASSETS_PATH, GENRES_DATA, VERSIONS_DATA, MaiData, MaiChart
 
 # ========================================
 # 基础常量
 # ========================================
 
 # 模块版本
-MODEL_VERSION: str = "260214"
-
-# assets 资源常量
-ASSETS_PATH = Path(__file__).parent / "assets"
+MODEL_VERSION: str = "260321"
 
 # 字体常量
 FONT_PATH = ASSETS_PATH / "fonts"
@@ -33,16 +30,6 @@ PIC_PATH = ASSETS_PATH / "pic"
 DXRATING_PATH = PIC_PATH / "dxrating"
 PLATE_PATH = PIC_PATH / "plate"
 VER_PATH = PIC_PATH / "ver"
-
-# Version 版本和 Genre 流派常量
-VERSIONS_CONFIG_PATH = ASSETS_PATH / "versions.yaml"
-VERSIONS_CONFIG = yaml.safe_load(VERSIONS_CONFIG_PATH.read_text(encoding="utf-8"))
-GENRE_CONFIG_PATH = ASSETS_PATH / "genres.yaml"
-GENRE_CONFIG = yaml.safe_load(GENRE_CONFIG_PATH.read_text(encoding="utf-8"))
-
-GENRE_PATH = ASSETS_PATH / "genres.yaml"
-with open(GENRE_PATH, 'r', encoding='utf-8') as f:
-    GENRE_CONFIG: dict[str, dict[str, str]] = yaml.safe_load(f)
 
 # 基础颜色常量
 COLOR_DXSCORE_GN = '#0A5'
@@ -267,7 +254,7 @@ def get_full_width_text(text: str) -> str:
 
 def get_genre(genre_id: int, cn_level: Literal[0, 1, 2]) -> Tuple[str, str]:
     """获取流派信息"""
-    genre_info = GENRE_CONFIG.get(str(genre_id), {})
+    genre_info = GENRES_DATA.get(str(genre_id), {})
     target = {0: 'jp', 1: 'intl', 2: 'cn'}
     genre = genre_info.get(target.get(cn_level, 'jp'), 'N/A')
     color = genre_info.get('color', COLOR_THEME)
@@ -820,7 +807,7 @@ class DrawInfo(DrawFactory):
         if ver_jp_path.exists():
             du.image(x+t+p, gvv_la, 34, 16, radius=0, png=ver_jp_path)
         else:
-            text = VERSIONS_CONFIG.get(maidata.version, str(maidata.version))
+            text = VERSIONS_DATA.get(maidata.version, str(maidata.version))
             text = text.replace(' ', '\n')
             du.text(x+t+p+17, gvv_mm, text=text,
                     fill='#FFF', anchor='mm', font=self.font_mdb[5])
@@ -830,7 +817,7 @@ class DrawInfo(DrawFactory):
             if ver_cn_path.exists():
                 du.image(x+t+p*2, gvv_la, 34, 16, radius=0, png=ver_cn_path)
             else:
-                text = VERSIONS_CONFIG.get(maidata.version_cn, str(maidata.version_cn))
+                text = VERSIONS_DATA.get(maidata.version_cn, str(maidata.version_cn))
                 text = text.replace(' ', '\n')
                 du.text(x+t+p*2+17, gvv_mm, text=text,
                         fill='#FFF', anchor='mm', font=self.font_mdb[5])

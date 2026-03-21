@@ -1,10 +1,10 @@
 import time
+import yaml
 import asyncio
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Optional, List, Set, Tuple, Any, Literal, cast
-from functools import singledispatchmethod
+from typing import Dict, Optional, List, Set, Tuple, Any, Literal
 
 from PIL import Image
 from loguru import logger
@@ -13,7 +13,8 @@ from .network import sy_music_data_from_file
 
 
 # 完成率别名映射
-rate_alias: Dict[float, Tuple[str, ...]] = {
+rate_alias_map: Dict[str, float] = {}
+for rate_value, aliases in {
     101.0000: ("ap+", "理论"),
     100.7500: ("ap",),
     100.5000: ("鸟加", "鸟家", "sss+", "3s+"),
@@ -30,12 +31,9 @@ rate_alias: Dict[float, Tuple[str, ...]] = {
     60.0000:  ("b", "1b"),
     50.0000:  ("c", "1c"),
     0.0000:   ("d", "1d"),
-}
-rate_alias_map: Dict[str, float] = {}
-for rate_value, aliases in rate_alias.items():
+}.items():
     for alias in aliases:
         rate_alias_map[alias.lower()] = rate_value
-del rate_alias  # 清理命名空间
 
 
 # 完成率对应的评分因子表
@@ -72,6 +70,14 @@ DIFFS_MAP = {v: i + 1 for i, v in enumerate(["蓝", "绿", "黄", "红", "紫", 
 
 # 服务器标识类型
 SERVER_TAG = Literal["JP", "INTL", "CN"]
+
+# 基础路径及 yml 数据
+PLUGIN_BASE_PATH = Path(__file__).parent
+ASSETS_PATH = PLUGIN_BASE_PATH / "assets"
+GENRES_YAML_PATH = ASSETS_PATH / "genres.yaml"
+GENRES_DATA = yaml.safe_load(GENRES_YAML_PATH.read_text(encoding="utf-8"))
+VERSIONS_YAML_PATH = ASSETS_PATH / "versions.yaml"
+VERSIONS_DATA = yaml.safe_load(VERSIONS_YAML_PATH.read_text(encoding="utf-8"))
 
 
 def parse_status(target: str, mapping: Dict[str, int]) -> int:

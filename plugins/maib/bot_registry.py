@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Type, Optional, Any, Callable
+from typing import Type, Optional, Callable
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.ext.asyncio import AsyncSession
 from contextlib import suppress

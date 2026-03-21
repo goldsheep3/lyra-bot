@@ -12,19 +12,31 @@ from nonebot_plugin_datastore.db import post_db_init
 
 from. import models, network
 from .bot_registry import PluginRegistry
-from .utils import MaiData, MaiChart, MaiAlias
+from .utils import MaiData, MaiChart, MaiAlias, GENRES_DATA, VERSIONS_DATA
 from .note_count import count_to_tuple
 
 
-ASSETS_PATH = Path(__file__).parent / "assets"
+def initialize_genres_data_rev():
+    genres_config_rev = {}
+    for k, v in GENRES_DATA.items():
+        if isinstance(v, dict):
+            for lang in ['jp', 'intl', 'cn']:
+                if lang_val := v.get(lang):
+                    clean_key = lang_val.lower().replace('\n', '').strip()
+                    genres_config_rev[clean_key] = k
+    return genres_config_rev
+
+GENRES_DATA_REV = initialize_genres_data_rev()
 
 
-async def parse_version(version_str: str, version_dict: dict[int, str]) -> int:
+async def parse_version(version_str: str) -> int:
     """辅助函数：解析版本号"""
+    global VERSIONS_DATA
+
     v_str = version_str.lower().strip()
     if not v_str:
         return -1
-    rd = {v.lower().strip(): k for k, v in version_dict.items()}
+    rd = {v.lower().strip(): k for k, v in VERSIONS_DATA.items()}
     # 1. 直接匹配
     v = rd.get(v_str, None)
     # 2. 尝试去掉前缀 "maimai "
@@ -48,9 +60,9 @@ async def parse_version(version_str: str, version_dict: dict[int, str]) -> int:
     return v
 
 
-async def parse_diving_fish_version(version_str: str, version_dict: dict[int, str]) -> int:
+async def parse_diving_fish_version(version_str: str) -> int:
     """辅助函数：解析国服版本号"""
-    v_jp_result = await parse_version(version_str, version_dict)
+    v_jp_result = await parse_version(version_str)
     if v_jp_result <= 12:
         # 旧框版本，一致
         return v_jp_result
@@ -106,10 +118,9 @@ async def get_chart(raw_metadata: dict, short_id: int, chart_num: int) -> MaiCha
         return chart
     return None
 
-async def parse_maidata(raw_metadata: dict[str, str],
-                        versions_config: dict[int, str],
-                        genres_config_rev: dict[str, int], zip_path: Path) -> MaiData:
+async def parse_maidata(raw_metadata: dict[str, str], zip_path: Path) -> MaiData:
     """通过 maidata.txt 元数据解析 MaiData"""
+    global GENRES_DATA_REV
 
     def raw_get(key_list, return_type: type = str, default = None):
         """从 raw_metadata 中获取数据的工具函数，支持多个候选 key 和类型转换"""
@@ -124,20 +135,18 @@ async def parse_maidata(raw_metadata: dict[str, str],
                         continue
         return default
 
-    genre_dict = genres_config_rev
-
     shortid = raw_get(['shortid', 'id'], int, 0)
     title = raw_get(['title'], default="")
     bpm = raw_get(['wholebpm', 'bpm'], int, 0)
     artist = raw_get(['artist'], default="")
-    genre = await parse_genre(raw_get(['genre'], default=""), genre_dict)
+    genre = await parse_genre(raw_get(['genre'], default=""), GENRES_DATA_REV)
     _cabinet = raw_get(['cabinet'], default=None)
     if _cabinet is None:
         cabinet = "SD" if shortid < 10000 else "DX"
     else:
         cabinet = "DX" if any(k in _cabinet.lower() for k in ["dx", "でらっくす", "deluxe"]) else "SD"
     version_str = raw_get(['version'], default="")
-    version = await parse_version(version_str, versions_config)
+    version = await parse_version(version_str)
     converter = raw_get(['ChartConverter'], default="")
 
     # title 处理：去掉`[XXXX]`
@@ -177,22 +186,9 @@ async def parse_maidata(raw_metadata: dict[str, str],
 
     return mai
 
-async def process_chart_files(chart_files: list[Path],
-                              versions_config: dict[int, str],
-                              genres_config: dict[int, dict[str, str]]) -> list[MaiData]:
+async def process_chart_files(chart_files: list[Path]) -> list[MaiData]:
     """处理文件夹中所有 zip 文件，提取 maidata.txt 中的元数据"""
     logger.info(f"数据同步-谱面处理开始：共 {len(chart_files)} 个 zip 文件")
-
-    genres_config_rev = {}
-    for k, v in genres_config.items():
-        if isinstance(v, dict):
-            # 遍历该流派下的所有语言版本（jp, intl, cn）
-            for lang in ['jp', 'intl', 'cn']:
-                if lang_val := v.get(lang):
-                    clean_key = lang_val.lower().replace('\n', '').strip()
-                    genres_config_rev[clean_key] = k
-        else:
-            logger.warning(f"流派配置加载警告：ID 为 {k} 的配置格式不正确")
 
     result = dict()
     for chart_path in chart_files:
@@ -223,7 +219,7 @@ async def process_chart_files(chart_files: list[Path],
                 # 未提取到元数据
                 logger.warning(f"数据同步-谱面处理：未提取到 {chart_file_name} 的元数据")
                 continue
-            mai: MaiData = await parse_maidata(raw_metadata, versions_config, genres_config_rev, chart_path)
+            mai: MaiData = await parse_maidata(raw_metadata, chart_path)
 
             # 去重：以 shortid 为准，后处理的覆盖前处理的
             # 若前处理的含 Re:MASTER 谱面，优先保留有 Re:MASTER 谱面的版本
@@ -307,8 +303,6 @@ async def maintenance_task():
     
     try:
         # 1. 准备路径和配置
-        genres_config = yaml.safe_load((ASSETS_PATH / "genres.yaml").read_text(encoding="utf-8"))
-        versions_config = yaml.safe_load((ASSETS_PATH / "versions.yaml").read_text(encoding="utf-8"))
         data_dir = PluginRegistry.get_data_dir()
         if not data_dir:
             logger.error("数据同步失败：无法获取谱面目录")
@@ -325,7 +319,7 @@ async def maintenance_task():
             return
 
         # 3. 处理数据
-        maidata_list: list[MaiData] = await process_chart_files(charts_files, versions_config, genres_config)
+        maidata_list: list[MaiData] = await process_chart_files(charts_files)
 
         # 4. 获取水鱼和别名库
         maidata_index: dict[int, int] = {m.shortid: i for i, m in enumerate(maidata_list)}
@@ -336,7 +330,7 @@ async def maintenance_task():
                 # 国服难度表
                 ds: list[int] = sy_data.get("ds", [])
                 # 国服版本号
-                ver = await parse_diving_fish_version(sy_data.get('basic_info', {}).get('from', ''), versions_config)
+                ver = await parse_diving_fish_version(sy_data.get('basic_info', {}).get('from', ''))
             
                 if shortid in maidata_index:
                     idx = maidata_index[shortid]
