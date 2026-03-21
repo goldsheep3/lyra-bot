@@ -88,17 +88,48 @@ def parse_diving_fish_version(version_str: str, version_dict: Dict[int, str]) ->
         return v
 
 
-def parse_maidata(raw_metadata: Dict[str, str], versions_config: Dict[int, str], zip_path: Path) -> MaiData:
+def parse_genre(genre_str: str, genre_dict_fixed: Dict[str, int]) -> Optional[int]:
+    """辅助函数：解析流派名"""
+    g_str = genre_str.lower().strip()
+    if not g_str:
+        return None
+
+    # 1. 精确匹配
+    g = genre_dict_fixed.get(g_str, None)
+    
+    # 2. 模糊匹配 (容错几个字符)
+    if g is None:
+        try:
+            from thefuzz import process
+            # 提取相似度最高的一个，阈值设为 80 (可以根据实际效果调整)
+            best_match = process.extractOne(g_str, list(genre_dict_fixed.keys()))
+            if best_match and best_match[1] >= 80:
+                g = genre_dict_fixed[best_match[0]]
+                logger.debug(f"流派模糊匹配成功: '{genre_str}' -> '{best_match[0]}' (相似度: {best_match[1]})")
+        except ImportError:
+            logger.warning("未安装 thefuzz 库，跳过模糊匹配。可以使用 pip install thefuzz 安装。")
+
+    if g is None:
+        logger.warning(f"无法解析流派名: {genre_str}")
+    return g
+
+
+def parse_maidata(raw_metadata: Dict[str, str], versions_config: Dict[int, str], genres_config: Dict[int, Dict[str, str]] | Dict[str, int], zip_path: Path) -> MaiData:
     """通过 maidata.txt 元数据解析 MaiData"""
 
     def raw_get(key_list, return_type: type = str, default: Any = ""):
         return get_by_list(raw_metadata, key_list, default, return_type)
 
+    if isinstance(genres_config.values()[0], dict):
+        genre_dict = {v['name'].lower().strip(): k for k, v in genres_config.items()}
+    else:
+        genre_dict = genres_config
+
     shortid = raw_get(['shortid', 'id'], int, 0)
     title = raw_get(['title'])
     bpm = raw_get(['wholebpm', 'bpm'], int, 0)
     artist = raw_get(['artist'])
-    genre = raw_get(['genre'])
+    genre = parse_genre(raw_get(['genre']), genre_dict)
     cabinet = raw_get(['cabinet'], default="SD" if shortid < 10000 else "DX")
     version_str = raw_get(['version'])
     version = parse_version(version_str, versions_config)
@@ -144,7 +175,7 @@ def parse_maidata(raw_metadata: Dict[str, str], versions_config: Dict[int, str],
     return mai
 
 
-def process_chart_files(chart_files: List[Path], versions_config: Dict[int, str]) -> List[MaiData]:
+def process_chart_files(chart_files: List[Path], versions_config: Dict[int, str], genre_config: Dict[int, Dict[str, str]]) -> List[MaiData]:
     """处理文件夹中所有 zip 文件，提取 maidata.txt 中的元数据"""
     logger.info(f"开始处理谱面文件，共 {len(chart_files)} 个")
     result = dict()
@@ -198,7 +229,7 @@ def process_chart_files(chart_files: List[Path], versions_config: Dict[int, str]
     return list(result.values())
 
 
-def process_chart_folders(folder_path_list: List[Path], versions_config: Dict[int, str]) -> List[MaiData]:
+def process_chart_folders(folder_path_list: List[Path], versions_config: Dict[int, str], genre_config: Dict[int, Dict[str, str]]) -> List[MaiData]:
     """处理多个文件夹中的谱面文件"""
     files = []
     for folder_path in folder_path_list:
@@ -246,7 +277,7 @@ def sync_aliases(maidata_list: List[MaiData]):
                     aliases_list.append(MaiAlias(shortid=shortid, alias=alias, create_qq=-1, create_time=now))
                     aliases_set.add((shortid, alias))  # 添加到集合中以去重
 
-    yuzuchan_aliases: Dict[str, List[Dict[str, List[str]] | Any] | Any] = get_yuzuchan_aliases()
+    yuzuchan_aliases: dict = get_yuzuchan_aliases()
     if yuzuchan_aliases:
         for aliases in yuzuchan_aliases.get("content", []):
             shortid = aliases.get('SongID', 0)

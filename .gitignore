@@ -12,8 +12,8 @@ uv.lock
 .env.prod
 .env
 
-# 本地调试连接使用
-frpc/frpc.exe
+# 测试临时文件
+temp/
 
 # static
-assets/pic/
+plugins/maib/assets/pic/

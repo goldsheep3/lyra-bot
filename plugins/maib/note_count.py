@@ -1,28 +1,20 @@
 import re
-from typing import List, Dict, Tuple
 
 
-def extract_note_tokens(simai_text: str) -> List[str]:
+async def extract_note_tokens(simai_text: str) -> list[str]:
     """
     从 simai 文本中提取最小音符 token 列表
     不做任何音符类型判断，仅做结构展开
     """
 
     simai_text = simai_text.strip()
-    tokens: List[str] = []
+    tokens: list[str] = []
 
     if not simai_text:
         return tokens
 
-    if any(c in simai_text for c in ' \n\r'):
-        # 大概是未经处理的多行，需要先处理
-        # 如果为 tools/maidata 中调用，大概是不会进入该处理段
-        metadata = re.findall(r'&inote_[0-9]=', simai_text)
-        if metadata and len(metadata) > 2:
-            raise ValueError("simai 文本包含过多谱面数据")
-        simai_text = re.sub(r'&[a-z]=.*?\n', '', simai_text)
-        simai_text = simai_text.replace('\n', '').replace('\r', '').replace(' ', '')
-
+    # 删除所有空白字符（包括换行、回车、空格等）
+    simai_text = simai_text.replace('\n', '').replace('\r', '').replace(' ', '')
     # 删除结尾 E
     simai_text = simai_text[:-1] if simai_text.endswith('E') else simai_text
     # 删除 () 标记
@@ -42,7 +34,7 @@ def extract_note_tokens(simai_text: str) -> List[str]:
     return tokens
 
 
-def count_notes(tokens: str | List[str]) -> Dict[str, List[str]]:
+async def count_notes(tokens: str | list[str]) -> dict[str, list[str]]:
     """
     对音符 token 进行数量统计
     根据提供的判定规则，将音符分类为 TAP, HOLD, SLIDE, TOUCH, BREAK
@@ -50,7 +42,7 @@ def count_notes(tokens: str | List[str]) -> Dict[str, List[str]]:
 
     if isinstance(tokens, str):
         # 如果输入是字符串，先提取 token 列表
-        tokens = extract_note_tokens(tokens)
+        tokens = await extract_note_tokens(tokens)
 
     result = {
         "TAP": [],
@@ -99,21 +91,21 @@ def count_notes(tokens: str | List[str]) -> Dict[str, List[str]]:
     return result
 
 
-def note_count_values(counts: Dict[str, List[str]]) -> Dict[str, int]:
+async def note_count_values(counts: dict[str, list[str]]) -> dict[str, int]:
     """从统计结果中提取各类型音符的数量"""
     return {k: len(v) for k, v in counts.items()}
 
 
-def count_note_values(simai_text: str) -> Dict[str, int]:
+async def count_note_values(simai_text: str) -> dict[str, int]:
     """直接从 simai 文本中统计各类型音符的数量"""
-    tokens = extract_note_tokens(simai_text)
-    counts = count_notes(tokens)
-    return note_count_values(counts)
+    tokens = await extract_note_tokens(simai_text)
+    counts = await count_notes(tokens)
+    return await note_count_values(counts)
 
 
-def count_to_tuple(simai_text: str) -> Tuple[int, int, int, int, int]:
+async def count_to_tuple(simai_text: str) -> tuple[int, int, int, int, int]:
     """将统计结果转换为元组形式，顺序为 (TAP, HOLD, SLIDE, TOUCH, BREAK)"""
-    counts = count_note_values(simai_text)
+    counts = await count_note_values(simai_text)
     return (
         counts.get("TAP", 0),
         counts.get("HOLD", 0),

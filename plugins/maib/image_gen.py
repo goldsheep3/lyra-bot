@@ -1,12 +1,13 @@
 import yaml
+import bisect
 from pathlib import Path
 from enum import IntEnum
-from typing import Optional, Tuple, Dict, Literal, List
+from typing import Optional, Tuple, Literal, List
 from dataclasses import dataclass
 
 from PIL import Image, ImageDraw, ImageFont, ImageChops
 
-from .utils import MaiData, MaiChart, MaiChartAch, MaiAlias
+from .utils import MaiData, MaiChart
 
 # ========================================
 # 基础常量
@@ -16,7 +17,7 @@ from .utils import MaiData, MaiChart, MaiChartAch, MaiAlias
 MODEL_VERSION: str = "260214"
 
 # assets 资源常量
-ASSETS_PATH = Path.cwd() / "assets"
+ASSETS_PATH = Path(__file__).parent / "assets"
 
 # 字体常量
 FONT_PATH = ASSETS_PATH / "fonts"
@@ -32,6 +33,16 @@ PIC_PATH = ASSETS_PATH / "pic"
 DXRATING_PATH = PIC_PATH / "dxrating"
 PLATE_PATH = PIC_PATH / "plate"
 VER_PATH = PIC_PATH / "ver"
+
+# Version 版本和 Genre 流派常量
+VERSIONS_CONFIG_PATH = ASSETS_PATH / "versions.yaml"
+VERSIONS_CONFIG = yaml.safe_load(VERSIONS_CONFIG_PATH.read_text(encoding="utf-8"))
+GENRE_CONFIG_PATH = ASSETS_PATH / "genres.yaml"
+GENRE_CONFIG = yaml.safe_load(GENRE_CONFIG_PATH.read_text(encoding="utf-8"))
+
+GENRE_PATH = ASSETS_PATH / "genres.yaml"
+with open(GENRE_PATH, 'r', encoding='utf-8') as f:
+    GENRE_CONFIG: dict[str, dict[str, str]] = yaml.safe_load(f)
 
 # 基础颜色常量
 COLOR_DXSCORE_GN = '#0A5'
@@ -56,6 +67,7 @@ class Difficulty:
     def level_text(self): return self._level_text if self._level_text else self.text
 
 
+EASY = Difficulty("EASY", "简单", bg='#FFF', frame='#FFF', text='#FFF', deep='#FFF', title_bg='#FFF')
 BASIC = Difficulty("BASIC", "基础", bg='#7E6', frame='#053', text='#FFF', deep='#8D5', title_bg='#2B5')
 ADVANCED = Difficulty("ADVANCED", "高级", bg='#FD3', frame='#B41', text='#FFF', deep='#FB1', title_bg='#F92')
 EXPERT = Difficulty("EXPERT", "专家", bg='#F88', frame='#C23', text='#FFF', deep='#F9A', title_bg='#F46')
@@ -66,7 +78,7 @@ UTAGE = Difficulty("U·TA·GE", "宴·会·场", bg='#E6E', frame='#D0B', text='
 
 DIFFICULTIES = [
     None,  # 0 - NONE
-    None,  # 1 - EASY
+    EASY,  # 1 - EASY
     BASIC,  # 2 - BASIC
     ADVANCED,  # 3 - ADVANCED
     EXPERT,  # 4 - EXPERT
@@ -126,14 +138,14 @@ class Sync(IntEnum):
 
 
 COMBO_DICT = {
-    0: (EVAL_GN, '···', '···', '···'),
+    0: (EVAL_GN, '', '', ''),
     1: (EVAL_GN, 'FULL COMBO', 'FC', '全连击'),
     2: (EVAL_GN, 'FULL COMBO +', 'FC+', '全连击+'),
     3: (EVAL_GD, 'ALL PERFECT', 'AP', '完美无缺'),
     4: (EVAL_GD, 'ALL PERFECT +', 'AP+', '完美无缺+'),
 }
 SYNC_DICT = {
-    0: (EVAL_DB, '···', '···', '···'),
+    0: (EVAL_DB, '', '', ''),
     1: (EVAL_DB, 'SYNC PLAY', 'SYNC', '同步游玩'),
     2: (EVAL_BE, 'FULL SYNC', 'FS', '全完同步'),  # 原文如此
     3: (EVAL_BE, 'FULL SYNC +', 'FS+', '全完同步+'),
@@ -141,13 +153,69 @@ SYNC_DICT = {
     5: (EVAL_GD, 'FULL SYNC DX +', 'FDX+', '完全同步DX+'),
 }
 
+# 全角映射
+def _build_full_width_table():
+    # 半角空格 (32) 对应全角空格 (12288)
+    # 其他 ASCII 可打印字符 (33-126) 对应全角 (65281-65374)
+    # 偏移量通常为 0xFEE0 (65248)
+    half_width = "".join(chr(i) for i in range(32, 127))
+    full_width = "　" + "".join(chr(i + 0xFEE0) for i in range(33, 127))
+    return str.maketrans(half_width, full_width)
+
+CHAR_FULL_WIDTH_TABLE = _build_full_width_table()
+
+# DXRating 版本分界线
+BOUNDARIES_DX_RATING = [0, 1000, 2000, 5000, 7000, 10000, 12000, 13000, 14000, 14500, 15000]
+BOUNDARIES_DX_RATING_NEW = [0, 1000, 2000, 5000, 7000, 10000, 12000, 13000, 14000, 14250, 14500, 14750, 15000, 15250, 15500, 15750, 16000, 16250, 16500, 16750]
+
 
 # ========================================
 # 辅助函数
 # ========================================
 
-# 颜色混合函数 (背景色 t，前景色 f)
+
+def get_image_from_path_or_weburl(path_or_url: str | Path) -> Optional[Image.Image]:
+    """从本地路径或网络 URL 获取图片。对 str 识别为 URL，对 Path 识别为本地路径。"""
+    if isinstance(path_or_url, str):
+        # 从 URL 下载到临时目录
+        import httpx
+        import tempfile
+        with httpx.Client(timeout=10.0) as client:
+            response = client.get(path_or_url)
+            response.raise_for_status()
+            with tempfile.NamedTemporaryFile(delete=False, suffix=Path(path_or_url).suffix) as tmp_file:
+                tmp_file.write(response.content)
+                path = Path(tmp_file.name)
+        if not path.exists():
+            return None
+    elif isinstance(path_or_url, Path):
+        path: Path = path_or_url
+    if path.exists():
+        try:
+            return Image.open(path).convert('RGBA')
+        except (FileNotFoundError, OSError):
+            return None
+    return None
+
+
+def get_range_index_left_closed(boundaries, value):
+    """
+    根据左闭右开区间 [b[i], b[i+1]) 返回索引 i
+    """
+    # 如果值小于最小值，通常返回 -1 或处理异常
+    if value < boundaries[0]:
+        return -1
+
+    idx = bisect.bisect_right(boundaries, value) - 1
+    
+    # 边界检查：如果值超出了最大边界
+    if idx >= len(boundaries):
+        return len(boundaries) - 1
+        
+    return idx
+
 def bcm(t: str, f: str):
+    """颜色混合函数 (背景色 t，前景色 f)"""
     r1, g1, b1 = (int(t[i] * 2, 16) for i in range(1, 4))
     r2, g2, b2, a = \
         (int(f[i] * 2, 16) for i in range(1, 5)) if len(f) == 5 else (int(f[i:i + 2], 16) for i in range(1, 9, 2))
@@ -183,33 +251,27 @@ class MS:
         return MS(int(self.multiple * other))
 
 
-def genre_split_and_get_color(genre: str) -> Tuple[str, str]:
-    """分割流派字符串"""
-    def is_genre(*args) -> bool: return any(g in genre.lower() for g in args)
+def get_difficulty(diff: int) -> Difficulty:
+    """根据难度数值获取 Difficulty 对象"""
+    if not 1 <= diff <= 7:
+        raise ValueError("Difficulty must be between 1 and 7")
+    return DIFFICULTIES[diff]
 
-    if is_genre('nico', 'ニコ'):
-        if '&' in genre:
-            genre = genre.replace('&', '$\n')
-        elif 'niconico' in genre:
-            genre = genre.replace('niconico', 'niconico&\n')
-        elif 'ニコニコ' in genre:
-            genre = genre.replace('ニコニコ', 'ニコニコ&\n')
-        return genre, '#02c8d3'  # niconico&VOCALOID
-    elif is_genre('pops', '流行'):
-        return genre, '#ff972a'
-    elif is_genre('project'):
-        return genre, '#ad59ee'
-    elif is_genre('game', 'ゲーム', '其他游戏'):
-        return genre, '#4be070'
-    elif is_genre('maimai', '舞萌'):
-        return genre, '#f64849'
-    elif is_genre('chunithm'):
-        genre = genre.replace('chu', '\nchu')
-        genre = genre.replace('CHU', '\nCHU')
-        return genre, '#3584fe'
-    elif is_genre('会', 'TA'):
-        return genre, '#dc39b8'
-    return genre, COLOR_THEME
+
+def get_full_width_text(text: str) -> str:
+    """将文本中的半角 ASCII 字符转换为全角形式"""
+    if not text:
+        return ""
+    return text.translate(CHAR_FULL_WIDTH_TABLE)
+
+
+def get_genre(genre_id: int, cn_level: Literal[0, 1, 2]) -> Tuple[str, str]:
+    """获取流派信息"""
+    genre_info = GENRE_CONFIG.get(str(genre_id), {})
+    target = {0: 'jp', 1: 'intl', 2: 'cn'}
+    genre = genre_info.get(target.get(cn_level, 'jp'), 'N/A')
+    color = genre_info.get('color', COLOR_THEME)
+    return genre, color
 
 
 # ========================================
@@ -326,7 +388,7 @@ class DrawUnit:
         f = MIS_HE.font_variant(size=self.ms.x(4.8))
         if all((not text, self.cn == 2)):
             fs = MIS_HE.font_variant(size=self.ms.x(3.3))
-            x1, y1, x2, y2 = f.getbbox(diff.text_title, anchor='lm', stroke_width=self.ms.x(0.8))
+            _x1, _y1, x2, y2 = f.getbbox(diff.text_title, anchor='lm', stroke_width=self.ms.x(0.8))
             mx2, my2 = self.ms.rev(x2), self.ms.rev(y2)
             self.text(x+mx2+0.5, y+my2, diff.text_title_cn, diff.text, 'ld',
                       fs, shadow=(0.8, diff.deep), shadow2=(0.8, diff.frame, 0.7))
@@ -368,6 +430,12 @@ class DrawUnit:
                 self.text(current_x, center_y, char, color, 'lm', font)
                 char_width = self.ms.rev(font.getlength(char))
                 current_x += char_width
+
+    def draw_badge(self, x: float, y: float, is_cabinet_dx: bool):
+        if is_cabinet_dx:
+            self.draw_dx_badge(x, y)
+        else:
+            self.draw_sd_badge(x, y)
 
     def level(self, x: float, y: float, diff: Difficulty, level: float, plus: bool = False,
               ignore_decimal: bool = False):
@@ -520,18 +588,38 @@ class DrawFactory:
         self.img = img.resize(ms.xy(width, height), Image.Resampling.LANCZOS)
 
         # 绘图单元
-        self.cn_level = cn_level
+        self.cn_level: Literal[0, 1, 2] = cn_level
         self.du = DrawUnit(self.img, multiple=ms, cn=cn_level)
 
     def get_image(self) -> Image.Image:
         """获取绘制完成的图像"""
         return self.img
 
+    def copyright_bar(self, x, y, width: int, lines: list[str] = [
+            "Powered by LyraBot (@GoldSheep3)",
+            "Version:" + MODEL_VERSION,
+            "Designer by Bakamai⑨'s Members",
+            "Background Artist by @银色山雾"
+        ]) -> tuple[int, int]:
+        """组件：版权信息"""
+        CR_INFO = "    |    ".join(lines)
+        font_size = 5
+        x1, y1, x2, y2 = -1, -1, width, -1  # 预设值，确定至少进入一次循环
+        while x2 - x1 > width * 0.9:  # 0.9x 留出一定边距，避免过于贴边
+            font_size -= 0.2
+            font = MIS_DB.font_variant(size=self.ms.x(font_size))
+            x1, y1, x2, y2 = font.getbbox(CR_INFO)  # 预加载字体
+        height = int(max((y2 - y1) * 1.1, 6))  # 1.1x 行距，留出一定边距
+        self.du.rounded_rect(0, y, width, height, fill='#313d7c', radius=0)  # 后续修改为遮罩渐变合成
+        self.du.text(x + width // 2, y + height // 2, text=CR_INFO, fill=COLOR_THEME, anchor='mm',
+                     font=MIS_DB.font_variant(size=self.ms.x(3.5)))
+        return width, height
+
     def chart_box(self, x, y, chart: MaiChart, cabinet_dx: bool, plus_level: int = 6,
                   is_utage: bool = False) -> Tuple[int, int]:
         """组件：谱面信息框"""
         du = self.du
-        diff = DIFFICULTIES[chart.difficulty]
+        diff = get_difficulty(chart.difficulty)
 
         width, height = 108, 36
         # noinspection DuplicatedCode
@@ -540,23 +628,23 @@ class DrawFactory:
         du.rounded_rect(x, y, width, height, radius=4, fill=None, outline=diff.frame, width=1)
         # 难度、DX
         du.difficulty(x + 2.5, y + 4.3, diff)
-        du.draw_dx_badge(x + 85, y + 2) if cabinet_dx else du.draw_sd_badge(x + 85, y + 2)
+        du.draw_badge(x + 85, y + 2, is_cabinet_dx=cabinet_dx)
         # 等级 LV
         plus = round(chart.lv % 1 * 10) >= plus_level
         du.level(x + 64, y + 7.4, diff, chart.lv, plus=plus, ignore_decimal=is_utage)
         # 达成率
-        if chart.ach:
-            du.ach(x + 2, y + 9, diff, chart.ach.achievement)
-            dxs, dxs_max, dxs_star = chart.ach.dxscore_tuple
-            du.dxscore(x + 38, y + 25, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
-            c, t, tl, tc = COMBO_DICT[chart.ach.combo]
-            du.evaluate(x + 3, y + 27, text=tc if self.du.cn == 2 else t, color=c)
-            c, t, tl, tc = SYNC_DICT[chart.ach.sync]
-            du.evaluate(x + 3, y + 32, text=tc if self.du.cn == 2 else t, color=c)
+        ach = chart.get_ach()
+        du.ach(x + 2, y + 9, diff, ach.achievement)
+        dxs, dxs_max, dxs_star = ach.dxscore_tuple
+        du.dxscore(x + 38, y + 25, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
+        c, t, _tl, tc = COMBO_DICT[ach.combo]
+        du.evaluate(x + 3, y + 27, text=tc if self.du.cn == 2 else t, color=c)
+        c, t, _tl, tc = SYNC_DICT[ach.sync]
+        du.evaluate(x + 3, y + 32, text=tc if self.du.cn == 2 else t, color=c)
 
         info_line5 = [
             f"谱师: {chart.des}",
-            f"拟合定数: {chart.diving_fish_lv}" if chart.diving_fish_lv else '',
+            f"拟合定数: {chart.lv_synh}" if chart.lv_synh else '',
         ]
 
         du.rounded_rect(x + 64, y + 9, 42, 25, fill=bcm(diff.bg, '#0009'), radius=1.5)
@@ -569,49 +657,132 @@ class DrawFactory:
                        is_utage: bool = False) -> Tuple[int, int]:
         """组件：谱面信息框 Lite"""
         du = self.du
-        diff = DIFFICULTIES[chart.difficulty]
+        diff = get_difficulty(chart.difficulty)
 
-        width, height = 108, 26
+        width, height = 108, 25
         # noinspection DuplicatedCode
         du.rounded_rect(x, y, width, height, radius=4, fill=diff.bg)
         du.cut_line(x, y, width, height, radius=4, line_y=y + 2, line_h=5, fill=diff.title_bg)
         du.rounded_rect(x, y, width, height, radius=4, fill=None, outline=diff.frame, width=1)
         # 难度、DX
         du.difficulty(x + 2.5, y + 4.3, diff)
-        du.draw_dx_badge(x + 85, y + 2) if cabinet_dx else du.draw_sd_badge(x + 85, y + 2)
+        du.draw_badge(x + 85, y + 2, is_cabinet_dx=cabinet_dx)
         # 等级 LV
         plus = round(chart.lv % 1 * 10) >= plus_level
         du.level(x + 64, y + 7.4, diff, chart.lv, plus=plus, ignore_decimal=is_utage)
         # 达成率
-        if chart.ach:
-            du.ach(x + 46, y + 9, diff, chart.ach.achievement)
-            dxs, dxs_max, dxs_star = chart.ach.dxscore_tuple
-            du.dxscore_lite(x + 2, y + 21, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
-            c, t, tl, tc = COMBO_DICT[chart.ach.combo]
-            du.evaluate(x + 3, y + 12, text=tc if self.du.cn == 2 else t, color=c)
-            c, t, tl, tc = SYNC_DICT[chart.ach.sync]
-            du.evaluate(x + 3, y + 17, text=tc if self.du.cn == 2 else t, color=c)
+        ach = chart.get_ach()
+        du.ach(x + 46, y + 9, diff, ach.achievement)
+        dxs, dxs_max, dxs_star = ach.dxscore_tuple
+        du.dxscore_lite(x + 2, y + 20, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
+        c, t, _tl, tc = COMBO_DICT[ach.combo]
+        du.evaluate(x + 3, y + 12, text=tc if self.du.cn == 2 else t, color=c)
+        c, t, _tl, tc = SYNC_DICT[ach.sync]
+        du.evaluate(x + 3, y + 17, text=tc if self.du.cn == 2 else t, color=c)
 
         return width, height
 
+    def mini_box(self, x: int, y: int, data: MaiData, diff_number: int) -> Tuple[int, int]:
+        """组件：Mini 成绩框"""
+        du = self.du
+        ms = self.ms
+        diff = get_difficulty(diff_number)
+        chart = data.get_chart(diff_number)
+        if not chart:
+            return 0, 0  # 未绘制
+        ach = chart.get_ach()
+        
+        width, height = 97, 36
+
+        # 外框背景
+        du.draw.rounded_rectangle(
+            ms.size(x, y, width, height), 
+            radius=ms.x(2.5), 
+            fill=diff.bg, 
+            outline=diff.frame,
+            width=3, 
+            corners=(True, True, True, True)
+        )
+
+        # 标题栏
+        du.draw.rectangle(ms.size(x, y + 2, width, 5), fill=diff.title_bg)
+
+        # 标题栏文字
+        limit_t = MIS_HE.font_variant(size=ms.x(4.6)).getlength('I' * 62)
+        du.difficulty(x + 36, y + 4.2, diff, text=f'#{data.shortid}', limit_width=limit_t)
+
+        # 曲绘
+        if data.image:
+            du.image(x + 2, y + 2, 32, 32, radius=1.5, outline=diff.frame, outline_width=0.5, png=data.image)
+
+        # 谱面类型 (SD/DX)
+        du.draw_badge(x + 75, y + 2, is_cabinet_dx=data.is_cabinet_dx)
+
+        # 达成率
+        du.ach(x + 35, y + 9, diff, ach_percent=ach.achievement)
+
+        offset = 1 if self.cn_level == 2 else 0
+        # FC/FC+/AP/AP+
+        if ach.combo:
+            c, _t, tl, tc = COMBO_DICT[ach.combo]
+            du.evaluate(x + 36, y + 27, text=tc if self.cn_level == 2 else tl, color=c)
+            
+        # SYNC/FS/FS+/FDX/FDX+
+        if ach.sync:
+            c, _t, tl, tc = SYNC_DICT[ach.sync]
+            du.evaluate(x + 36, y + 32, text=tc if self.cn_level == 2 else tl, color=c, offset=offset)
+
+        # INFO
+        # 留空 (x+53, y+25, w=42, h=5) 可供自定义
+
+        # DXSCORE
+        dxs, dxs_max, dxs_star = ach.dxscore_tuple
+        du.dxscore_lite(x + 53, y + 31, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
+
+        # 外框边框
+        du.draw.rounded_rectangle(
+            ms.size(x, y, width, height), 
+            radius=ms.x(2.5), 
+            fill=None, 
+            outline=diff.frame,
+            width=3, 
+            corners=(True, True, True, True)
+        )
+
+        return width, height
+
+    def b50_box(self, x: int, y: int, data: MaiData, diff_number: int, index: int, is_b15: Optional[bool] = None) -> tuple[int, int]:
+        """组件：B50 成绩框"""
+        du = self.du
+        ms = self.ms
+        diff = get_difficulty(diff_number)
+        chart = data.get_chart(diff_number)
+        if not chart:
+            return 0, 0  # 未绘制
+
+        w, h = self.mini_box(x, y, data, diff_number)
+
+        du.rounded_rect(x + 53, y + 25, 42, 5, fill=bcm(diff.bg, '#0009'), radius=2)
+        du.rounded_rect(x + 53, y + 25, 16, 5, fill='#006', radius=2)
+        b_type = '15' if is_b15 else '35'
+        du.text(x+61, y+27.5, f"b{b_type} #{index}", fill='#FFF', anchor='mm', font=MIS_DB.font_variant(size=ms.x(3))) 
+        du.text(x+70, y+27.5, f"{chart.lv:.1f} > {data.get_chart_dxrating(diff_number)}", fill='#FFF', anchor='lm', font=MIS_DB.font_variant(size=ms.x(3)))
+
+        return w, h
 
 class DrawInfo(DrawFactory):
     """实现 `info11951` 图像的绘制"""
 
-    def __init__(self, maidata: MaiData, version_config: Dict[int, str], multiple: float = 1,
-                 cn_level: Literal[0, 1, 2] = 0):
+    def __init__(self, maidata: MaiData, multiple: float = 1, cn_level: Literal[0, 1, 2] = 0):
         super().__init__(width=240, height=240, ms_multiple=int(10 * multiple), cn_level=cn_level)
-        self.maidata = maidata
-        self.ver_cfg = version_config
-        self._info()
+        self._info(maidata)
 
-    def _info(self):
+    def _info(self, maidata: MaiData):
         """实现 `info11951` 图像的绘制"""
         x, y = 10, 10
         width = 220
         margin = 5
         du = self.du
-        maidata = self.maidata
 
         # ========== Module.1 曲绘和基本信息 ==========
         # 曲绘
@@ -625,8 +796,9 @@ class DrawInfo(DrawFactory):
         # 艺术家
         du.text(x + t, y + 14, text=maidata.artist, fill='#FFF', anchor='la', font=self.font_mdb[5])
         # ShortID, BPM
-        du.text(x + t, y + 23, text=f"ID {self.maidata.shortid}", fill='#FFF', anchor='la', font=self.font_mdb[6])
-        du.text(x + t + 30, y + 23, text=f"BPM {self.maidata.bpm}", fill='#FFF', anchor='la', font=self.font_mdb[6])
+        du.text(x + t, y + 23, text=f"ID {maidata.shortid}", fill='#FFF', anchor='la', font=self.font_mdb[6])
+        du.text(x + t + 30, y + 23, text=f"BPM {maidata.bpm}", fill='#FFF', anchor='la', font=self.font_mdb[6])
+        du.text(x + t + 60, y + 23, text=f"数据来源: {maidata.converter}", fill='#FFF', anchor='la', font=self.font_mdb[6])
         # Genre, Version
         gvv_title = y + 34
         gvv_la = gvv_title + 5
@@ -638,7 +810,7 @@ class DrawInfo(DrawFactory):
         du.text(x+t+p*2, gvv_title, text="CN", fill='#FFF', anchor='la', font=self.font_mdb[4])
 
         # Genre
-        genre_text, genre_fill = genre_split_and_get_color(maidata.genre)
+        genre_text, genre_fill = get_genre(maidata.genre, cn_level=self.cn_level)
         du.text(x+t+17, gvv_mm, text=genre_text, fill='#FFF', anchor='mm', font=self.font_mdb[5],
                 shadow=(1.5, '#FFF'))
         du.text(x+t+17, gvv_mm, text=genre_text, fill=genre_fill, anchor='mm', font=self.font_mdb[5],
@@ -648,7 +820,7 @@ class DrawInfo(DrawFactory):
         if ver_jp_path.exists():
             du.image(x+t+p, gvv_la, 34, 16, radius=0, png=ver_jp_path)
         else:
-            text = self.ver_cfg.get(maidata.version, str(maidata.version))
+            text = VERSIONS_CONFIG.get(maidata.version, str(maidata.version))
             text = text.replace(' ', '\n')
             du.text(x+t+p+17, gvv_mm, text=text,
                     fill='#FFF', anchor='mm', font=self.font_mdb[5])
@@ -658,7 +830,7 @@ class DrawInfo(DrawFactory):
             if ver_cn_path.exists():
                 du.image(x+t+p*2, gvv_la, 34, 16, radius=0, png=ver_cn_path)
             else:
-                text = self.ver_cfg.get(maidata.version_cn, str(maidata.version_cn))
+                text = VERSIONS_CONFIG.get(maidata.version_cn, str(maidata.version_cn))
                 text = text.replace(' ', '\n')
                 du.text(x+t+p*2+17, gvv_mm, text=text,
                         fill='#FFF', anchor='mm', font=self.font_mdb[5])
@@ -692,9 +864,7 @@ class DrawInfo(DrawFactory):
 
         # ========== Module.3 详细谱面数据 ==========
         now_x = x
-        for i, chart in enumerate(maidata.charts):
-            if not chart.ach:
-                chart.ach = MaiChartAch(-101, 0, 0, 0, 0)
+        for i, chart in enumerate(maidata.charts.values()):
             if chart.difficulty >= 4:
                 _w, h = self.chart_box(now_x, y, chart, cabinet_dx=maidata.is_cabinet_dx)
             else:
@@ -708,18 +878,70 @@ class DrawInfo(DrawFactory):
                 y += h + margin
 
         # ========== Module.4 版权信息 ==========
-        CR_INFO = "    |    ".join([
-            "Powered by LyraBot (@GoldSheep3)",
-            f"Version: {MODEL_VERSION}",
-            "Designer by Bakamai⑨'s Members",
-            "Background Artist by @银色山雾"
-        ])
-        du.rounded_rect(0, y, 240, 6, fill='#313d7c', radius=0)  # 后续修改为遮罩渐变合成
-        du.text(120, y + 3, text=CR_INFO, fill=COLOR_THEME, anchor='mm',
-                font=MIS_DB.font_variant(size=self.ms.x(3.5)))
+        _w, h = self.copyright_bar(0, y, 240)
         # 切割
-        self.img = self.img.crop((0, 0, self.ms.x(240), self.ms.x(y + 6)))
+        self.img = self.img.crop((0, 0, self.ms.x(240), self.ms.x(y + h)))
         self.img = self.img.convert('RGB')
+
+
+class DrawB50Boxex(DrawFactory):
+    """实现 `b50` 图像的绘制"""
+
+    # TODO 后面肯定要打包一个 utils 类管理两个列表和版本/DXRating规则！
+    def __init__(self, b35: list[tuple[MaiData, int]], b15: list[tuple[MaiData, int]],
+                 current_version: int, ra: int, user_name: str, user_avatar: Optional[Image.Image] = None,
+                 multiple: float = 1, cn_level: Literal[0, 1, 2] = 0):
+        super().__init__(width=411, height=580, ms_multiple=int(10 * multiple), cn_level=cn_level)
+        self._b50(b35, b15, current_version, ra, user_name, user_avatar)
+
+    def _b50(self, b35: list[tuple[MaiData, int]], b15: list[tuple[MaiData, int]], current_version: int, ra: int,
+             user_name: str, user_avatar: Optional[Image.Image]):
+        """实现 `b50` 图像的绘制"""
+        x, y = 7, 7
+        margin = 3
+        du = self.du
+
+        # 头像
+        user_avatar = user_avatar if user_avatar else Image.new('RGB', (10, 10), color='#CCC')
+        du.image(x, y, 32, 32, radius=5, outline='#FFF', outline_width=1, png=user_avatar)
+        # DX Rating
+        
+        if 2000 > current_version >= 26:
+            # CiRCLE PLUS 修改了部分图标，增加了极彩框
+            dxra_fram_path = Path(PIC_PATH / "dxrating" / f"JP_CIRP_{get_range_index_left_closed(BOUNDARIES_DX_RATING_NEW, ra)}.png")
+            if not dxra_fram_path.exists():
+                dxra_fram_path = Path(PIC_PATH / "dxrating" / f"JP_{get_range_index_left_closed(BOUNDARIES_DX_RATING_NEW, ra)}.png")
+        else:
+            dxra_fram_path = Path(PIC_PATH / "dxrating" / f"JP_{get_range_index_left_closed(BOUNDARIES_DX_RATING, ra)}.png")
+        if dxra_fram_path.exists():
+            du.image(x+36, y, 70, 14, radius=0, png=dxra_fram_path)
+        # Username
+        du.rounded_rect(x+36, y+15, 100, 17, fill='#333', radius=2)
+        du.text(x+36, y+23.5, text=' ' + get_full_width_text(user_name), fill='#FFF', anchor='lm',
+                font=MIS_DB.font_variant(size=self.ms.x(10)))
+        
+
+        y += 32 + margin * 2
+
+        for i, (maidata, diff) in enumerate(b35, start=1):
+            tx = x + i % 4 * (97 + 3)
+            ty = y + i // 4 * (36 + 3)
+            _w, _h = self.b50_box(tx, ty, maidata, diff_number=diff, index=i, is_b15=False)
+
+        y += (len(b35) + 3) // 4 * (36 + 3) + margin
+
+        for i, (maidata, diff) in enumerate(b15, start=1):
+            tx = x + i % 4 * (97 + 3)
+            ty = y + i // 4 * (36 + 3)
+            _w, _h = self.b50_box(tx, ty, maidata, diff_number=diff, index=i, is_b15=True)
+
+        y += (len(b15) + 3) // 4 * (36 + 3)
+
+        _w, h = self.copyright_bar(0, y, 411)
+        # 切割
+        self.img = self.img.crop((0, 0, self.ms.x(411), self.ms.x(y + h)))
+        self.img = self.img.convert('RGB')
+        
 
 
 # todo info_box_mini 等元件的新写法转换
@@ -771,80 +993,6 @@ def info_box_mini(
     return img
 
 
-def b50_box(
-        diff: int | Difficulty,
-        cabinet_dx: bool,
-        short_id: int,
-        title: str,
-        level: float,
-        ra: int,
-        achievement: float,
-        bg_path: Path,
-        dxscore: Tuple[int, int, int],
-        new_song: bool,
-        index: int,
-        combo: Optional[Combo | int] = None,
-        sync: Optional[Sync | int] = None,
-        all_cn: bool = False,
-        ms_multiple: int | MS = 10,
-) -> Image.Image:
-    ms = ms_multiple if isinstance(ms_multiple, MS) else MS(ms_multiple)
-    diff = diff if isinstance(diff, Difficulty) else DIFFICULTIES[diff]
-
-    img = Image.new('RGBA', (ms.x(91) + 2, ms.x(36) + 2), color='#FFFFFF00')
-
-    # 绘图单元
-    du = DrawUnit(img, multiple=ms)
-
-    # 外框
-    du.draw.rounded_rectangle(ms.size(0, 0, 91, 36), radius=ms.x(2.5), fill=diff.bg, outline=diff.frame,
-                              width=3, corners=(True, True, True, True))
-
-    # 标题栏
-    du.draw.rectangle(ms.size(0, 2, 91, 5), fill=diff.title_bg)
-
-    # 标题栏文字
-    limit_t = MIS_HE.font_variant(size=ms.x(4.6)).getlength('I' * 62)  # 实测结果 todo 修改为width计算
-    du.difficulty(2, 4.2, diff, text=f'#{short_id}  {title}', limit_width=limit_t)
-
-    # 曲绘
-    du.image(2, 9, 25, 25, radius=1.5, outline=diff.deep, outline_width=0.3, png=bg_path)
-
-    # 谱面类型 (SD/DX) - 进行了额外的 MS 缩放
-    tv = ms.multiple * 1
-    ms.multiple = tv * 0.5
-    tx, ty = MS(2).xy(1.25, 8.5)
-    du.draw_dx_badge(tx, ty) if cabinet_dx else du.draw_sd_badge(tx, ty)
-    ms.multiple = tv * 1
-
-    # 达成率
-    du.ach(29, 9, diff, ach_percent=achievement)
-
-    # DXSCORE
-    du.dxscore(65, 25, score=dxscore[0], max_score=dxscore[1], star_count=dxscore[2], diff=diff)
-
-    offset = 1 if all_cn else 0
-    # FC/FC+/AP/AP+
-    if combo:
-        c, t, tl, tc = COMBO_DICT[combo]
-        du.evaluate(30, 27, text=tc if all_cn else tl, color=c)
-    # SYNC/FS/FS+/FDX/FDX+
-    if sync:
-        c, t, tl, tc = SYNC_DICT[sync]
-        du.evaluate(30, 32, text=tc if all_cn else tl, color=c, offset=offset)
-
-    # INFO
-    du.rounded_rect(43, 25, 20, 9, fill=bcm(diff.bg, '#0009'), radius=1.5)
-    du.infos(44.5, 29.5, lines=[f'b{'1' if new_song else '3'}5#{index}', f'{level:.1f} > {ra}'], line_height=3.4,
-             font=MIS_DB.font_variant(size=ms.x(2.5)))
-
-    # 外框
-    du.draw.rounded_rectangle(ms.size(0, 0, 91, 36), radius=ms.x(2.5), fill=None, outline=diff.frame,
-                              width=3, corners=(True, True, True, True))
-
-    return img
-
-
 def simple_list(maidata_list: List[MaiData]) -> Image.Image:
     """生成一个简单的文本列表图，展示多个曲目的信息"""
     text = '\n'.join([f"{maidata.shortid}.\t{maidata.title}"
@@ -858,49 +1006,3 @@ def simple_list(maidata_list: List[MaiData]) -> Image.Image:
     img_draw.text((2, 2), text, fill='#000', font=font)
 
     return img
-
-
-# 示例用法
-if __name__ == "__main__":
-    maidata = MaiData(
-        shortid=101,
-        title="おちゃめ機能",
-        bpm=150,
-        artist="ゴジマジP",
-        genre="niconicoボーカロイド",
-        cabinet='SD',
-        version=2,
-        version_cn=2022,
-        converter="PreData",
-        img_path=Path(r"C:\Users\sanji\AppData\Roaming\JetBrains\PyCharm2025.3\scratches\bg.png"),
-        aliases=[MaiAlias(101, a, 0, -1) for a in ["ochamekinou", "五月病", "天真浪漫机能", "天真烂漫机能", "机能"]]*5,
-    )
-
-    for i in range(2, 7):
-        maidata.set_chart(MaiChart(
-            difficulty=i,
-            lv=3.6 + i * 1.8,
-            des="chartDes",
-            ach=MaiChartAch(
-                achievement=70 + 2.63 ** (i/1.7),
-                dxscore=200 + i * 100,
-                dxscore_max=300 + i * 100,
-                combo=Combo(i - 2),
-                sync=Sync(i - 1)
-            )
-        ))
-
-    config_yaml_path = Path.cwd() / "versions.yaml"
-    with open(config_yaml_path, "r", encoding="utf-8") as f:
-        ver_cfg: Dict[int, str] = yaml.safe_load(f)
-
-    target = DrawInfo(maidata, ver_cfg, multiple=0.3, cn_level=1).get_image()
-
-    from PIL import ImageTk
-    import tkinter as tk
-
-    root = tk.Tk()
-    tk_image = ImageTk.PhotoImage(target)
-    label = tk.Label(root, image=tk_image)
-    label.pack()
-    root.mainloop()
