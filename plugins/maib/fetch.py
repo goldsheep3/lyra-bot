@@ -1,6 +1,7 @@
 import re
-from pathlib import Path
+import orjson
 import zipfile
+from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -11,7 +12,7 @@ from nonebot_plugin_datastore.db import post_db_init
 
 from. import models, network, services
 from .bot_registry import PluginRegistry
-from .utils import MaiData, MaiChart, MaiAlias, GENRES_DATA, VERSIONS_DATA
+from .utils import MaiData, MaiChart, GENRES_DATA, VERSIONS_DATA
 from .note_count import count_to_tuple
 
 
@@ -26,6 +27,13 @@ def initialize_genres_data_rev():
     return genres_config_rev
 
 GENRES_DATA_REV = initialize_genres_data_rev()
+
+
+def get_file_stat_identity(file_path: Path) -> str:
+    """获取文件的特征标识（修改时间 + 文件大小）"""
+    stat = file_path.stat()
+    # 使用 修改时间_文件大小 作为唯一标识
+    return f"{stat.st_mtime}_{stat.st_size}"
 
 
 async def parse_version(version_str: str) -> int:
@@ -188,13 +196,27 @@ async def parse_maidata(raw_metadata: dict[str, str], zip_path: Path) -> MaiData
 async def process_chart_files(chart_files: list[Path]) -> list[MaiData]:
     """处理文件夹中所有 zip 文件，提取 maidata.txt 中的元数据"""
     logger.info(f"数据同步-谱面处理开始：共 {len(chart_files)} 个 zip 文件")
+    cache_path = PluginRegistry.get_cache_dir() / "stat_cache.json"
+    if cache_path.exists():
+        stat_cache = orjson.loads(cache_path.read_bytes())
+    else:
+        stat_cache = {}
 
     result = dict()
     for chart_path in chart_files:
+
         if not chart_path.exists():
             logger.warning(f"数据同步-谱面处理：{str(chart_path)} 不存在，跳过")
             continue
         chart_file_name = chart_path.stem
+
+        # 文件状态校验，跳过未修改的文件
+        file_identity = get_file_stat_identity(chart_path)
+        if stat_cache.get(chart_file_name) == file_identity:
+            logger.info(f"数据同步-谱面处理：{chart_path.name} 未修改，跳过")
+            continue
+        else:
+            stat_cache[chart_file_name] = file_identity
 
         try:
             # 打开 zip 文件
@@ -235,6 +257,10 @@ async def process_chart_files(chart_files: list[Path]) -> list[MaiData]:
         except Exception as e:
             logger.warning(f"数据同步-谱面处理失败 {chart_file_name}: {e}")
             raise e
+
+    # 更新 stat 缓存
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_path.write_bytes(orjson.dumps(stat_cache))
 
     logger.success(f"数据同步-谱面处理完成：合计处理到 {len(result)} 条谱面数据")
     return list(result.values())
@@ -327,11 +353,9 @@ async def maintenance_task():
             return
 
         # 3. 处理数据
-        maidata_list: list[MaiData] = await process_chart_files(charts_files)
+        maidata_dict: dict[int, MaiData] = {m.shortid: m for m in await process_chart_files(charts_files)}
 
-        # 4. 获取水鱼和别名库
-        maidata_index: dict[int, int] = {m.shortid: i for i, m in enumerate(maidata_list)}
-        # 4.1 同步国服难度和版本
+        # 4. 同步国服难度和版本
         if sy_music_data := await network.sy_music_data_from_file(PluginRegistry.get_cache_dir() / "sy_music_data.json"):
             for sy_data in sy_music_data:
                 shortid = int(sy_data.get('id', 0))
@@ -340,69 +364,23 @@ async def maintenance_task():
                 # 国服版本号
                 ver = await parse_diving_fish_version(sy_data.get('basic_info', {}).get('from', ''))
             
-                if shortid in maidata_index:
-                    idx = maidata_index[shortid]
+                if shortid in maidata_dict:
+                    maidata = maidata_dict[shortid]
                     # 同步版本号
-                    maidata_list[idx].version_cn = ver
+                    maidata.version_cn = ver
                     # 同步难度
-                    for diff, chart in maidata_list[idx].charts.items():
+                    for diff, chart in maidata.charts.items():
                         lv_cn = ds[diff-2] if diff-2 < len(ds) else None
                         if lv_cn is not None:
                             chart.lv_cn = lv_cn
         else:
             logger.warning("数据同步-水鱼数据：music_data 加载失败，无法同步国服版本号")
 
-        # 4.2 同步拟合难度
-        if sy_chart_stats := await network.sy_chart_stats():
-            for shortid, sy_stats in sy_chart_stats.get("charts", {}).items():
-                shortid = int(shortid)
-                fit_diffs: list[float] = [s.get('fit_diff', 0) for s in sy_stats]
-
-                if shortid in maidata_index:
-                    idx = maidata_index[shortid]
-                    for diff, chart in maidata_list[idx].charts.items():
-                        i = diff - 2
-                        if i < len(fit_diffs):
-                            chart.lv_synh = fit_diffs[i]
-        else:
-            logger.warning("数据同步-水鱼数据：chart_stats 加载失败，无法同步拟合难度")
-
-        # 4.3 同步别名数据
-        from time import time
-        from collections import defaultdict
-        
-        now = int(time())
-        aliases_dict: dict[int, list[MaiAlias]] = defaultdict(list)
-        aliases_set: set[tuple[int, str]] = set()
-
-        def add_to_aliases(song_id: int, alias_names: list[str], source_id: int):
-            # source_id: 复数 create_id 表示来自别名库自动同步，-101 代表 YuzuChaN，-102 代表 LXNS
-            for alias in alias_names:
-                if (song_id, alias) not in aliases_set:
-                    aliases_dict[song_id].append(
-                        MaiAlias(shortid=song_id, alias=alias, create_qq=source_id, create_time=now)
-                    )
-                    aliases_set.add((song_id, alias))
-
-        # 处理 Yuzuchan 别名
-        if yuzuchan_data := await network.yuzuchan_alias_list():
-            for entry in yuzuchan_data.get("content", []):
-                add_to_aliases(entry.get('SongID', 0), entry.get('Alias', []), -101)
-        # 处理 LXNS 别名
-        if lxns_data := await network.lx_alias_list():
-            for entry in lxns_data.get("aliases", []):
-                add_to_aliases(entry.get('song_id', 0), entry.get('aliases', []), -102)
-
-        # 5. 将别名批量添加到 MaiData 对象中
-        for maidata in maidata_list:
-            if maidata.shortid in aliases_dict:
-                maidata.add_aliases(aliases_dict[maidata.shortid])
-
-    # 5. 存储到数据库
+        # 5. 存储到数据库
         get_session = PluginRegistry.get_session
         async with get_session() as session:
-            total = len(maidata_list)
-            for idx, mai in enumerate(maidata_list):
+            total = len(maidata_dict)
+            for idx, mai in enumerate(maidata_dict.values()):
                 try:
                     await upsert_maidata(session, mai)
                     if (idx + 1) % 50 == 0:
@@ -414,6 +392,42 @@ async def maintenance_task():
             
             # 最后统一 commit 剩余部分
             await session.commit()
+
+        # 6. 同步拟合难度
+        sy_lvnh = []
+        if sy_chart_stats := await network.sy_chart_stats():
+            for shortid, sy_stats in sy_chart_stats.get("charts", {}).items():
+                shortid = int(shortid)
+                fit_diffs: list[float] = [s.get('fit_diff', 0) for s in sy_stats]
+                for diff, fit_diff in enumerate(fit_diffs, start=2):
+                    sy_lvnh.append((shortid, diff, fit_diff))
+            if sy_lvnh:
+                await services.set_lv_synh_batch(sy_lvnh)
+        else:
+            logger.warning("数据同步-水鱼数据：chart_stats 加载失败，无法同步拟合难度")
+
+        # 7. 独立获取别名数据
+        from time import time
+        
+        now = int(time())
+        # 处理 Yuzuchan 别名
+        if yuzuchan_data := await network.yuzuchan_alias_list():
+            aliases_set: set[tuple[int, str]] = set()
+            for entry in yuzuchan_data.get("content", []):
+                song_id = int(entry.get('SongID', 0))
+                aliases: list[str] = entry.get('Alias', '')
+                aliases_set.update((song_id, alias) for alias in aliases)
+            # 存储别名数据
+            await services.add_aliases(list(aliases_set), source_id=-101, add_time=now)
+        # 处理 LXNS 别名
+        if lxns_data := await network.lx_alias_list():
+            aliases_set: set[tuple[int, str]] = set()
+            for entry in lxns_data.get("aliases", []):
+                song_id = int(entry.get('song_id', 0))
+                aliases: list[str] = entry.get('aliases', [])
+                aliases_set.update((song_id, alias) for alias in aliases)
+            # 存储别名数据
+            await services.add_aliases(list(aliases_set), source_id=-102, add_time=now)
 
         logger.success("maib 数据重整理完成！")
         

@@ -4,12 +4,10 @@ import bisect
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Optional, List, Set, Tuple, Any, Literal
+from typing import Dict, Optional, List, Tuple, Literal
 
 from PIL import Image
 from loguru import logger
-
-from .network import sy_music_data_from_file
 
 
 # 完成率别名映射

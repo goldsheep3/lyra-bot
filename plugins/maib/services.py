@@ -95,18 +95,46 @@ async def get_song_by_version(version: int, cn: bool = False) -> Sequence[MaiDat
 
 
 # --- 根据谱面难度 (lv) 筛选 shortid 列表 ---
-async def get_shortids_by_lv(min_lv: float, max_lv: float) -> Sequence[int]:
-    """
-    查询定数在指定范围内的所有乐曲 ID
-    """
+async def get_shortids_by_lv(min_lv: float, max_lv: float, server: utils.SERVER_TAG) -> Sequence[int]:
+    """查询定数在指定范围内的所有乐曲 ID"""
     async with get_session() as session:
         statement = (
             select(MaiChart.shortid)
-            .where(MaiChart.lv >= min_lv, MaiChart.lv <= max_lv)
             .distinct()
         )
+        if server == "CN":
+            statement = statement.where(MaiChart.lv_cn >= min_lv, MaiChart.lv_cn <= max_lv)
+        else:
+            statement = statement.where(MaiChart.lv >= min_lv, MaiChart.lv <= max_lv)
+
         result = await session.execute(statement)
         return result.scalars().all()
+
+
+async def set_lv_synh(shortid: int, difficulty: int, lvnh: float):
+    """设置指定谱面的水鱼拟合定数"""
+    async with get_session() as session:
+        stmt = (
+            select(MaiChart)
+            .where(MaiChart.shortid == shortid, MaiChart.difficulty == difficulty)
+        )
+        chart = (await session.execute(stmt)).scalar_one_or_none()
+        if chart:
+            chart.lv_synh = lvnh
+            await session.commit()
+
+async def set_lv_synh_batch(data: Sequence[tuple[int, int, float]]):
+    """批量设置水鱼拟合定数，输入为 (shortid, difficulty, lvnh) 的列表"""
+    async with get_session() as session:
+        for shortid, difficulty, lvnh in data:
+            stmt = (
+                select(MaiChart)
+                .where(MaiChart.shortid == shortid, MaiChart.difficulty == difficulty)
+            )
+            chart = (await session.execute(stmt)).scalar_one_or_none()
+            if chart:
+                chart.lv_synh = lvnh
+        await session.commit()
 
 
 # --- 别名的添加 ---
@@ -130,6 +158,42 @@ async def add_alias(shortid: int, alias_text: str, qq: int, group_id: Optional[i
         await session.commit()
         return True
 
+async def add_aliases(data: Sequence[tuple[int, str]], source_id: int, add_time: int):
+    """批量添加别名"""
+    # 1. 提取所有目标 shortid
+    requested_ids = {shortid for shortid, _ in data}
+    if not requested_ids:
+        return
+
+    async with get_session() as session:
+        # 2. 【核心修改】检查哪些 shortid 在 maidata 主表中确实存在
+        valid_ids_stmt = select(MaiData.shortid).where(MaiData.shortid.in_(list(requested_ids)))
+        valid_ids_result = await session.execute(valid_ids_stmt)
+        existing_song_ids = {row[0] for row in valid_ids_result.all()}
+
+        # 3. 查出已有的别名（仅针对主表存在的歌）
+        existing_alias_stmt = select(MaiAlias.shortid, MaiAlias.alias).where(
+            MaiAlias.shortid.in_(list(existing_song_ids))
+        )
+        existing_alias_result = await session.execute(existing_alias_stmt)
+        known_aliases = {(row[0], row[1]) for row in existing_alias_result.all()}
+
+        # 4. 过滤并添加
+        new_count = 0
+        for shortid, alias_text in data:
+            # 只有当：1. 主表有这首歌  2. 别名表没这个别名 时才插入
+            if shortid in existing_song_ids and (shortid, alias_text) not in known_aliases:
+                session.add(MaiAlias(
+                    shortid=shortid,
+                    alias=alias_text,
+                    create_time=add_time,
+                    create_qq=source_id
+                ))
+                known_aliases.add((shortid, alias_text)) # 防止 data 内部重复
+                new_count += 1
+        
+        if new_count > 0:
+            await session.commit()
 
 # --- 7. 别名的鉴权和删除 ---
 async def get_alias_info(alias_text: str) -> List[MaiAlias]:
