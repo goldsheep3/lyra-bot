@@ -1,10 +1,12 @@
 import time
 from typing import List, Optional, Sequence
+from collections import defaultdict
 
 from sqlalchemy import select, or_, delete
 from sqlalchemy.orm import selectinload
 
-from .models import MaiData, MaiChart, MaiAlias
+from . import utils
+from .models import MaiData, MaiChart, MaiChartAch, MaiAlias
 from .bot_registry import PluginRegistry
 
 get_session = PluginRegistry.get_session
@@ -151,4 +153,127 @@ async def delete_alias_by_id(alias_id: int):
     async with get_session() as session:
         stmt = delete(MaiAlias).where(MaiAlias.id == alias_id)
         await session.execute(stmt)
+        await session.commit()
+
+
+async def refresh_dxrating_cache(shortid: int, difficulty: int, current_version: int):
+    """当定数改变时，重新计算该谱面下所有用户的 dxrating 缓存"""
+    async with get_session() as session:
+        # 1. 获取谱面 Model 并转为 Utils
+        statement = (
+            select(MaiChart)
+            .where(MaiChart.shortid == shortid, MaiChart.difficulty == difficulty)
+            .options(selectinload(MaiChart.maidata))
+        )
+        mct = (await session.execute(statement)).scalar_one_or_none()
+        if not mct:
+            return
+        
+        maichart = mct.to_data()
+        
+        # 2. 获取该谱面所有关联成绩
+        ach_statement = select(MaiChartAch).where(
+            MaiChartAch.shortid == shortid,
+            MaiChartAch.difficulty == difficulty
+        )
+        ach_statement = ach_statement.where(
+            MaiChartAch.server == ("CN" if current_version >= 2000 else "JP")
+        )
+        mct_achs = (await session.execute(ach_statement)).scalars().all()
+        
+        # 3. 批量更新
+        for mct_ach in mct_achs:
+            # maiJP 25(CiRCLE) 及以后版本计算 AP Bonus
+            ap_bonus = 1 if 2000 > current_version >= 25 else 0
+            
+            # 使用 utils 计算
+            ach = mct_ach.to_data()
+            maichart.set_ach(ach)
+            mct_ach.dxrating = maichart.get_dxrating(server=mct_ach.server, ap_bonus=ap_bonus)
+
+        # 4. 提交变更
+        await session.commit()
+
+async def upload_achievements_batch(user_id: int, ach_list: List[utils.MaiChartAch]):
+    """批量上传接口"""
+    jp_ver, cn_ver = utils.get_current_versions()
+
+    # 1. 按 shortid 分组，减少后续查询次数
+    ach_group = defaultdict(list)
+    for a in ach_list:
+        ach_group[a.shortid].append(a)
+
+    async with get_session() as session:
+        for shortid, incoming_items in ach_group.items():
+            # 2. 一次性获取该乐曲的所有谱面及该用户已有的所有成绩
+            chart_stmt = select(MaiChart).where(MaiChart.shortid == shortid)
+            chart_models = (await session.execute(chart_stmt)).scalars().all()
+            if not chart_models:
+                continue
+            
+            chart_dict = {c.difficulty: c for c in chart_models}
+            
+            exist_ach_stmt = select(MaiChartAch).where(
+                MaiChartAch.user_id == user_id,
+                MaiChartAch.shortid == shortid
+            )
+            existing_achs = (await session.execute(exist_ach_stmt)).scalars().all()
+            # 唯一索引 key: (difficulty, server)
+            existing_ach_dict = {(a.difficulty, a.server): a for a in existing_achs}
+
+            for incoming in incoming_items:
+                if incoming.difficulty not in chart_dict:
+                    continue
+                
+                mct = chart_dict[incoming.difficulty]
+                existing = existing_ach_dict.get((incoming.difficulty, incoming.server))
+                
+                # 转换到 Utils 进行逻辑判定
+                maichart = mct.to_data()
+                if existing:
+                    maichart.set_ach(existing.to_data())
+                
+                # 记录原始状态用于对比是否真的需要更新
+                old_achievement = maichart.get_ach(incoming.server).achievement
+                
+                # 3. 执行合并与 Rating 计算
+                # 确定当前环境版本
+                cur_ver = cn_ver if incoming.server == "CN" else jp_ver
+                ap_bonus = 1 if 2000 > cur_ver >= 25 else 0
+                
+                # apply_item_achievement 会调用 update_with (取 max)
+                updated_utils = maichart.update_ach(incoming)
+                
+                # 4. 只有当数据确实发生变化时（如成就率提高或牌子更新），才操作 Model
+                # 如果是新成绩，或者成就率/DX分数等有提升
+                if not existing or updated_utils.achievement > old_achievement or \
+                   (existing.dxscore < updated_utils.dxscore):
+                    
+                    # 重新计算该环境下的缓存 Rating
+                    calculated_rating = maichart.get_dxrating(server=incoming.server, ap_bonus=ap_bonus)
+                    
+                    if existing:
+                        existing.achievement = updated_utils.achievement
+                        existing.dxscore = updated_utils.dxscore
+                        existing.dxrating = calculated_rating
+                        existing.combo = updated_utils.combo
+                        existing.sync = updated_utils.sync
+                        existing.update_time = int(time.time())
+                    else:
+                        new_ach = MaiChartAch(
+                            user_id=user_id,
+                            shortid=shortid,
+                            chart_id=mct.id,
+                            difficulty=incoming.difficulty,
+                            server=incoming.server,
+                            achievement=updated_utils.achievement,
+                            dxscore=updated_utils.dxscore,
+                            dxrating=calculated_rating,
+                            combo=updated_utils.combo,
+                            sync=updated_utils.sync,
+                            update_time=int(time.time())
+                        )
+                        session.add(new_ach)
+
+        # 5. 最后一次性提交所有变更
         await session.commit()

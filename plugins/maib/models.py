@@ -40,7 +40,7 @@ class MaiAlias(Model):
 class MaiChartAch(Model):
     """MaiChartAch 成绩数据"""
     __tablename__ = "chart_achs"
-    __table_args__ = (UniqueConstraint("shortid", "difficulty", "server"),)
+    __table_args__ = (UniqueConstraint("user_id", "shortid", "difficulty", "server"),)
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     shortid: Mapped[int] = mapped_column(ForeignKey("maidata.shortid", ondelete="RESTRICT"))
@@ -53,6 +53,9 @@ class MaiChartAch(Model):
     combo: Mapped[int] = mapped_column(default=0)  # 连击
     sync: Mapped[int] = mapped_column(default=0)  # 同步游玩
     update_time: Mapped[int] = mapped_column()  # 更新时间戳
+    dxrating: Mapped[int] = mapped_column(default=0)  # DX Rating (Cache)
+
+    user_id: Mapped[Optional[int]] = mapped_column()  # qq
 
     chart: Mapped["MaiChart"] = relationship(back_populates="achs")
 

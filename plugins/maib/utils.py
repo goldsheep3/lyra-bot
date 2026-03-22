@@ -1,3 +1,4 @@
+import time
 import yaml
 import bisect
 import zipfile
@@ -86,6 +87,14 @@ def parse_status(target: str, mapping: Dict[str, int]) -> int:
     """通过映射表常量进行数值获取"""
     return mapping.get(target.lower(), 0)
 
+def get_current_versions():
+    """从 VERSIONS_DATA 获取当前最新版本号"""
+    jp_versions = [v for v in VERSIONS_DATA.keys() if v < 2000]
+    cn_versions = [v for v in VERSIONS_DATA.keys() if v >= 2000]
+    
+    jp_current = max(jp_versions) if jp_versions else 0
+    cn_current = max(cn_versions) if cn_versions else 0
+    return jp_current, cn_current
 
 @dataclass
 class MaiAlias:
@@ -95,7 +104,7 @@ class MaiAlias:
 
     create_time: int  # 创建时间戳
     create_qq: int  # 创建者 QQ 号
-    create_qq_group: Optional[int] = None  # 创建者 QQ 群号（若有）
+    create_qq_group: Optional[int] = None  # 创建者 QQ 群号 (若有)
 
 
 @dataclass
@@ -111,6 +120,8 @@ class MaiChartAch:
     combo: int = 0  # 连击
     sync: int = 0  # 同步游玩
     update_time: int = 0  # 更新时间戳
+
+    user_id: int = -1 # 用户 ID (qq)
 
     @property
     def dxscore_star_count(self) -> int:
@@ -133,6 +144,15 @@ class MaiChartAch:
     def dxscore_tuple(self) -> tuple[int, int, int]:
         return self.dxscore, self.dxscore_max, self.dxscore_star_count
 
+    def update(self, new_ach: 'MaiChartAch'):
+        """
+        合并成绩逻辑：取各项指标的最大值
+        """
+        self.achievement = max(self.achievement, new_ach.achievement)
+        self.dxscore = max(self.dxscore, new_ach.dxscore)
+        self.combo = max(self.combo, new_ach.combo)
+        self.sync = max(self.sync, new_ach.sync)
+        self.update_time = int(time.time())
 
 @dataclass
 class MaiChart:
@@ -194,27 +214,29 @@ class MaiChart:
     def get_ach(self, server: SERVER_TAG = "JP") -> MaiChartAch:
         """获取谱面成绩"""
         ach = self._achs.get(server, None)
-        return ach if ach else MaiChartAch(shortid=self.shortid, difficulty=self.difficulty, server=server, achievement=-100)
+        return ach if ach else MaiChartAch( shortid=self.shortid, difficulty=self.difficulty, server=server, achievement=-100)
 
     def set_ach(self, ach: MaiChartAch):
-        """设置谱面成绩"""
+        """覆盖原有谱面成绩"""
+        ach.dxscore_max = self.dxscore_max  # 同步 DX 分数上限
         self._achs[ach.server] = ach
 
-    def get_dxrating(self, server: SERVER_TAG = "JP", ap_bonus: bool = False) -> int:
+    def update_ach(self, ach: MaiChartAch) -> MaiChartAch:
+        """更新谱面成绩"""
+        old_ach = self.get_ach(ach.server)
+        old_ach.update(ach)
+        self.set_ach(old_ach)
+        return old_ach
+
+    def get_dxrating(self, server: SERVER_TAG = "JP", ap_bonus: int = 0) -> int:
         """获取谱面 DX Rating"""
         ach = self.get_ach(server=server)
-        if not ach:
+        if not ach or ach.achievement < 0:
             return 0
-
-        # 使用 next() 找到第一个满足条件的因子
-        factor = next(
-            (f for threshold, f in RATE_FACTOR_TABLE if ach.achievement >= threshold),
-            0.0  # 默认值
-        )
+        factor = next((f for threshold, f in RATE_FACTOR_TABLE if ach.achievement >= threshold), 0.0)
         ra = int(self.lv * ach.achievement * factor)
-        # AP 额外奖励
-        if ap_bonus and ach.combo >= 3:  # 3 代表 All Perfect
-            ra += 1
+        if ach.combo >= 3:
+            ra += ap_bonus
         return ra
 
     def set_notes_with_tuple(self, notes: tuple[int, int, int, int, int]):
@@ -351,13 +373,13 @@ class MaiData:
 
         return version >= current_version - limit
 
-    def get_chart_dxrating(self, diff: int, current_version: int = 0) -> Optional[int]:
+    def get_chart_dxrating(self, diff: int, server: SERVER_TAG, current_version: int = 0) -> Optional[int]:
         """获取对应难度的 DX Rating"""
         # maiJP: 25(CiRCLE) 开始，增加 AP+1 奖励分
-        ap_bonus = 2000 > current_version >= 25
+        ap_bonus = 1 if 2000 > current_version >= 25 else 0
         chart = self.get_chart(diff)
         if chart:
-            return chart.get_dxrating(ap_bonus=ap_bonus)
+            return chart.get_dxrating(server=server, ap_bonus=ap_bonus)
         return None
 
     def set_chart_ach(self, diff: int, ach: MaiChartAch):
@@ -398,8 +420,9 @@ class MaiData:
 
 
 class MaiB50Manager:
-    def __init__(self, current_version: int):
+    def __init__(self, current_version: int, server: SERVER_TAG):
         self.current_version = current_version
+        self.server: SERVER_TAG = server
         # 存储格式: (rating, maidata, diff)
         self._b35: List[Tuple[int, 'MaiData', int]] = []
         self._b15: List[Tuple[int, 'MaiData', int]] = []
@@ -448,7 +471,7 @@ class MaiB50Manager:
         return [(item[1], item[2]) for item in b50]
 
     def _process_entry(self, maidata: 'MaiData', diff: int) -> Optional[Tuple[int, 'MaiData', int]]:
-        ra = maidata.get_chart_dxrating(diff, current_version=self.current_version)
+        ra = maidata.get_chart_dxrating(diff, server=self.server, current_version=self.current_version)
         return (ra, maidata, diff) if ra is not None else None
 
     def add_entry(self, maidata: 'MaiData', diff: int):

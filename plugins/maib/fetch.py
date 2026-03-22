@@ -1,5 +1,4 @@
 import re
-import yaml
 from pathlib import Path
 import zipfile
 
@@ -10,7 +9,7 @@ from thefuzz import process
 from nonebot import logger
 from nonebot_plugin_datastore.db import post_db_init
 
-from. import models, network
+from. import models, network, services
 from .bot_registry import PluginRegistry
 from .utils import MaiData, MaiChart, MaiAlias, GENRES_DATA, VERSIONS_DATA
 from .note_count import count_to_tuple
@@ -265,11 +264,16 @@ async def upsert_maidata(session: AsyncSession, data: MaiData):
         existing.aliases = existing.aliases or []
 
     # 处理谱面数据
+    changed_tasks = []
     existing_charts = {chart.difficulty: chart for chart in existing.charts}
     for chart in data.charts.values():
         if chart.difficulty in existing_charts:
             # 更新已有谱面
             ec = existing_charts[chart.difficulty]
+            if ec.lv != chart.lv:
+                changed_tasks.append((data.shortid, chart.difficulty, "JP"))
+            if ec.lv_cn != chart.lv_cn:
+                changed_tasks.append((data.shortid, chart.difficulty, "CN"))
             ec.lv = chart.lv
             ec.lv_cn = chart.lv_cn
             ec.lv_synh = chart.lv_synh
@@ -294,6 +298,10 @@ async def upsert_maidata(session: AsyncSession, data: MaiData):
             new_alias = models.MaiDataModelFactory.mai_alias(alias_obj)
             existing.aliases.append(new_alias)
             existing_alias_names.add(alias_obj.alias)
+
+    for shortid, diff, server_tag in changed_tasks:
+        await services.refresh_dxrating_cache(shortid, diff, server_tag)
+        
 
 
 @post_db_init
