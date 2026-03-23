@@ -20,7 +20,6 @@ async def get_song_by_id(shortid: int) -> Optional[MaiData]:
         statement = (
             select(MaiData)
             .where(MaiData.shortid == shortid)
-            .options(selectinload(MaiData.charts), selectinload(MaiData.aliases))
         )
         result = await session.execute(statement)
         return result.scalar_one_or_none()
@@ -39,7 +38,6 @@ async def get_song_by_name(keyword: str) -> Sequence[MaiData]:
                     MaiAlias.alias == keyword
                 )
             )
-            .options(selectinload(MaiData.charts), selectinload(MaiData.aliases))
             .distinct()
         )
         result = await session.execute(statement)
@@ -59,7 +57,6 @@ async def get_song_by_name_blur(keyword: str) -> Sequence[MaiData]:
                     MaiAlias.alias.contains(keyword)
                 )
             )
-            .options(selectinload(MaiData.charts), selectinload(MaiData.aliases))
             .distinct()
         )
         result = await session.execute(statement)
@@ -87,7 +84,6 @@ async def get_song_by_version(version: int, cn: bool = False) -> Sequence[MaiDat
                     (MaiData.version if not cn else MaiData.version_cn) == version,
                 )
             )
-            .options(selectinload(MaiData.charts), selectinload(MaiData.aliases))
             .distinct()
         )
         result = await session.execute(statement)
@@ -227,7 +223,6 @@ async def refresh_dxrating_cache(shortid: int, difficulty: int, current_version:
         statement = (
             select(MaiChart)
             .where(MaiChart.shortid == shortid, MaiChart.difficulty == difficulty)
-            .options(selectinload(MaiChart.maidata))
         )
         mct = (await session.execute(statement)).scalar_one_or_none()
         if not mct:

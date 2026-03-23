@@ -104,6 +104,7 @@ async def get_song_image(mdt: services.MaiData, user_id: str | int) -> bytes:
     if maidata.version_cn is not None:
         # 通过 QQ 获取用户绑定的信息
         record_list = await network.sy_dev_player_record(maidata.shortid, qq=user_id, developer_token=DEVELOPER_TOKEN)
+        logger.debug(f"获取到的成绩数据: {record_list}")
         if record_list:
             maidata.parse_sy_player_record(record_list)  # 若水鱼有数据则进行填入
     # 构建回复图片

@@ -24,7 +24,7 @@ class MaiAlias(Model):
     create_qq_group: Mapped[Optional[int]] = mapped_column()
 
     # 关系映射
-    maidata: Mapped["MaiData"] = relationship(back_populates="aliases")  # 不进行级联删除以避免在重建时丢失别名数据
+    maidata: Mapped["MaiData"] = relationship(back_populates="aliases", lazy="selectin")  # 不进行级联删除以避免在重建时丢失别名数据
 
     def to_data(self) -> utils.MaiAlias:
         """转换为 utils.MaiAlias 对象"""
@@ -57,7 +57,7 @@ class MaiChartAch(Model):
 
     user_id: Mapped[Optional[int]] = mapped_column()  # qq
 
-    chart: Mapped["MaiChart"] = relationship(back_populates="achs")
+    chart: Mapped["MaiChart"] = relationship(back_populates="achs", lazy="selectin")
 
     def to_data(self) -> utils.MaiChartAch:
         """转换为 utils.MaiChartAch 对象"""
@@ -94,8 +94,8 @@ class MaiChart(Model):
     note_count_touch: Mapped[int]
     note_count_break: Mapped[int]
 
-    maidata: Mapped["MaiData"] = relationship(back_populates="charts")
-    achs: Mapped[List["MaiChartAch"]] = relationship(back_populates="chart", cascade="all, delete-orphan")
+    maidata: Mapped["MaiData"] = relationship(back_populates="charts", lazy="selectin")
+    achs: Mapped[List["MaiChartAch"]] = relationship(back_populates="chart", cascade="all, delete-orphan", lazy="selectin")
 
     def to_data(self) -> utils.MaiChart:
         """转换为 utils.MaiChart 对象"""
@@ -143,8 +143,8 @@ class MaiData(Model):
     buddy: Mapped[bool] = mapped_column(default=False)
 
     # 关系映射
-    charts: Mapped[List["MaiChart"]] = relationship(back_populates="maidata", cascade="all, delete-orphan")
-    aliases: Mapped[List["MaiAlias"]] = relationship(back_populates="maidata")
+    charts: Mapped[List["MaiChart"]] = relationship(back_populates="maidata", cascade="all, delete-orphan", lazy="selectin")
+    aliases: Mapped[List["MaiAlias"]] = relationship(back_populates="maidata", lazy="selectin")
 
     def get_charts(self):
         self.charts.sort(key=lambda c: c.difficulty)
