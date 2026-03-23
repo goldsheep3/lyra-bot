@@ -602,7 +602,7 @@ class DrawFactory:
                      font=MIS_DB.font_variant(size=self.ms.x(3.5)))
         return width, height
 
-    def chart_box(self, x, y, chart: MaiChart, cabinet_dx: bool, plus_level: int = 6,
+    def chart_box(self, x, y, chart: MaiChart, cabinet_dx: bool, server: SERVER_TAG, plus_level: int = 6,
                   is_utage: bool = False) -> Tuple[int, int]:
         """组件：谱面信息框"""
         du = self.du
@@ -620,7 +620,7 @@ class DrawFactory:
         plus = round(chart.lv % 1 * 10) >= plus_level
         du.level(x + 64, y + 7.4, diff, chart.lv, plus=plus, ignore_decimal=is_utage)
         # 达成率
-        ach = chart.get_ach()
+        ach = chart.get_ach(server=server)
         du.ach(x + 2, y + 9, diff, ach.achievement)
         dxs, dxs_max, dxs_star = ach.dxscore_tuple
         du.dxscore(x + 38, y + 25, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
@@ -640,7 +640,7 @@ class DrawFactory:
 
         return width, height
 
-    def chart_box_lite(self, x, y, chart: MaiChart, cabinet_dx: bool, plus_level: int = 6,
+    def chart_box_lite(self, x, y, chart: MaiChart, cabinet_dx: bool, server: SERVER_TAG, plus_level: int = 6,
                        is_utage: bool = False) -> Tuple[int, int]:
         """组件：谱面信息框 Lite"""
         du = self.du
@@ -658,7 +658,7 @@ class DrawFactory:
         plus = round(chart.lv % 1 * 10) >= plus_level
         du.level(x + 64, y + 7.4, diff, chart.lv, plus=plus, ignore_decimal=is_utage)
         # 达成率
-        ach = chart.get_ach()
+        ach = chart.get_ach(server=server)
         du.ach(x + 46, y + 9, diff, ach.achievement)
         dxs, dxs_max, dxs_star = ach.dxscore_tuple
         du.dxscore_lite(x + 2, y + 20, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
@@ -670,11 +670,11 @@ class DrawFactory:
         return width, height
 
     def chart_box_mini(self, x, y, chart: MaiChart, cabinet_dx: bool, plus_level: int = 6,
-                       is_utage: bool = False) -> Tuple[int, int]:
+                       is_utage: bool = False, server: SERVER_TAG = "JP") -> Tuple[int, int]:
         """组件：谱面信息框 Mini (更紧凑的布局，适用于多行并列或背景填充)"""
         du = self.du
         diff = get_difficulty(chart.difficulty)
-        ach = chart.get_ach()
+        ach = chart.get_ach(server=server)
 
         # 定义 Mini 尺寸：宽度略窄，高度大幅度压缩 (从 25 降至 16)
         width, height = 86, 16 
@@ -701,7 +701,7 @@ class DrawFactory:
         # 4. 达成率 (居中偏右布局)
         du.ach(x + 36, y + 8, diff, ach.achievement)
 
-        # 5. 奖牌状态 (FC/Sync) - 采用水平并列或极窄间距
+        # 5. 状态 (FC/Sync) - 采用水平并列或极窄间距
         # 在 Mini 模式下，如果空间有限，FC 和 Sync 通常并排显示或缩小字体
         c_combo, t_combo, _tl, tc_combo = COMBO_DICT[ach.combo]
         c_sync, t_sync, _tl, tc_sync = SYNC_DICT[ach.sync]
@@ -710,18 +710,17 @@ class DrawFactory:
         text_combo = tc_combo if du.cn == 2 else t_combo
         text_sync = tc_sync if du.cn == 2 else t_sync
 
-        # 绘制奖牌：水平排列在底部
+        # 绘制：水平排列在底部
         du.evaluate(x + 2, y + 11.5, text=text_combo, color=c_combo)
         du.evaluate(x + 22, y + 11.5, text=text_sync, color=c_sync)
 
-        # 6. DX 分数 (Mini 版通常只保留星星或极简分数)
+        # 6. DX 分数
         dxs, dxs_max, dxs_star = ach.dxscore_tuple
-        # 这里仅在右下角保留 DX Star 标识，不再显示完整进度条以节省空间
         du.dxscore_lite(x + 48, y + 11.5, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
 
         return width, height
 
-    def mini_box(self, x: int, y: int, data: MaiData, diff_number: int) -> Tuple[int, int]:
+    def mini_box(self, x: int, y: int, data: MaiData, diff_number: int, server: SERVER_TAG) -> Tuple[int, int]:
         """组件：Mini 成绩框"""
         du = self.du
         ms = self.ms
@@ -729,7 +728,7 @@ class DrawFactory:
         chart = data.get_chart(diff_number)
         if not chart:
             return 0, 0  # 未绘制
-        ach = chart.get_ach()
+        ach = chart.get_ach(server=server)
         
         width, height = 97, 36
 
@@ -800,7 +799,7 @@ class DrawFactory:
         if not chart:
             return 0, 0  # 未绘制
 
-        w, h = self.mini_box(x, y, data, diff_number)
+        w, h = self.mini_box(x, y, data, diff_number, server=server)
 
         du.rounded_rect(x + 53, y + 25, 42, 5, fill=bcm(diff.bg, '#0009'), radius=2)
         du.rounded_rect(x + 53, y + 25, 16, 5, fill='#006', radius=2)
@@ -813,11 +812,11 @@ class DrawFactory:
 class DrawInfo(DrawFactory):
     """实现 `info11951` 图像的绘制"""
 
-    def __init__(self, maidata: MaiData, multiple: float = 1, cn_level: Literal[0, 1, 2] = 0):
+    def __init__(self, maidata: MaiData, server: SERVER_TAG, multiple: float = 1, cn_level: Literal[0, 1, 2] = 0):
         super().__init__(width=240, height=240, ms_multiple=int(10 * multiple), cn_level=cn_level)
-        self._info(maidata)
+        self._info(maidata, server)
 
-    def _info(self, maidata: MaiData):
+    def _info(self, maidata: MaiData, server: SERVER_TAG):
         """实现 `info11951` 图像的绘制"""
         x, y = 10, 10
         width = 220
@@ -906,9 +905,9 @@ class DrawInfo(DrawFactory):
         now_x = x
         for i, chart in enumerate(maidata.charts.values()):
             if chart.difficulty >= 4:
-                _w, h = self.chart_box(now_x, y, chart, cabinet_dx=maidata.is_cabinet_dx)
+                _w, h = self.chart_box(now_x, y, chart, cabinet_dx=maidata.is_cabinet_dx, server=server)
             else:
-                _w, h = self.chart_box_lite(now_x, y, chart, cabinet_dx=maidata.is_cabinet_dx)
+                _w, h = self.chart_box_lite(now_x, y, chart, cabinet_dx=maidata.is_cabinet_dx, server=server)
             if (i + 1) % 2 == 1:
                 now_x = 123
                 if len(maidata.charts) - i == 1:

@@ -101,6 +101,7 @@ async def get_song_image(mdt: services.MaiData, user_id: str | int) -> bytes:
     """提取的共用查歌并生成图片的逻辑"""
     user_id = str(user_id)
     maidata: MaiData = mdt.to_data()
+    server = "CN" if maidata.version_cn else "JP"
     if maidata.version_cn is not None:
         # 通过 QQ 获取用户绑定的信息
         record_list = await network.sy_dev_player_record(maidata.shortid, qq=user_id, developer_token=DEVELOPER_TOKEN)
@@ -108,7 +109,7 @@ async def get_song_image(mdt: services.MaiData, user_id: str | int) -> bytes:
             maidata.parse_sy_player_record(record_list)  # 若水鱼有数据则进行填入
     # 构建回复图片
     output = io.BytesIO()
-    img = image_gen.DrawInfo(maidata, cn_level=1 if maidata.version_cn else 0).get_image()
+    img = image_gen.DrawInfo(maidata, server=server, cn_level=1 if maidata.version_cn else 0).get_image()
     img.save(output, format="jpeg")
     return output.getvalue()
 
