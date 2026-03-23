@@ -7,14 +7,10 @@ from typing import Optional, List
 from . import services, image_gen, network
 from .utils import rate_alias_map, MaiData, MaiChart, MaiChartAch, parse_status, DIFFS_MAP
 
-from nonebot import require, logger, on_regex
+from nonebot import logger, on_regex
 from nonebot.params import RegexGroup
 from nonebot.internal.matcher import Matcher
 from nonebot.adapters.onebot.v11 import Bot, Event, Message, MessageSegment
-
-require("nonebot_plugin_localstore")
-require("nonebot_plugin_datastore")
-from nonebot_plugin_localstore import get_plugin_cache_dir
 
 
 DEVELOPER_TOKEN: Optional[str] = None

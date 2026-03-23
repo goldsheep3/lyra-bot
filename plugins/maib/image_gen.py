@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from PIL import Image, ImageDraw, ImageFont, ImageChops
 
-from .utils import ASSETS_PATH, GENRES_DATA, VERSIONS_DATA, MaiData, MaiChart, MaiB50Manager
+from .utils import ASSETS_PATH, GENRES_DATA, VERSIONS_DATA, MaiData, MaiChart, MaiB50Manager, SERVER_TAG
 
 # ========================================
 # 基础常量
@@ -790,7 +790,8 @@ class DrawFactory:
 
         return width, height
 
-    def b50_box(self, x: int, y: int, data: MaiData, diff_number: int, index: int, is_b15: Optional[bool] = None) -> tuple[int, int]:
+    def b50_box(self, x: int, y: int, data: MaiData, diff_number: int, server: SERVER_TAG, current_version: int,
+                index: int, is_b15: Optional[bool] = None) -> tuple[int, int]:
         """组件：B50 成绩框"""
         du = self.du
         ms = self.ms
@@ -805,7 +806,7 @@ class DrawFactory:
         du.rounded_rect(x + 53, y + 25, 16, 5, fill='#006', radius=2)
         b_type = '15' if is_b15 else '35'
         du.text(x+61, y+27.5, f"b{b_type} #{index}", fill='#FFF', anchor='mm', font=MIS_DB.font_variant(size=ms.x(3))) 
-        du.text(x+70, y+27.5, f"{chart.lv:.1f} > {data.get_chart_dxrating(diff_number)}", fill='#FFF', anchor='lm', font=MIS_DB.font_variant(size=ms.x(3)))
+        du.text(x+70, y+27.5, f"{chart.lv:.1f} > {data.get_chart_dxrating(diff_number, server, current_version)}", fill='#FFF', anchor='lm', font=MIS_DB.font_variant(size=ms.x(3)))
 
         return w, h
 
@@ -956,13 +957,13 @@ class DrawB50Boxex(DrawFactory):
         for i, (maidata, diff) in enumerate(b35, start=1):
             tx = x + i % 4 * (97 + 3)
             ty = y + i // 4 * (36 + 3)
-            _w, _h = self.b50_box(tx, ty, maidata, diff_number=diff, index=i, is_b15=False)
+            _w, _h = self.b50_box(tx, ty, maidata, diff_number=diff, server=b50manager.server, current_version=b50manager.current_version, index=i, is_b15=False)
         y += (len(b35) + 3) // 4 * (36 + 3) + margin
 
         for i, (maidata, diff) in enumerate(b15, start=1):
             tx = x + i % 4 * (97 + 3)
             ty = y + i // 4 * (36 + 3)
-            _w, _h = self.b50_box(tx, ty, maidata, diff_number=diff, index=i, is_b15=True)
+            _w, _h = self.b50_box(tx, ty, maidata, diff_number=diff, server=b50manager.server, current_version=b50manager.current_version, index=i, is_b15=True)
         y += (len(b15) + 3) // 4 * (36 + 3)
 
         _w, h = self.copyright_bar(0, y, 411)

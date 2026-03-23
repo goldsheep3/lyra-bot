@@ -7,13 +7,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from thefuzz import process
-from nonebot import logger
+from nonebot import logger, require
+require("nonebot_plugin_datastore")
 from nonebot_plugin_datastore.db import post_db_init
 
 from. import models, network, services
 from .bot_registry import PluginRegistry
-from .utils import MaiData, MaiChart, GENRES_DATA, VERSIONS_DATA
-from .note_count import count_to_tuple
+from .utils import MaiData, MaiChart, GENRES_DATA, VERSIONS_DATA, SimaiNoteCount
 
 
 def initialize_genres_data_rev():
@@ -121,7 +121,8 @@ async def get_chart(raw_metadata: dict, short_id: int, chart_num: int) -> MaiCha
             des=str(raw_metadata.get(des_key, '')),
             inote=str(raw_metadata.get(inote_key, '')),
         )
-        chart.set_notes_with_tuple(await count_to_tuple(raw_metadata.get(inote_key, '')))
+        snc = await SimaiNoteCount(raw_metadata.get(inote_key, '')).process()
+        chart.set_notes_with_tuple(snc.to_tuple())
         return chart
     return None
 

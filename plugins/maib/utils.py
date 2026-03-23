@@ -1,3 +1,4 @@
+import re
 import time
 import yaml
 import bisect
@@ -508,3 +509,112 @@ class MaiB50Manager:
         # 合并当前数据与新数据，排序并截取前 N 个
         self._b15 = sorted(self._b15 + new_entries, key=lambda x: x[0], reverse=True)[:15]
         self._b35 = sorted(self._b35 + old_entries, key=lambda x: x[0], reverse=True)[:35]
+
+
+class SimaiNoteCount:
+    """
+    Simai 音符计数器
+    用于解析 simai 文本并统计各类音符（TAP, HOLD, SLIDE, TOUCH, BREAK）的数量
+    """
+
+    def __init__(self, simai_text: str = ""):
+        self.raw_text = simai_text
+        self.tokens: list[str] = []
+        self.counts: dict[str, list[str]] = {
+            "TAP": [],
+            "HOLD": [],
+            "SLIDE": [],
+            "TOUCH": [],
+            "BREAK": [],
+        }
+
+    async def _extract_tokens(self) -> list[str]:
+        """内部方法：清理文本并提取最小音符单元"""
+        text = self.raw_text.strip()
+        if not text:
+            return []
+
+        # 预处理：删除空白、结尾E、以及()和{}中的元数据
+        text = re.sub(r'[\n\r\s]', '', text)
+        text = text[:-1] if text.endswith('E') else text
+        text = re.sub(r'\([^)]*\)', '', text)
+        text = re.sub(r'\{[^}]*}', '', text)
+        
+        # 将同位叠加符号 / 视作并列 ,
+        text = text.replace('/', ',')
+        
+        self.tokens = [t for t in text.split(',') if t.strip()]
+        return self.tokens
+
+    async def process(self, simai_text: str | None = None) -> 'SimaiNoteCount':
+        """
+        核心执行方法：解析并分类音符
+        如果传入 simai_text 则更新当前文本
+        """
+        
+        if simai_text is not None:
+            self.raw_text = simai_text
+        
+        # 重置统计结果
+        self.counts = {k: [] for k in self.counts}
+        tokens = await self._extract_tokens()
+
+        for token in tokens:
+            # 1. 处理 HOLD 或 TOUCH HOLD
+            if 'h' in token:
+                if 'b' in token:
+                    self.counts["BREAK"].append(token)
+                else:
+                    self.counts["HOLD"].append(token)
+            
+            # 2. 处理 TOUCH (包含判定区字母 BCEAD)
+            elif any(c in token for c in "BCEAD"):
+                if 'b' in token:
+                    self.counts["BREAK"].append(token)
+                else:
+                    self.counts["TOUCH"].append(token)
+            
+            # 3. 处理 SLIDE (包含 '[' 符号)
+            elif '[' in token:
+                # 假设前3位是起始 TAP/BREAK
+                prefix = token[:3]
+                suffix = token[3:]
+
+                if 'b' in prefix:
+                    self.counts["BREAK"].append(prefix)
+                else:
+                    self.counts["TAP"].append(prefix)
+
+                # 处理后续的一个或多个滑动轨迹
+                for s in suffix.split('*'):
+                    if 'b' in s:
+                        self.counts["BREAK"].append(s)
+                    else:
+                        self.counts["SLIDE"].append(s)
+            
+            # 4. 处理普通 TAP 或双押 TAP
+            else:
+                note_units = re.findall(r'[1-8][a-z]*', token)
+                for unit in note_units:
+                    if 'b' in unit:
+                        self.counts["BREAK"].append(unit)
+                    else:
+                        self.counts["TAP"].append(unit)
+        
+        return self
+
+    @property
+    def statistics(self) -> dict[str, int]:
+        """获取各类型音符的数量字典"""
+        return {k: len(v) for k, v in self.counts.items()}
+
+    def to_tuple(self) -> tuple[int, int, int, int, int]:
+        """返回元组形式: (TAP, HOLD, SLIDE, TOUCH, BREAK)"""
+        stats = self.statistics
+        return (
+            stats.get("TAP", 0),
+            stats.get("HOLD", 0),
+            stats.get("SLIDE", 0),
+            stats.get("TOUCH", 0),
+            stats.get("BREAK", 0),
+        )
