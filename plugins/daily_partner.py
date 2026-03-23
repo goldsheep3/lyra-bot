@@ -131,12 +131,12 @@ class GroupInstance:
             return hope
         return random.choice(others)
 
-    async def handle_jrlp(self, user_id: int, pool: List[int], hope: Optional[int]) -> Tuple[str, int]:
+    async def handle_jrlp(self, user_id: int, pool: List[int], hope: Optional[int]) -> Tuple[str, int | None]:
         async with self._lock:
             member = self.get_member(user_id)
             # 检查是否已离婚 (count = -1)
             if member.count == -1:
-                return "qq_fail_lh", user_id
+                return "qq_fail_lh", None
             if member.wife: 
                 return "jrlp_already", member.wife
             
@@ -183,19 +183,19 @@ class GroupInstance:
             self._clear_relation(user_id)
             return ("hlp_limit" if member.count > MAX_COUNT else "hlg_success"), husband_id
 
-    async def handle_qq(self, user_id: int, target_id: int, bot_id: int) -> Tuple[str, int]:
+    async def handle_qq(self, user_id: int, target_id: int, bot_id: int) -> Tuple[str, int | None]:
         async with self._lock:
             member = self.get_member(user_id)
             
             # 离婚判定
             if member.count == -1:
-                return "qq_fail_lh", target_id
+                return "qq_fail_lh", None
             # 次数判定
             if member.count >= MAX_COUNT: 
-                return "qq_fail_limit", target_id
+                return "qq_fail_limit", None
             # 强娶机器人判定
             if target_id == bot_id:
-                return "qq_with_lyra", target_id
+                return "qq_with_lyra", None
             # 自己
             if user_id == target_id:
                 self._clear_relation(user_id)
@@ -204,7 +204,7 @@ class GroupInstance:
                 return "qq_self", user_id
             # 对方已婚判定
             if self.get_member(target_id).husband: 
-                return "qq_fail_married", target_id
+                return "qq_fail_married", None
             
             self._clear_relation(user_id)
             member.count += 1
