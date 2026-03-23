@@ -62,10 +62,10 @@ RATE_FACTOR_TABLE: List[Tuple[float, float]] = [
 ]
 
 # Diving-Fish 的 FC/FS 解析映射
-DF_FC_MAP = {v: i + 1 for i, v in enumerate(['fc', 'fcp', 'ap', 'app'])}
-DF_FS_MAP = {v: i + 1 for i, v in enumerate(['sync', 'fs', 'fsp', 'fsd', 'fsdp'])}
+DF_FC_MAP = {v: i for i, v in enumerate(['fc', 'fcp', 'ap', 'app'], start=1)}
+DF_FS_MAP = {v: i for i, v in enumerate(['sync', 'fs', 'fsp', 'fsd', 'fsdp'], start=1)}
 # 难度颜色字符串解析映射
-DIFFS_MAP = {v: i + 1 for i, v in enumerate(["蓝", "绿", "黄", "红", "紫", "白"])}
+DIFFS_MAP = {v: i for i, v in enumerate(["蓝", "绿", "黄", "红", "紫", "白"], start=1)}
 
 # 服务器标识类型
 SERVER_TAG = Literal["JP", "INTL", "CN"]
@@ -387,26 +387,37 @@ class MaiData:
         if chart_obj := self.get_chart(diff):
             chart_obj.set_ach(ach)
 
-    def parse_sy_player_record(self, records: list, dxscore_max: int = 0) -> None:
+    def parse_sy_player_record(self, records: list) -> None:
         """解析来自水鱼查分器的响应体数据，填充 MaiChartAch 分数信息"""
-        for record in records:
-            diff = record.get("level_index", 3) + 2  # 水鱼难度编号转换为 MaiChart 难度编号
-            achievement = record.get("achievements", 0.0000)
-            dxscore = 0 if dxscore_max == 0 else dxscore_max
-            combo = parse_status(record.get("fc", ""), DF_FC_MAP)
-            sync = parse_status(record.get("fs", ""), DF_FS_MAP)
-            shortid: int = record.get("song_id", self.shortid)
 
+        for record in records:
+            # 1. 难度转换
+            level_idx = record.get("level_index")
+            if level_idx is None:
+                continue
+            diff = level_idx + 2  
+            
+            # 2. 提取各项分数
+            achievement = record.get("achievements", 0.0)
+            actual_dx_score = record.get("dxScore", 0) # 从 API 获取实际 DX 分数
+            
+            # 3. 解析状态码 (FC/FS)
+            combo = DF_FC_MAP.get(record.get("fc", "").lower(), 0)
+            sync = DF_FS_MAP.get(record.get("fs", "").lower(), 0)
+            
+            # 4. 创建成就对象
             ach = MaiChartAch(
-                shortid=shortid,
+                shortid=self.shortid,
                 difficulty=diff,
                 server="CN",
                 achievement=achievement,
-                dxscore=dxscore,
-                dxscore_max=dxscore_max,
+                dxscore=actual_dx_score,
                 combo=combo,
-                sync=sync
+                sync=sync,
+                update_time=int(time.time())
             )
+            
+            # 5. 更新到内存对象中
             self.set_chart_ach(diff, ach)
 
     def add_aliases(self, aliases: List[MaiAlias]):

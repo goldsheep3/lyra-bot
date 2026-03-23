@@ -68,14 +68,13 @@ async def _request(url: str, method: str = "GET", developer_token: Optional[str]
             if response.status_code == 304:
                 return response
             response.raise_for_status()
-            return response
         except Exception as e:
             if i < retries - 1:
                 logger.warning(f"[{project_name}] 尝试 {i+1} 失败: {e}")
                 await asyncio.sleep(delay)
             else:
                 logger.error(f"[{project_name}] 最终请求失败: {url} | Error: {e}")
-    return None
+    return response
 
 async def request_json(url: str, method: str = "GET", developer_token: Optional[str] = None, **kwargs) -> Optional[Any]:
     """请求并解析 JSON，失败时返回 None"""

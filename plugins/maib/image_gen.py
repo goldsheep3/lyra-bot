@@ -631,7 +631,7 @@ class DrawFactory:
 
         info_line5 = [
             f"谱师: {chart.des}",
-            f"拟合定数: {chart.lv_synh}" if chart.lv_synh else '',
+            f"拟合定数: {chart.lv_synh:.4f}" if chart.lv_synh else '',
         ]
 
         du.rounded_rect(x + 64, y + 9, 42, 25, fill=bcm(diff.bg, '#0009'), radius=1.5)
