@@ -1,294 +1,497 @@
-import json
+import asyncio
 import random
-from datetime import datetime
+import re
+import shutil
+import tarfile
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Tuple
 from pathlib import Path
-from typing import Any, Dict, List, Optional
 
-from atomicwrites import atomic_write
-from nonebot import on_regex, logger, require
-from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, Message, MessageSegment
-require("nonebot_plugin_localstore")
-from nonebot_plugin_localstore import get_plugin_cache_dir
+import anyio
+import orjson
+from pydantic import BaseModel
 
-# --- 配置与常量 ---
-# 活跃时间判定（14天）
-ACTIVE_DAYS: int = 14
-# 更换伴侣次数上限
-MAX_CHANGE_COUNT: int = 3
+from nonebot import get_driver, get_plugin_config, logger, on_regex, require
+from nonebot.adapters.onebot.v11 import (
+    Bot,
+    GroupMessageEvent,
+    Message,
+    MessageEvent,
+    MessageSegment,
+    PrivateMessageEvent,
+)
+from nonebot.exception import ActionFailed, NetworkError
+from nonebot.plugin import PluginMetadata
 
-# 插件数据目录
-DATA_DIR: Path = get_plugin_cache_dir()
-DATA_DIR.mkdir(parents=True, exist_ok=True)
+require('nonebot_plugin_localstore')
+from nonebot_plugin_localstore import get_plugin_cache_dir, get_plugin_data_dir
 
+# --- 插件配置 ---
+class Config(BaseModel):
+    PARTNER_ACTIVE_DAYS: int = 14
+    PARTNER_MAX_CHANGE_COUNT: int = 3
 
-# --- Matchers ---
-jrlp = on_regex(r"^(今日老婆|jrlp)$", priority=5, block=True)
-lihun = on_regex(r"^(离婚)$", priority=5, block=True)
-huanlp = on_regex(r"^(换老婆|hlp)$", priority=5, block=True)
-qiangqu = on_regex(r"^强娶", priority=5, block=True)
+__plugin_meta__ = PluginMetadata(
+    name="今日老婆",
+    description="支持群友「结婚」的娱乐插件，支持「一夫一妻制」。",
+    usage="今日老婆, 换老婆, 强娶 [QQ], 离婚, 当老婆, 不当老婆, 娶bot, 不娶bot",
+    config=Config,
+)
 
+plugin_conf = get_plugin_config(Config)
+ACTIVE_DAYS = plugin_conf.PARTNER_ACTIVE_DAYS
+MAX_COUNT = plugin_conf.PARTNER_MAX_CHANGE_COUNT
 
-# --- 数据处理核心函数 ---
+# --- 发言字典 ---
+REPLY_DICT: Dict[str, str] = {
+    # jrlp: 成功、自己、已婚
+    "jrlp_success": "你今天的老婆是：{qq}",
+    "jrlp_self": "你今天的老婆是自己哦=w=",
+    "jrlp_already": "你今天的老婆已经是 {qq} 啦！",
+    # hlp: 成功、上限、自己、没有老婆了
+    "hlp_success1": "好吧好吧，给你换了。你现在的老婆是：{qq}",
+    "hlp_success2": "换好了喔。你现在的老婆是：{qq}",
+    "hlp_last": "再换你就没老婆啦！你现在的老婆是：{qq}",
+    "hlp_self": "恭喜你，现在没有其他可以更换的人选了，恭喜水仙（",
+    "hlp_limit": "换太多次啦！你现在没有香香软软的亲亲老婆了！😡😡",
+    "hlp_lh": "（翻笔记）你现在不能换老婆了（叉腰）",
+    # hlg: 成功、还没有老公
+    "hlg_success": "休夫，立即执行！{qq} 已经是你的前任了。",
+    "hlg_none": "还没有人娶到你喔ww",
+    # qq: 成功、自己、未指定、对方已婚、上限、离过婚了
+    "qq_success": "怎么还有强制play（）总之恭喜娶到 {qq} ！",
+    "qq_self": "终归是要水仙啊……那我先磕！",
+    "qq_usage": "若想强娶那个TA，请勇敢地@出来=w=",
+    "qq_with_lyra": "小梨不能跟你们玩这种游戏啦！莉莉丝阿姐听说了会生气的qwq",
+    "qq_fail_married": "不可以哦——TA已经有老婆了，TA的老婆会闹情绪的！",
+    "qq_fail_limit": "再换老婆你可就没有老婆了，今天安安心心过这日子吧（",
+    "qq_fail_lh": "你今天已经离过婚了，不可以再找新老婆了！",
+    # lh: 成功、自己、还没有老婆
+    "lh_success": "你已经和 {qq} 离婚了。（记笔记）",
+    "lh_self": "水仙也要离婚吗（大脑过载）\n那便如此吧（",
+    "lh_none": "你还没有一个香香软软的亲亲老婆，怎么就想着当个负心汉了！😡😡",
+    # jrlg: 有老公、还没有老公
+    "jrlg_status": "你现在的老公是：{qq}",
+    "jrlg_none": "还没有人娶到你喔ww",
+    # hope/toggle: 设置hope成功、已拒绝、已允许、已排除机器人、已加入机器人
+    "hope_set": "已悄悄将 {qq} 记入你的心愿单。",
+    "not_allowed": "设置成功：你已拒绝分配给任何人。",
+    "allowed": "设置成功：你已重新进入分配池！",
+    "not_allow_bot": "设置成功：你的择偶标准已排除机器人。",
+    "allow_bot": "设置成功：机器人现已加入你的择偶池！",
+}
 
-def get_today_file(group_id: int) -> Path:
-    """获取指定群聊今天的JSON数据文件路径"""
-    today_str = datetime.now().strftime("%Y%m%d")
-    return DATA_DIR / f"{today_str}_{group_id}.json"
+# --- 数据模型 ---
+class MemberData(BaseModel):
+    wife: Optional[int] = None
+    husband: Optional[int] = None
+    count: int = 0
 
+class GroupInstance:
+    def __init__(self, group_id: int, data: dict):
+        self.group_id = group_id
+        self.members: Dict[int, MemberData] = {
+            int(uid): MemberData(**info) for uid, info in data.items()
+        }
+        self._lock = asyncio.Lock()
 
-def read_data(file_path: Path) -> Dict[str, Dict[str, Any]]:
-    """读取数据文件，文件不存在则返回空字典"""
-    if not file_path.exists():
-        return {}
+    def get_member(self, user_id: int) -> MemberData:
+        if user_id not in self.members:
+            self.members[user_id] = MemberData()
+        return self.members[user_id]
+
+    def _update_relation(self, user_a: int, user_b: int) -> None:
+        a = self.get_member(user_a)
+        b = self.get_member(user_b)
+        a.wife, b.husband = user_b, user_a
+
+    def _clear_relation(self, user_id: int) -> None:
+        """清除关系，确保双向解绑"""
+        user = self.get_member(user_id)
+        # 清理老婆
+        if user.wife:
+            wife = self.get_member(user.wife)
+            wife.husband = None
+            user.wife = None
+            if wife.count == -1 or wife.count > MAX_COUNT:
+                wife.count = MAX_COUNT - 1
+        # 清理老公
+        if user.husband:
+            husband = self.get_member(user.husband)
+            husband.wife = None
+            user.husband = None
+            if husband.count == -1 or husband.count > MAX_COUNT:
+                husband.count = MAX_COUNT - 1
+
+    def random_partner(self, pool: List[int], user_id: int, hope: Optional[int] = None, ex_partner_id: Optional[int] = None) -> int:
+        others = [m for m in pool if m != user_id and m != ex_partner_id]
+        if not others:
+            return user_id
+        if hope in others and random.random() < 0.5:
+            return hope
+        return random.choice(others)
+
+    async def handle_jrlp(self, user_id: int, pool: List[int], hope: Optional[int]) -> Tuple[str, int | None]:
+        async with self._lock:
+            member = self.get_member(user_id)
+            # 检查是否已离婚 (count = -1)
+            if member.count == -1:
+                return "qq_fail_lh", None
+            if member.wife: 
+                return "jrlp_already", member.wife
+            
+            target_id = self.random_partner(pool, user_id, hope)
+            self._update_relation(user_id, target_id)
+            return ("jrlp_self" if target_id == user_id else "jrlp_success"), target_id
+
+    async def handle_hlp(self, user_id: int, pool: List[int], hope: Optional[int]) -> Tuple[str, Optional[int]]:
+        async with self._lock:
+            member = self.get_member(user_id)
+            
+            # 1. 离婚状态检查
+            if member.count == -1:
+                return "hlp_lh", None # 对应 (翻笔记) 那个回复
+            
+            # 2. 次数限制检查
+            if member.count >= MAX_COUNT:
+                return "hlp_limit", None
+            
+            # 3. 正常更换逻辑
+            member.count += 1
+            ex_partner_id = member.wife
+            self._clear_relation(user_id)
+            
+            target_id = self.random_partner(pool, user_id, hope, ex_partner_id)
+            self._update_relation(user_id, target_id)
+            
+            # 4. 文案分支判断
+            if target_id == user_id:
+                return "hlp_self", target_id
+            if member.count == MAX_COUNT:
+                return "hlp_last", target_id
+            
+            # 随机返回 hlp_success1 或 2
+            return random.choice(["hlp_success1", "hlp_success2"]), target_id
+
+    async def handle_hlg(self, user_id: int) -> Tuple[str, Optional[int]]:
+        async with self._lock:
+            member = self.get_member(user_id)
+            if not member.husband: 
+                return "hlg_none", None
+            husband_id = member.husband
+            member.count += 1
+            self._clear_relation(user_id)
+            return ("hlp_limit" if member.count > MAX_COUNT else "hlg_success"), husband_id
+
+    async def handle_qq(self, user_id: int, target_id: int, bot_id: int) -> Tuple[str, int | None]:
+        async with self._lock:
+            member = self.get_member(user_id)
+            
+            # 离婚判定
+            if member.count == -1:
+                return "qq_fail_lh", None
+            # 次数判定
+            if member.count >= MAX_COUNT: 
+                return "qq_fail_limit", None
+            # 强娶机器人判定
+            if target_id == bot_id:
+                return "qq_with_lyra", None
+            # 自己
+            if user_id == target_id:
+                self._clear_relation(user_id)
+                member.count += 1
+                self._update_relation(user_id, user_id)
+                return "qq_self", user_id
+            # 对方已婚判定
+            if self.get_member(target_id).husband: 
+                return "qq_fail_married", None
+            
+            self._clear_relation(user_id)
+            member.count += 1
+            self._update_relation(user_id, target_id)
+            return "qq_success", target_id
+
+    async def handle_lh(self, user_id: int) -> Tuple[str, Optional[int]]:
+        async with self._lock:
+            member = self.get_member(user_id)
+            if not member.wife:
+                return "lh_none", None
+            
+            partner_id = member.wife
+            status = "lh_self" if partner_id == user_id else "lh_success"
+            
+            self._clear_relation(user_id)
+            # 设置离婚标记：count 为 -1
+            member.count = -1 
+            return status, partner_id
+
+# --- 单例管理器 ---
+class PluginManager:
+    _instance: Optional["PluginManager"] = None
+    
+    # 使用标准库的 Path 类型进行注解
+    groups: Dict[int, GroupInstance]
+    config_path: Path 
+
+    def __new__(cls):
+        if not cls._instance:
+            cls._instance = super().__new__(cls)
+            cls._instance.groups = {}
+            # get_plugin_data_dir() 返回的是 pathlib.Path
+            cls._instance.config_path = get_plugin_data_dir() / "config.json"
+        return cls._instance
+
+    async def get_group(self, group_id: int) -> GroupInstance:
+        if group_id not in self.groups:
+            path = get_plugin_cache_dir() / datetime.now().strftime("%Y%m%d") / f"{group_id}.json"
+            data = {}
+            if path.exists():
+                try:
+                    content_bytes = await anyio.Path(path).read_bytes()
+                    data = orjson.loads(content_bytes)
+                except (ValueError, KeyError, orjson.JSONDecodeError) as e:
+                    logger.warning(f"读取群 {group_id} 数据异常，启用空配置: {e}")
+                except Exception as e:
+                    logger.error(f"未知异常读取缓存: {e}")
+            self.groups[group_id] = GroupInstance(group_id, data)
+        return self.groups[group_id]
+
+    async def save_group(self, group_id: int) -> None:
+        path = get_plugin_cache_dir() / datetime.now().strftime("%Y%m%d") / f"{group_id}.json"
+        await anyio.Path(path.parent).mkdir(parents=True, exist_ok=True)
+        dumped_dict = {str(k): getattr(v, "model_dump", v.dict)() for k, v in self.groups[group_id].members.items()}
+        dumped_bytes = orjson.dumps(dumped_dict, option=orjson.OPT_INDENT_2)
+        await anyio.Path(path).write_bytes(dumped_bytes)
+
+    async def load_config(self) -> dict:
+        if not self.config_path.exists():
+            default_config = {"allowed": {}, "not_allowed": []}
+            await anyio.Path(self.config_path.parent).mkdir(parents=True, exist_ok=True)
+            await anyio.Path(self.config_path).write_bytes(orjson.dumps(default_config, option=orjson.OPT_INDENT_2))
+            return default_config
+        try:
+            content_bytes = await anyio.Path(self.config_path).read_bytes()
+            return orjson.loads(content_bytes)
+        except (ValueError, KeyError, orjson.JSONDecodeError) as e:
+            logger.warning(f"读取配置文件异常: {e}")
+            return {"allowed": {}, "not_allowed": []}
+        except Exception as e:
+            logger.error(f"未知异常读取配置文件: {e}")
+            return {"allowed": {}, "not_allowed": []}
+
+    async def save_config(self, config_data: dict) -> None:
+        try:
+            await anyio.Path(self.config_path.parent).mkdir(parents=True, exist_ok=True)
+            dumped_bytes = orjson.dumps(config_data, option=orjson.OPT_INDENT_2)
+            await anyio.Path(self.config_path).write_bytes(dumped_bytes)
+        except Exception as e:
+            logger.error(f"保存配置失败: {e}")
+
+plugin_manager = PluginManager()
+
+# --- 定时与启动任务 ---
+driver = get_driver()
+
+def _archive_last_week_data():
+    now = datetime.now()
+    base_dir = get_plugin_cache_dir()
+    
+    last_monday = now - timedelta(days=now.weekday() + 7)
+    target_dates = [(last_monday + timedelta(days=i)).strftime("%Y%m%d") for i in range(7)]
+    
+    dirs_to_archive = [base_dir / d for d in target_dates if (base_dir / d).exists() and (base_dir / d).is_dir()]
+    if not dirs_to_archive:
+        return
+
+    archive_name = base_dir / f"archive_{target_dates[0]}_{target_dates[-1]}.tar.gz"
     try:
-        with file_path.open("r", encoding="utf-8") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, IOError) as e:
-        logger.warning(f"读取数据文件 {file_path} 失败: {e}")
-        return {}
+        with tarfile.open(archive_name, "w:gz") as tar:
+            for d in dirs_to_archive:
+                tar.add(d, arcname=d.name)
+                
+        for d in dirs_to_archive:
+            shutil.rmtree(d)
+            
+        logger.info(f"上周数据已压缩至 {archive_name} 并清理原文件夹。")
+    except Exception as e:
+        logger.error(f"压缩上周数据失败: {e}")
 
+@driver.on_startup
+async def check_and_archive_data():
+    if datetime.now().weekday() == 0:
+        await asyncio.to_thread(_archive_last_week_data)
 
-def write_data(file_path: Path, data: Dict[str, Dict[str, Any]]) -> None:
-    """使用原子操作将数据写入JSON文件"""
-    try:
-        with atomic_write(file_path, overwrite=True, encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=4)
-    except IOError as e:
-        logger.error(f"写入数据文件 {file_path} 失败: {e}")
+# --- 工具函数 ---
+async def build_message(bot: Bot, group_id: int, user_id: int, template: str, partner_id: Optional[int] = None, intent: str = "wife") -> Message:
+    display = "你自己"
+    if partner_id and partner_id != user_id:
+        try:
+            info = await bot.get_group_member_info(group_id=group_id, user_id=partner_id)
+            display = info.get("card") or info.get("nickname") or str(partner_id)
+        except (ActionFailed, NetworkError) as e:
+            logger.warning(f"获取群员信息失败: {e}")
+            display = str(partner_id)
+        except Exception as e:
+            logger.error(f"未知异常导致无法获取昵称: {e}")
+            display = str(partner_id)
 
+    text = template.replace("{qq}", display)
+    msg = Message([MessageSegment.at(user_id), MessageSegment.text(f"\n{text}")])
+    if partner_id: 
+        msg.append(MessageSegment.image(f"http://q1.qlogo.cn/g?b=qq&nk={partner_id}&s=640"))
+    return msg
 
-async def get_active_members(bot: Bot, group_id: int) -> List[str]:
-    """获取群内14天内发言的成员QQ号列表"""
+async def get_pool(bot: Bot, group_id: int, user_id: int, config: dict) -> List[int]:
+    pref = config["allowed"].get(str(user_id), {})
     try:
         member_list = await bot.get_group_member_list(group_id=group_id)
-    except Exception as e:
-        logger.error(f"获取群 {group_id} 成员列表失败: {e}")
+    except (ActionFailed, NetworkError) as e:
+        logger.warning(f"拉取群成员列表失败: {e}")
         return []
+    except Exception as e:
+        logger.error(f"未知异常导致拉取群成员失败: {e}")
+        return []
+        
+    now = datetime.now().timestamp()
+    pool = []
+    for member_info in member_list:
+        member_id = member_info["user_id"]
+        if member_id in config["not_allowed"] or member_id == user_id: 
+            continue
+        if not pref.get("allow_bot") and (member_info.get("is_bot") or str(member_id) == bot.self_id): 
+            continue
+        if now - member_info.get("last_sent_time", 0) > ACTIVE_DAYS * 86400: 
+            continue
+        pool.append(member_id)
+    return pool
 
-    active_members = []
-    current_timestamp = int(datetime.now().timestamp())
-    for member in member_list:
-        if current_timestamp - member.get("last_sent_time", 0) < ACTIVE_DAYS * 24 * 3600:
-            active_members.append(str(member["user_id"]))
-    return active_members
-
-
-def get_user_data(data: Dict[str, Dict[str, Any]], user_id: str) -> Dict[str, Any]:
-    """获取用户的配对数据，不存在则创建默认值"""
-    return data.get(user_id, {"partner_id": None, "change_count": 0})
-
-
-# --- 消息构造函数 ---
-
-async def build_message(bot: Bot, group_id: int, at_user_id: str, text: str, partner_user_id: Optional[str] = None) -> Message:
-    """构造回复消息"""
-    nickname = ""
-    if partner_user_id:
-        try:
-            user_info = await bot.get_group_member_info(group_id=group_id, user_id=int(partner_user_id))
-            nickname = user_info.get("card", "") or user_info.get("nickname", "")
-        except Exception as e:
-            logger.warning(f"获取群成员 {partner_user_id} 信息失败: {e}")
-
-    user_display = nickname or partner_user_id or ""
-    final_text = text.replace("{qq}", str(user_display))
-
-    result = [MessageSegment.at(at_user_id), MessageSegment.text(' \n'), MessageSegment.text(final_text)]
-    
-    if partner_user_id:
-        result.append(MessageSegment.image(f"http://q1.qlogo.cn/g?b=qq&nk={partner_user_id}&s=640"))
-
-    return Message(result)
-
-
-# --- 事件响应 ---
+# --- 响应器 ---
+jrlp = on_regex(r"^(今日老婆|jrlp)$", priority=5, block=True)
+hlp = on_regex(r"^(换老婆|hlp)$", priority=5, block=True)
+hlg = on_regex(r"^(换老公|hlg)$", priority=5, block=True)
+qq = on_regex(r"^(强娶|qq)", priority=5, block=True)
+lh = on_regex(r"^(离婚|lh)$", priority=5, block=True)
+jrlg = on_regex(r"^(今日老公|jrlg)$", priority=5, block=True)
+toggle_status = on_regex(r"^(不当老婆|当老婆|不娶bot|娶bot)$", priority=5, block=True)
 
 @jrlp.handle()
-async def handle_jrlp(bot: Bot, event: GroupMessageEvent):
-    """处理「今日老婆」命令"""
-    user_id = str(event.user_id)
-    group_id = event.group_id
-    file_path = get_today_file(group_id)
-    data = read_data(file_path)
-
-    if user_id in data:
-        partner_id = data[user_id].get("partner_id")
-        if partner_id is None:
-            msg = await build_message(bot, group_id, user_id, "你今天已经离过婚了！不可以再找老婆了！")
-        elif partner_id == user_id:
-            msg = await build_message(bot, group_id, user_id, "你今天的老婆是自己哦=w=", partner_user_id=partner_id)
-        else:
-            msg = await build_message(bot, group_id, user_id, "你今天的老婆是：{qq}", partner_user_id=partner_id)
-        await jrlp.finish(msg)
-
-    active_members = await get_active_members(bot, group_id)
-    bot_id = str(bot.self_id)
-    candidates = [m for m in active_members if m not in data and m != user_id and m != bot_id]
-
-    if not candidates:
-        partner_id = user_id
-        data[user_id] = {"partner_id": user_id, "change_count": 0}
-        msg = await build_message(bot, group_id, user_id, "今天群里没有其他单身人士了，你的老婆是你自己哦！", partner_user_id=partner_id)
-    else:
-        partner_id = random.choice(candidates)
-        data[user_id] = {"partner_id": partner_id, "change_count": 0}
-        data[partner_id] = {"partner_id": user_id, "change_count": 0}
-        msg = await build_message(bot, group_id, user_id, "你今天的老婆是：{qq}", partner_user_id=partner_id)
-        logger.info(f"群({group_id})配对成功: {user_id} <-> {partner_id}")
-
-    write_data(file_path, data)
-    await jrlp.finish(msg)
-
-
-@lihun.handle()
-async def handle_lihun(bot: Bot, event: GroupMessageEvent):
-    """处理「离婚」命令"""
-    user_id = str(event.user_id)
-    group_id = event.group_id
-    file_path = get_today_file(group_id)
-    data = read_data(file_path)
-
-    if user_id not in data:
-        msg = await build_message(bot, group_id, user_id, "你还没有一个香香软软的亲亲老婆，怎么就想着当个负心汉了！😡😡")
-        await lihun.finish(msg)
-
-    user_info = data[user_id]
-    partner_id = user_info.get("partner_id")
-
-    if partner_id is None:
-        msg = await build_message(bot, group_id, user_id, "你已经离过婚了！干嘛！😡😡")
-        await lihun.finish(msg)
+async def _(bot: Bot, event: MessageEvent):
+    if not isinstance(event, GroupMessageEvent): return
+    config = await plugin_manager.load_config()
+    if event.user_id in config["not_allowed"]: 
+        return  # 直接返回，保持沉默
+        
+    pool = await get_pool(bot, event.group_id, event.user_id, config)
+    group = await plugin_manager.get_group(event.group_id)
+    status, partner_id = await group.handle_jrlp(event.user_id, pool, config["allowed"].get(str(event.user_id), {}).get("hope"))
     
-    if partner_id == user_id:
-        msg = await build_message(bot, group_id, user_id, "水仙也要离婚吗（大脑过载）")
-        await lihun.finish(msg)
+    await plugin_manager.save_group(event.group_id)
+    await jrlp.finish(await build_message(bot, event.group_id, event.user_id, REPLY_DICT[status], partner_id))
 
-    if partner_id in data:
-        del data[partner_id]
-    user_info["partner_id"] = None
-    write_data(file_path, data)
-
-    logger.info(f"群({group_id})离婚成功: 用户 {user_id} 与 {partner_id} 离婚")
-    msg = await build_message(bot, group_id, user_id, "你已经和 {qq} 离婚了。（记笔记）", partner_user_id=partner_id)
-    await lihun.finish(msg)
-
-
-@huanlp.handle()
-async def handle_huanlp(bot: Bot, event: GroupMessageEvent):
-    """处理「换老婆」命令"""
-    user_id = str(event.user_id)
-    group_id = event.group_id
-    file_path = get_today_file(group_id)
-    data = read_data(file_path)
-
-    user_info = get_user_data(data, user_id)
-    original_partner_id = user_info.get("partner_id")
-
-    if original_partner_id is None:
-        msg = await build_message(bot, group_id, user_id, "（翻笔记）你现在不能换老婆了（叉腰）")
-        await huanlp.finish(msg)
-
-    if user_info.get("change_count", 0) >= MAX_CHANGE_COUNT:
-        if original_partner_id in data:
-            del data[original_partner_id]
-        user_info["partner_id"] = None
-        user_info["change_count"] += 1
-        write_data(file_path, data)
-        await huanlp.finish("换太多次啦！你现在没有香香软软的亲亲老婆了！😡😡")
-
-
-    active_members = await get_active_members(bot, group_id)
-    bot_id = str(bot.self_id)
-    new_candidates = [m for m in active_members if m not in data and m != user_id and m != bot_id]
-
-    if not new_candidates:
-        msg = await build_message(bot, group_id, user_id, "恭喜你，现在没有其他可以更换的人选了（")
-        await huanlp.finish(msg)
-
-    if original_partner_id and original_partner_id in data:
-        del data[original_partner_id]
+@hlp.handle()
+async def _(bot: Bot, event: MessageEvent):
+    if not isinstance(event, GroupMessageEvent): return
+    config = await plugin_manager.load_config()
+    pool = await get_pool(bot, event.group_id, event.user_id, config)
+    group = await plugin_manager.get_group(event.group_id)
+    status, partner_id = await group.handle_hlp(event.user_id, pool, config["allowed"].get(str(event.user_id), {}).get("hope"))
     
-    new_partner_id = random.choice(new_candidates)
-    user_info["partner_id"] = new_partner_id
-    user_info["change_count"] += 1
+    await plugin_manager.save_group(event.group_id)
+    await hlp.finish(await build_message(bot, event.group_id, event.user_id, REPLY_DICT[status], partner_id))
+
+@hlg.handle()
+async def _(bot: Bot, event: MessageEvent):
+    if not isinstance(event, GroupMessageEvent): return
+    group = await plugin_manager.get_group(event.group_id)
+    status, partner_id = await group.handle_hlg(event.user_id)
     
-    data[user_id] = user_info
-    data[new_partner_id] = {"partner_id": user_id, "change_count": 0}
-    write_data(file_path, data)
+    await plugin_manager.save_group(event.group_id)
+    await hlg.finish(await build_message(bot, event.group_id, event.user_id, REPLY_DICT[status], partner_id, "husband"))
 
-    if user_info["change_count"] == MAX_CHANGE_COUNT:
-        text = "再换你就没老婆啦！你现在的老婆是：{qq}"
-    else:
-        text = random.choice([
-            "好吧好吧，给你换了。",
-            "换好了喔。"
-        ]) + "你现在的老婆是：{qq}"
-    msg = await build_message(bot, group_id, user_id, text, partner_user_id=new_partner_id)
-    await huanlp.finish(msg)
-
-
-@qiangqu.handle()
-async def handle_qiangqu(bot: Bot, event: GroupMessageEvent):
-    """处理「强娶」命令"""
-    user_id = str(event.user_id)
-    group_id = event.group_id
-    file_path = get_today_file(group_id)
-    data = read_data(file_path)
-
-    # 提取被@的用户
-    target_user_id = None
-    for seg in event.message:
-        if seg.type == "at":
-            target_user_id = str(seg.data["qq"])
+@qq.handle()
+async def _(bot: Bot, event: MessageEvent):
+    target_id = None
+    for segment in event.get_message():
+        if segment.type == "at":
+            target_id = int(segment.data["qq"])
             break
-    if not target_user_id:
-        msg = await build_message(bot, group_id, user_id, "若想强娶那个TA，请勇敢地@出来=w=")
-        await qiangqu.finish(msg)
+            
+    if not target_id:
+        text = event.get_plaintext().strip()
+        match = re.search(r'\d+', text)
+        if match:
+            target_id = int(match.group())
 
-    if target_user_id == str(bot.self_id):
-        await qiangqu.finish("小梨不能跟你们玩这种游戏啦！莉莉丝阿姐听说了会生气的qwq")
+    if not target_id:
+        await qq.finish(REPLY_DICT["qq_usage"])
 
-    # 检查目标是否可被强娶
-    # 被锁定为 None 的用户现在可以被强娶，但仅限强娶
-    if target_user_id in data and data[target_user_id].get("partner_id") is not None:
-        msg = await build_message(bot, group_id, user_id, "不可以哦——TA已经有老婆了，TA的老婆会闹情绪的！")
-        await qiangqu.finish(msg)
+    if isinstance(event, PrivateMessageEvent):
+        config = await plugin_manager.load_config()
+        uid_str = str(event.user_id)
+        if uid_str not in config["allowed"]:
+            config["allowed"][uid_str] = {}
+        config["allowed"][uid_str]["hope"] = target_id
+        await plugin_manager.save_config(config)
+        await qq.finish(REPLY_DICT["hope_set"].replace("{qq}", str(target_id)))
+        return
 
-    user_info = get_user_data(data, user_id)
-    original_partner_id = user_info.get("partner_id")
-    change_count = user_info.get("change_count", 0)
+    if not isinstance(event, GroupMessageEvent): return
 
-    # [逻辑修改] 根据用户是否有老婆，执行不同逻辑
-    if not original_partner_id:
-        # 用户单身，直接建立新关系
-        if user_id in data and data[user_id].get("partner_id") is None:
-            # 今天离过婚的用户不能再配对
-            msg = await build_message(bot, group_id, user_id, "你今天已经离过婚了，不可以再找新老婆了！")
-            await qiangqu.finish(msg)
+    group = await plugin_manager.get_group(event.group_id)
+    status, partner_id = await group.handle_qq(event.user_id, target_id, int(bot.self_id))
+    
+    await plugin_manager.save_group(event.group_id)
+    await qq.finish(await build_message(bot, event.group_id, event.user_id, REPLY_DICT[status], partner_id))
+
+@lh.handle()
+async def _(bot: Bot, event: MessageEvent):
+    if not isinstance(event, GroupMessageEvent): return
+    group = await plugin_manager.get_group(event.group_id)
+    status, partner_id = await group.handle_lh(event.user_id)
+    
+    await plugin_manager.save_group(event.group_id)
+    await lh.finish(await build_message(bot, event.group_id, event.user_id, REPLY_DICT[status], partner_id))
+
+@jrlg.handle()
+async def _(bot: Bot, event: MessageEvent):
+    if not isinstance(event, GroupMessageEvent): return
+    group = await plugin_manager.get_group(event.group_id)
+    member = group.get_member(event.user_id)
+    if not member.husband: 
+        await jrlg.finish(REPLY_DICT["jrlg_none"])
         
-        # 建立新关系
-        data[user_id] = {"partner_id": target_user_id, "change_count": 0}
-        data[target_user_id] = {"partner_id": user_id, "change_count": 0}
-        write_data(file_path, data)
-        logger.info(f"群({group_id})强娶成功: 单身用户 {user_id} 强娶了 {target_user_id}")
-        msg = await build_message(bot, group_id, user_id, "怎么还有强制play（）总之恭喜娶到 {qq} ！", partner_user_id=target_user_id)
+    await jrlg.finish(await build_message(bot, event.group_id, event.user_id, REPLY_DICT["jrlg_status"], member.husband, "husband"))
 
-    else:
-        # 用户已有老婆，执行更换逻辑
-        if change_count >= MAX_CHANGE_COUNT:
-            msg = await build_message(bot, group_id, user_id, "再换老婆你可就没有老婆了，今天安安心心过这日子吧（")
-            await qiangqu.finish(msg)
-
-        if original_partner_id in data:
-            del data[original_partner_id] # 释放前任
-
-        user_info["partner_id"] = target_user_id
-        user_info["change_count"] += 1
-        data[user_id] = user_info
-        data[target_user_id] = {"partner_id": user_id, "change_count": 0}
-        write_data(file_path, data)
+@toggle_status.handle()
+async def _(bot: Bot, event: MessageEvent):
+    if not isinstance(event, GroupMessageEvent): return
+    cmd = event.get_plaintext().strip()
+    config = await plugin_manager.load_config()
+    user_id = event.user_id
+    uid_str = str(user_id)
+    
+    if cmd == "不当老婆":
+        if user_id not in config["not_allowed"]:
+            config["not_allowed"].append(user_id)
+            await plugin_manager.save_config(config)
+        await toggle_status.finish(REPLY_DICT["not_allowed"])
         
-        logger.info(f"群({group_id})强娶更换成功: {user_id} 从 {original_partner_id} 换为 {target_user_id}")
-        msg = await build_message(bot, group_id, user_id, "怎么还有强制play（）总之恭喜娶到 {qq} ！", partner_user_id=target_user_id)
-
-    await qiangqu.finish(msg)
+    elif cmd == "当老婆":
+        if user_id in config["not_allowed"]:
+            config["not_allowed"].remove(user_id)
+            await plugin_manager.save_config(config)
+        await toggle_status.finish(REPLY_DICT["allowed"])
+        
+    elif cmd == "不娶bot":
+        if uid_str not in config["allowed"]:
+            config["allowed"][uid_str] = {}
+        config["allowed"][uid_str]["allow_bot"] = False
+        await plugin_manager.save_config(config)
+        await toggle_status.finish(REPLY_DICT["not_allow_bot"])
+        
+    elif cmd == "娶bot":
+        if uid_str not in config["allowed"]:
+            config["allowed"][uid_str] = {}
+        config["allowed"][uid_str]["allow_bot"] = True
+        await plugin_manager.save_config(config)
+        await toggle_status.finish(REPLY_DICT["allow_bot"])
