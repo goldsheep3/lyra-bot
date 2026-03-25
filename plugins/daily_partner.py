@@ -124,7 +124,14 @@ class GroupInstance:
                 husband.count = MAX_COUNT - 1
 
     def random_partner(self, pool: List[int], user_id: int, hope: Optional[int] = None, ex_partner_id: Optional[int] = None) -> int:
-        others = [m for m in pool if m != user_id and m != ex_partner_id]
+        # 双重过滤：避免抽到自己、前任，且不选择已与他人绑定的对象。
+        others = [
+            m
+            for m in pool
+            if m != user_id
+            and m != ex_partner_id
+            and (not self.get_member(m).husband or self.get_member(m).husband == user_id)
+        ]
         if not others:
             return user_id
         if hope in others and random.random() < 0.5:
@@ -160,8 +167,10 @@ class GroupInstance:
             member.count += 1
             ex_partner_id = member.wife
             self._clear_relation(user_id)
-            
-            target_id = self.random_partner(pool, user_id, hope, ex_partner_id)
+
+            # 即使上游池刷新，也显式保证不回抽刚离婚对象。
+            clean_pool = [m for m in pool if m != ex_partner_id]
+            target_id = self.random_partner(clean_pool, user_id, hope, ex_partner_id)
             self._update_relation(user_id, target_id)
             
             # 4. 文案分支判断
@@ -348,7 +357,7 @@ async def build_message(bot: Bot, group_id: int, user_id: int, template: str, pa
         msg.append(MessageSegment.image(f"http://q1.qlogo.cn/g?b=qq&nk={partner_id}&s=640"))
     return msg
 
-async def get_pool(bot: Bot, group_id: int, user_id: int, config: dict) -> List[int]:
+async def get_pool(bot: Bot, group_id: int, user_id: int, config: dict, group_instance: GroupInstance) -> List[int]:
     pref = config["allowed"].get(str(user_id), {})
     try:
         member_list = await bot.get_group_member_list(group_id=group_id)
@@ -364,6 +373,9 @@ async def get_pool(bot: Bot, group_id: int, user_id: int, config: dict) -> List[
     for member_info in member_list:
         member_id = member_info["user_id"]
         if member_id in config["not_allowed"] or member_id == user_id: 
+            continue
+        member_data = group_instance.get_member(member_id)
+        if member_data.husband and member_data.husband != user_id:
             continue
         if not pref.get("allow_bot") and (member_info.get("is_bot") or str(member_id) == bot.self_id): 
             continue
@@ -388,9 +400,9 @@ async def _(bot: Bot, event: MessageEvent):
     config = await plugin_manager.load_config()
     if event.user_id in config["not_allowed"]: 
         return  # 直接返回，保持沉默
-        
-    pool = await get_pool(bot, event.group_id, event.user_id, config)
+
     group = await plugin_manager.get_group(event.group_id, now_date)
+    pool = await get_pool(bot, event.group_id, event.user_id, config, group)
     status, partner_id = await group.handle_jrlp(event.user_id, pool, config["allowed"].get(str(event.user_id), {}).get("hope"))
     
     await plugin_manager.save_group(event.group_id, now_date)
@@ -401,8 +413,8 @@ async def _(bot: Bot, event: MessageEvent):
     if not isinstance(event, GroupMessageEvent): return
     now_date = datetime.now().strftime("%Y%m%d")
     config = await plugin_manager.load_config()
-    pool = await get_pool(bot, event.group_id, event.user_id, config)
     group = await plugin_manager.get_group(event.group_id, now_date)
+    pool = await get_pool(bot, event.group_id, event.user_id, config, group)
     status, partner_id = await group.handle_hlp(event.user_id, pool, config["allowed"].get(str(event.user_id), {}).get("hope"))
     
     await plugin_manager.save_group(event.group_id, now_date)
