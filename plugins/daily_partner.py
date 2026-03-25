@@ -62,7 +62,7 @@ REPLY_DICT: Dict[str, str] = {
     "qq_success": "怎么还有强制play（）总之恭喜娶到 {qq} ！",
     "qq_self": "终归是要水仙啊……那我先磕！",
     "qq_usage": "若想强娶那个TA，请勇敢地@出来=w=",
-    "qq_with_lyra": "小梨不能跟你们玩这种游戏啦！莉莉丝阿姐听说了会生气的qwq",
+    "qq_with_bot_self": "小梨不能跟你们玩这种游戏啦！莉莉丝阿姐听说了会生气的qwq",
     "qq_fail_married": "不可以哦——TA已经有老婆了，TA的老婆会闹情绪的！",
     "qq_fail_limit": "再换老婆你可就没有老婆了，今天安安心心过这日子吧（",
     "qq_fail_lh": "你今天已经离过婚了，不可以再找新老婆了！",
@@ -395,7 +395,7 @@ jrlg = on_regex(r"^(今日老公|jrlg)$", priority=5, block=True)
 toggle_status = on_regex(r"^(不当老婆|当老婆|不娶bot|娶bot)$", priority=5, block=True)
 
 @help.handle()
-async def _(event: MessageEvent):
+async def _():
     await help.finish("""
 帮助 | DailyPartner（今日老婆）
 
@@ -461,7 +461,10 @@ async def _(bot: Bot, event: MessageEvent):
         if segment.type == "at":
             target_id = int(segment.data["qq"])
             break
-            
+      
+    if getattr(event, 'to_me', None):
+        await qq.finish(REPLY_DICT["qq_with_bot_self"])
+      
     if not target_id:
         text = event.get_plaintext().strip()
         match = re.search(r'\d+', text)
