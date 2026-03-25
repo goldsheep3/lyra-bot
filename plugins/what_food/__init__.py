@@ -213,9 +213,48 @@ async def _(event: MessageEvent, matcher: Matcher, groups: tuple = RegexGroup())
 @admin.handle()
 async def _(event: MessageEvent, matcher: Matcher, groups: tuple = RegexGroup()):
     """处理管理员命令"""
+    _, _, command = groups
+
     # sudo whatfood enabled/disabled itemname  # 启用/禁用餐点
+    if command.startswith("enabled"):
+        return
+
     # sudo whatfood setscore itemname score reason weight # 设置餐点的高权重评分和理由
+    elif command.startswith("setscore"):
+        return
+
     # sudo whatfood ban userid time(minutes)  # 禁止用户在该群使用插件一段时间
+    elif command.startswith("ban"):
+        return
+
     # sudo whatfood unban userid  # 解除用户禁令
+    elif command.startswith("unban"):
+        return
+
     # sudo whatfood init  # 将初始菜品填入数据库
+    elif command.startswith("init"):
+        return
+
+    # sudo whatfood update  # 从 JSON/NPZ 文件更新数据
+    elif command.startswith("update"):
+        require("nonebot_plugin_localstore")
+        from nonebot_plugin_localstore import get_plugin_data_dir, get_plugin_cache_dir
+        from .json_update import full_migrate_old_data
+        food_json_path = get_plugin_data_dir() / "Food.json"
+        drink_json_path = get_plugin_data_dir() / "Drink.json"
+        food_score_path = get_plugin_cache_dir() / "food_scores.npz"
+        drink_score_path = get_plugin_cache_dir() / "drink_scores.npz"
+        user_offset_json_path = get_plugin_data_dir() / "user_offset.json"
+        if not any([food_json_path.exists(), drink_json_path.exists(), food_score_path.exists(), drink_score_path.exists()]):
+            await matcher.finish("未找到旧数据文件，无法执行更新操作。")
+        await full_migrate_old_data(
+            food_json_path=food_json_path,
+            drink_json_path=drink_json_path,
+            food_npz_path=food_score_path,
+            drink_npz_path=drink_score_path,
+            user_offset_json_path=user_offset_json_path
+        )
+        await matcher.finish("数据更新完成！旧数据已迁移到数据库，并已随机打乱ID。")
+        return
+
     return
