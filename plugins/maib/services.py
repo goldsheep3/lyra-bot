@@ -216,8 +216,11 @@ async def delete_alias_by_id(alias_id: int):
         await session.commit()
 
 
-async def refresh_dxrating_cache(shortid: int, difficulty: int, current_version: int):
+async def refresh_dxrating_cache(shortid: int, difficulty: int, server: utils.SERVER_TAG):
     """当定数改变时，重新计算该谱面下所有用户的 dxrating 缓存"""
+    jp_ver, cn_ver = utils.get_current_versions()
+    current_version = cn_ver if server == "CN" else jp_ver
+
     async with get_session() as session:
         # 1. 获取谱面 Model 并转为 Utils
         statement = (
@@ -235,9 +238,7 @@ async def refresh_dxrating_cache(shortid: int, difficulty: int, current_version:
             MaiChartAch.shortid == shortid,
             MaiChartAch.difficulty == difficulty
         )
-        ach_statement = ach_statement.where(
-            MaiChartAch.server == ("CN" if current_version >= 2000 else "JP")
-        )
+        ach_statement = ach_statement.where(MaiChartAch.server == server)
         mct_achs = (await session.execute(ach_statement)).scalars().all()
         
         # 3. 批量更新
@@ -252,6 +253,72 @@ async def refresh_dxrating_cache(shortid: int, difficulty: int, current_version:
 
         # 4. 提交变更
         await session.commit()
+
+
+async def sync_cn_data_batch(
+    data: Sequence[tuple[int, int, list[float | int]]],
+    commit_every: int = 200,
+) -> tuple[int, int]:
+    """批量同步国服版本与定数（自管 session）。
+
+    参数 data 项格式: (shortid, version_cn, ds)
+    返回: (命中曲目数, 发生 lv_cn 变更的谱面数)
+    """
+    if not data:
+        return 0, 0
+
+    if commit_every <= 0:
+        commit_every = 200
+
+    hit_song_count = 0
+    changed_tasks: set[tuple[int, int, utils.SERVER_TAG]] = set()
+
+    async with get_session() as session:
+        for idx, (shortid, version_cn, ds) in enumerate(data, start=1):
+            result = await session.execute(
+                select(MaiData)
+                .where(MaiData.shortid == shortid)
+                .options(selectinload(MaiData.charts))
+            )
+            existing = result.scalar_one_or_none()
+            if existing is None:
+                continue
+
+            hit_song_count += 1
+            existing.version_cn = version_cn
+
+            for chart in existing.charts:
+                ds_idx = chart.difficulty - 2
+                if ds_idx < 0 or ds_idx >= len(ds):
+                    continue
+                lv_cn_raw = ds[ds_idx]
+                if lv_cn_raw is None:
+                    continue
+                try:
+                    lv_cn = float(lv_cn_raw)
+                except (TypeError, ValueError):
+                    continue
+
+                if chart.lv_cn != lv_cn:
+                    changed_tasks.add((shortid, chart.difficulty, "CN"))
+                    chart.lv_cn = lv_cn
+
+            if idx % commit_every == 0:
+                await session.commit()
+
+        await session.commit()
+
+    # lv_cn 改变后必须刷新对应谱面的 dxrating 缓存（CN 侧）。
+    for sid, diff, server in changed_tasks:
+        await refresh_dxrating_cache(sid, diff, server)
+
+    return hit_song_count, len(changed_tasks)
+
+
+async def sync_cn_data_by_shortid(shortid: int, version_cn: int, ds: list[float | int]) -> bool:
+    """按 shortid 同步国服版本与定数（自管 session）。"""
+    hit_song_count, _ = await sync_cn_data_batch([(shortid, version_cn, ds)], commit_every=1)
+    return hit_song_count > 0
 
 async def upload_achievements_batch(user_id: int, ach_list: List[utils.MaiChartAch]):
     """批量上传接口"""

@@ -13,7 +13,7 @@ from nonebot_plugin_datastore.db import post_db_init
 
 from. import models, network, services
 from .bot_registry import PluginRegistry
-from .utils import MaiData, MaiChart, GENRES_DATA, VERSIONS_DATA, SimaiNoteCount
+from .utils import MaiData, MaiChart, GENRES_DATA, VERSIONS_DATA, SimaiNoteCount, SERVER_TAG
 
 
 def initialize_genres_data_rev():
@@ -75,6 +75,7 @@ async def parse_diving_fish_version(version_str: str) -> int:
         return v_jp_result
     else:
         # 新框版本，转化
+        # 版本号为 maib 自主定义，兼容水鱼版本号输出格式，不受官方版本号影响
         v = (v_jp_result - 13) // 2 + 2020
         return v
 
@@ -194,74 +195,224 @@ async def parse_maidata(raw_metadata: dict[str, str], zip_path: Path) -> MaiData
 
     return mai
 
+
+def _extract_raw_metadata_from_content(content: str) -> dict[str, str]:
+    """从 maidata.txt 内容提取键值元数据。"""
+    parts = content.replace('\r\n', '\n').split('&')
+    raw_metadata: dict[str, str] = {}
+    for part in parts:
+        if '=' in part:
+            # 只分割第一个 '='，防止注释或内容里有等号
+            k, v = part.split('=', 1)
+            raw_metadata[k.strip()] = v.strip()
+    return raw_metadata
+
+
+async def read_chart_raw_metadata(chart_path: Path) -> dict[str, str] | None:
+    """读取单个谱面 zip 的 maidata.txt 元数据。"""
+    try:
+        with zipfile.ZipFile(chart_path, 'r') as zip_ref:
+            with zip_ref.open("maidata.txt") as f:
+                content = f.read().decode('utf-8')
+        raw_metadata = _extract_raw_metadata_from_content(content)
+        return raw_metadata or None
+    except Exception as e:
+        logger.warning(f"数据同步-谱面处理失败 {chart_path.stem}: {e}")
+        return None
+
+
+def _parse_shortid_from_metadata(raw_metadata: dict[str, str]) -> int:
+    """从元数据中提取 shortid。"""
+    for key in ("shortid", "id"):
+        v = raw_metadata.get(key)
+        if v is None:
+            continue
+        try:
+            return int(v)
+        except (ValueError, TypeError):
+            continue
+    return 0
+
+
+def _cache_key_for_path(chart_path: Path) -> str:
+    """生成缓存 key，优先使用 data_dir 相对路径，保证文件名与 shortid 解耦。"""
+    data_dir = PluginRegistry.get_data_dir()
+    if data_dir:
+        try:
+            return chart_path.relative_to(data_dir).as_posix()
+        except ValueError:
+            pass
+    return chart_path.as_posix()
+
+
+def _normalize_cache_entry(raw_entry: object, fallback_shortid: int | None = None) -> dict[str, int | str] | None:
+    """兼容旧缓存格式：str(identity) -> {identity, shortid?}。"""
+    if isinstance(raw_entry, dict):
+        identity = raw_entry.get("identity")
+        shortid = raw_entry.get("shortid")
+        normalized: dict[str, int | str] = {}
+        if isinstance(identity, str):
+            normalized["identity"] = identity
+        if isinstance(shortid, int):
+            normalized["shortid"] = shortid
+        elif isinstance(shortid, str):
+            try:
+                normalized["shortid"] = int(shortid)
+            except ValueError:
+                pass
+        elif fallback_shortid is not None:
+            normalized["shortid"] = fallback_shortid
+        return normalized if "identity" in normalized else None
+    if isinstance(raw_entry, str):
+        normalized = {"identity": raw_entry}
+        if fallback_shortid is not None:
+            normalized["shortid"] = fallback_shortid
+        return normalized
+    return None
+
+
+def _merge_maidata_with_priority(existing: MaiData, new_data: MaiData) -> MaiData:
+    """同 shortid 去重：优先保留带 Re:MASTER 的谱面。"""
+    exist_remaster: bool = getattr(existing, '_chart6', None) is not None
+    new_remaster: bool = getattr(new_data, '_chart6', None) is not None
+    return existing if (exist_remaster and not new_remaster) else new_data
+
 async def process_chart_files(chart_files: list[Path]) -> list[MaiData]:
-    """处理文件夹中所有 zip 文件，提取 maidata.txt 中的元数据"""
+    """按 shortid 增量处理 zip 文件，避免文件名与 shortid 绑定。"""
     logger.info(f"数据同步-谱面处理开始：共 {len(chart_files)} 个 zip 文件")
     cache_path = PluginRegistry.get_cache_dir() / "stat_cache.json"
     if cache_path.exists():
-        stat_cache = orjson.loads(cache_path.read_bytes())
+        stat_cache_raw = orjson.loads(cache_path.read_bytes())
+        if not isinstance(stat_cache_raw, dict):
+            stat_cache_raw = {}
     else:
-        stat_cache = {}
+        stat_cache_raw = {}
 
-    result = dict()
+    # 缓存候选项：首轮扫描收集，末尾按“是否成功重理”决定是否提交。
+    pending_stat_cache: dict[str, dict[str, int | str]] = {}
+    old_stat_cache: dict[str, dict[str, int | str]] = {}
+    next_stat_cache: dict[str, dict[str, int | str]] = {}
+    id_to_paths: dict[int, list[Path]] = {}
+    needs_reprocess_ids: set[int] = set()
+    preloaded_metadata: dict[str, dict[str, str]] = {}
+
+    count_a = 0
+    count_b = 0
+    count_c = 0
+
     for chart_path in chart_files:
-
         if not chart_path.exists():
             logger.warning(f"数据同步-谱面处理：{str(chart_path)} 不存在，跳过")
             continue
+
+        cache_key = _cache_key_for_path(chart_path)
         chart_file_name = chart_path.stem
-
-        # 文件状态校验，跳过未修改的文件
         file_identity = get_file_stat_identity(chart_path)
-        if stat_cache.get(chart_file_name) == file_identity:
-            logger.info(f"数据同步-谱面处理：{chart_path.name} 未修改，跳过")
-            continue
+
+        legacy_entry = stat_cache_raw.get(chart_file_name)
+        cache_entry = _normalize_cache_entry(stat_cache_raw.get(cache_key))
+        if cache_entry is None and legacy_entry is not None:
+            cache_entry = _normalize_cache_entry(legacy_entry)
+        if cache_entry is not None:
+            old_stat_cache[cache_key] = cache_entry
+
+        sid: int | None = None
+        metadata: dict[str, str] | None = None
+        cached_shortid: int | None = None
+        if cache_entry is not None:
+            raw_shortid = cache_entry.get("shortid")
+            if isinstance(raw_shortid, int):
+                cached_shortid = raw_shortid
+
+        identity_match = (
+            cache_entry is not None
+            and isinstance(cache_entry.get("identity"), str)
+            and cache_entry["identity"] == file_identity
+        )
+
+        if identity_match and cached_shortid is not None:
+            # A 类：未变化，且缓存中已有 shortid。
+            sid = cached_shortid
+            count_a += 1
         else:
-            stat_cache[chart_file_name] = file_identity
-
-        try:
-            # 打开 zip 文件
-            with zipfile.ZipFile(chart_path, 'r') as zip_ref:
-                # 直接读取 maidata.txt 内容
-                with zip_ref.open("maidata.txt") as f:
-                    content = f.read().decode('utf-8')
-
-            # 提取元数据
-            parts = content.replace('\r\n', '\n').split('&')
-            raw_metadata = {}
-
-            for part in parts:
-                if '=' in part:
-                    # 只分割第一个 '='，防止注释或内容里有等号
-                    k, v = part.split('=', 1)
-                    # 去掉首尾空格和换行
-                    raw_metadata[k.strip()] = v.strip()
-
-            if not raw_metadata:
-                # 未提取到元数据
+            # 非 A 类：只开包一次，先读元数据拿 shortid，并触发该 shortid 全组重理。
+            metadata = await read_chart_raw_metadata(chart_path)
+            if not metadata:
                 logger.warning(f"数据同步-谱面处理：未提取到 {chart_file_name} 的元数据")
                 continue
-            mai: MaiData = await parse_maidata(raw_metadata, chart_path)
+            sid = _parse_shortid_from_metadata(metadata)
+            needs_reprocess_ids.add(sid)
 
-            # 去重：以 shortid 为准，后处理的覆盖前处理的
-            # 若前处理的含 Re:MASTER 谱面，优先保留有 Re:MASTER 谱面的版本
-            if mai.shortid in result.keys():
-                exist_remaster: bool = getattr(result[mai.shortid], '_chart6', None) is not None
-                new_remaster: bool = getattr(mai, '_chart6', None) is not None
-                if not (exist_remaster and not new_remaster):
-                    result[mai.shortid] = mai
+            if cache_entry is None:
+                count_c += 1
             else:
-                result[mai.shortid] = mai
+                count_b += 1
 
-            logger.success(f"数据同步-谱面处理成功：{chart_file_name}({mai.title})")
+            preloaded_metadata[cache_key] = metadata
 
-        except Exception as e:
-            logger.warning(f"数据同步-谱面处理失败 {chart_file_name}: {e}")
-            raise e
+        if sid is None:
+            logger.warning(f"数据同步-谱面处理：{chart_file_name} shortid 解析失败，跳过")
+            continue
+
+        pending_stat_cache[cache_key] = {"identity": file_identity, "shortid": sid}
+
+        if sid not in id_to_paths:
+            id_to_paths[sid] = []
+        id_to_paths[sid].append(chart_path)
+
+    logger.info(f"数据同步-谱面处理分类统计：A={count_a}, B={count_b}, C={count_c}")
+
+    result: dict[int, MaiData] = {}
+    parsed_success_cache_keys: set[str] = set()
+    for sid in needs_reprocess_ids:
+        paths = id_to_paths.get(sid, [])
+        if not paths:
+            continue
+
+        sid_result: MaiData | None = None
+        for chart_path in paths:
+            chart_file_name = chart_path.stem
+            cache_key = _cache_key_for_path(chart_path)
+            raw_metadata = preloaded_metadata.get(cache_key)
+            if raw_metadata is None:
+                raw_metadata = await read_chart_raw_metadata(chart_path)
+            if not raw_metadata:
+                logger.warning(f"数据同步-谱面处理：未提取到 {chart_file_name} 的元数据")
+                continue
+
+            try:
+                mai = await parse_maidata(raw_metadata, chart_path)
+                sid_result = mai if sid_result is None else _merge_maidata_with_priority(sid_result, mai)
+                parsed_success_cache_keys.add(cache_key)
+                logger.success(f"数据同步-谱面处理成功：{chart_file_name}({mai.title})")
+            except Exception as e:
+                logger.warning(f"数据同步-谱面处理失败 {chart_file_name}: {e}")
+
+        if sid_result is not None:
+            result[sid] = sid_result
+
+    # 仅在“文件成功参与解析”后提交重理组缓存；失败文件回退到旧缓存（若存在）。
+    for cache_key, pending_entry in pending_stat_cache.items():
+        sid_raw = pending_entry.get("shortid")
+        sid = sid_raw if isinstance(sid_raw, int) else None
+        if sid is None:
+            continue
+
+        if sid not in needs_reprocess_ids:
+            next_stat_cache[cache_key] = pending_entry
+            continue
+
+        if cache_key in parsed_success_cache_keys:
+            next_stat_cache[cache_key] = pending_entry
+            continue
+
+        old_entry = old_stat_cache.get(cache_key)
+        if old_entry is not None:
+            next_stat_cache[cache_key] = old_entry
 
     # 更新 stat 缓存
     cache_path.parent.mkdir(parents=True, exist_ok=True)
-    cache_path.write_bytes(orjson.dumps(stat_cache))
+    cache_path.write_bytes(orjson.dumps(next_stat_cache))
 
     logger.success(f"数据同步-谱面处理完成：合计处理到 {len(result)} 条谱面数据")
     return list(result.values())
@@ -291,7 +442,7 @@ async def upsert_maidata(session: AsyncSession, data: MaiData):
         existing.aliases = existing.aliases or []
 
     # 处理谱面数据
-    changed_tasks = []
+    changed_tasks: list[tuple[int, int, SERVER_TAG]] = []
     existing_charts = {chart.difficulty: chart for chart in existing.charts}
     for chart in data.charts.values():
         if chart.difficulty in existing_charts:
@@ -326,9 +477,8 @@ async def upsert_maidata(session: AsyncSession, data: MaiData):
             existing.aliases.append(new_alias)
             existing_alias_names.add(alias_obj.alias)
 
-    for shortid, diff, server_tag in changed_tasks:
-        await services.refresh_dxrating_cache(shortid, diff, server_tag)
-        
+    for shortid, diff, server in changed_tasks:
+        await services.refresh_dxrating_cache(shortid, diff, server)
 
 
 @post_db_init
@@ -353,35 +503,12 @@ async def maintenance_task():
             logger.warning("数据同步结束：未找到任何谱面文件")
             return
 
-        # 3. 处理数据
-        maidata_dict: dict[int, MaiData] = {m.shortid: m for m in await process_chart_files(charts_files)}
-
-        # 4. 同步国服难度和版本
-        if sy_music_data := await network.sy_music_data_from_file(PluginRegistry.get_cache_dir() / "sy_music_data.json"):
-            for sy_data in sy_music_data:
-                shortid = int(sy_data.get('id', 0))
-                # 国服难度表
-                ds: list[int] = sy_data.get("ds", [])
-                # 国服版本号
-                ver = await parse_diving_fish_version(sy_data.get('basic_info', {}).get('from', ''))
-            
-                if shortid in maidata_dict:
-                    maidata = maidata_dict[shortid]
-                    # 同步版本号
-                    maidata.version_cn = ver
-                    # 同步难度
-                    for diff, chart in maidata.charts.items():
-                        lv_cn = ds[diff-2] if diff-2 < len(ds) else None
-                        if lv_cn is not None:
-                            chart.lv_cn = lv_cn
-        else:
-            logger.warning("数据同步-水鱼数据：music_data 加载失败，无法同步国服版本号")
-
-        # 5. 存储到数据库
+        # 3. 处理本地 maidata 并存储到数据库
+        maidata_list = await process_chart_files(charts_files)
         get_session = PluginRegistry.get_session
         async with get_session() as session:
-            total = len(maidata_dict)
-            for idx, mai in enumerate(maidata_dict.values()):
+            total = len(maidata_list)
+            for idx, mai in enumerate(maidata_list):
                 try:
                     await upsert_maidata(session, mai)
                     if (idx + 1) % 50 == 0:
@@ -394,7 +521,31 @@ async def maintenance_task():
             # 最后统一 commit 剩余部分
             await session.commit()
 
-        # 6. 同步拟合难度
+        # 4. 获取水鱼数据并逐条同步国服版本与定数
+        if sy_music_data := await network.sy_music_data_from_file(PluginRegistry.get_cache_dir() / "sy_music_data.json"):
+            total = len(sy_music_data)
+            sync_data: list[tuple[int, int, list[float | int]]] = []
+            for idx, sy_data in enumerate(sy_music_data):
+                try:
+                    shortid = int(sy_data.get("id", 0))
+                    ds: list[float | int] = sy_data.get("ds", [])
+                    ver = await parse_diving_fish_version(sy_data.get("basic_info", {}).get("from", ""))
+
+                    sync_data.append((shortid, ver, ds))
+
+                    if (idx + 1) % 200 == 0:
+                        logger.info(f"水鱼数据解析进度: [{idx+1}/{total}]")
+                except Exception as e:
+                    logger.warning(f"水鱼数据同步失败 shortid={sy_data.get('id', 0)}: {e}")
+
+            hit_song_count, changed_chart_count = await services.sync_cn_data_batch(sync_data, commit_every=200)
+            logger.info(
+                f"水鱼数据批量同步完成: 输入 {len(sync_data)} 条, 命中 {hit_song_count} 首, 更新谱面 {changed_chart_count} 条"
+            )
+        else:
+            logger.warning("数据同步-水鱼数据：music_data 加载失败，无法同步国服版本号")
+
+        # 5. 同步拟合难度
         sy_lvnh = []
         if sy_chart_stats := await network.sy_chart_stats():
             for shortid, sy_stats in sy_chart_stats.get("charts", {}).items():
@@ -407,7 +558,7 @@ async def maintenance_task():
         else:
             logger.warning("数据同步-水鱼数据：chart_stats 加载失败，无法同步拟合难度")
 
-        # 7. 独立获取别名数据
+        # 6. 独立获取别名数据
         from time import time
         
         now = int(time())
