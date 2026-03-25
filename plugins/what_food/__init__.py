@@ -1,329 +1,221 @@
-import re
-from random import choice
-from typing import Tuple, List, Optional
+# ==============================================================
+# what_food
+# 支持「吃什么」的抽选插件
+# ==============================================================
 
-from nonebot import logger, require
-from nonebot.plugin import on_regex, PluginMetadata
-from nonebot.matcher import Matcher
+import random
+from pydantic import BaseModel
+
+from nonebot import logger, get_plugin_config, require, on_regex
+from nonebot.rule import to_me
+from nonebot.plugin import PluginMetadata
+from nonebot.params import RegexGroup
 from nonebot.permission import SUPERUSER
-
+from nonebot.internal.matcher import Matcher
 from nonebot.adapters.onebot.v11 import MessageEvent
 
-require("nonebot_plugin_localstore")
-from nonebot_plugin_localstore import get_plugin_data_dir, get_plugin_cache_dir
+from . import services, ai_service
 
-from .messages import MESSAGES, ALCOHOL_NOTICE, SPECIAL_NOTICE, NICKNAMES
-from .utils import Eatable, Food, Drink, MenuManager, content_cut, EatableMenu
+try:
+    from nonebot import get_driver
+    driver = get_driver()
+except ValueError:
+    pass
+else:
+    # 依赖数据库
+    require("nonebot_plugin_datastore")
+    
+    class Config(BaseModel):
+        # 默认为千问轻量模型
+        WHAT_FOOD_AI_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        WHAT_FOOD_AI_MODEL: str = "qwen3.5-flash-2026-02-23"
+        WHAT_FOOD_AI_KEY: str | None = None
 
-__plugin_meta__ = PluginMetadata(
-    name="吃什么",
-    description="一个「吃什么」的查询插件。",
-    usage="发送「吃什么」即可使用。",
-)
+    __plugin_meta__ = PluginMetadata(
+        name="what-food",
+        description="一个支持「吃什么」的抽选插件。",
+        usage="",
+        config=Config,
+    )
 
-# 初始化菜单数据类
-menu_manager = MenuManager(
-    data_dir_path=get_plugin_data_dir(),
-    cache_dir_path=get_plugin_cache_dir(),
-    nb_logger=logger
-)
+    AI_URL = get_plugin_config(Config).WHAT_FOOD_AI_URL
+    AI_MODEL = get_plugin_config(Config).WHAT_FOOD_AI_MODEL
+    AI_KEY = get_plugin_config(Config).WHAT_FOOD_AI_KEY
 
+    AI_ENABLED = all([AI_URL, AI_MODEL, AI_KEY])
 
-def get_event_info(event: MessageEvent) -> Tuple[int, int]:
-    """辅助函数：获取适配器事件信息"""
-    user_id = getattr(event, "user_id", -1)
-    group_id = getattr(event, "group_id", -1)
-    return user_id, group_id
+    if AI_ENABLED:
+        ai_service.API_URL = AI_URL
+        ai_service.API_MODEL = AI_MODEL
+        ai_service.API_KEY = AI_KEY
 
+LYRA_NICKNAMES = ("小梨", "Lyra", "莱茵", "Lyrandra", "小莱")
 
-def item_show_id_text(item: Eatable) -> str:
-    """辅助函数：返回格式化 id，如`[F1]`"""
-    return f"[{str(item.category)[:1]}{item.num}]"
+# --- 发言字典 ---
+REPLY_DICT: dict[str, str | list[str]] = {
+    # 吃什么
+    'csm_no_items': "没有符合你当前「爱好」的餐点TT",
+    'csm_success': [
+        "小梨建议{user}试试{food}哦！",
+        "小梨觉得{user}可以试试{food}哦！",
+        "{user}来试试{food}！记得告诉小梨感想哦w",
+        "莉莉丝阿姐昨天点的是{food}诶，{user}可以尝一下（",
+    ],
+    # 吃什么 / 设置偏好
+    'kyc_success': "小梨已经记录了你的偏好啦！接下来你只会抽选出 {tip} 的餐点了哦！",
+    'kuc_not_understand': "小梨不太理解你的偏好哦！可以直接输入数字，或者使用【好吃的、能吃的、都行的、正常的、好玩的、猎奇的】来表达偏好哦！",
+    # 吃这个
+    'czg_loading': "小梨准备将 {food} 写入菜单咯。",
+    'czg_existing': "餐点 {food} 已经被写入菜单了喔。",
+    'czg_success': "小梨已经将 {food} 写入菜单啦！",
+    # 好吃吗
+    'hcm_no_item': "菜单里没有找到 {food} 呀。",
+    'hcm_score': "{food} 的平均分是 {current_score} 分哦！",
+    'hcm_set_score': "小梨已经记录了 {user} 给 {food} 的 {score} 分评价啦！\n当前的分数为 {current_score} 。",
+    'hcm_wrong_score': "评分应该是 1-5 的整数哦！",
+    # 特殊提示
+    'alcohol_warning': "未成年请勿饮酒，成年人也要适量饮酒喔！",
+    'csm_to_lyra': "不用给小梨推荐啦！小梨的餐点都是莉莉丝阿姐一手包办的~",
+}
 
+def get_reply(key: str, **kwargs) -> str:
+    """获取回复文本"""
+    template: str | list[str] = REPLY_DICT.get(key, "")
+    if isinstance(template, list):
+        template = random.choice(template)
+    return template.format(**kwargs)
 
-on_what_food = on_regex(r"^(.*?)([吃喝])什么$", priority=5, block=True)
+def pronoun_switch(text: str) -> str:
+    """用户代词转换"""
+    return text.replace("你", "他").replace("我", "你")
 
+# ------ matcher ------
 
-@on_what_food.handle()
-async def _(event: MessageEvent, matcher: Matcher):
-    """处理命令: 吃什么 / 喝什么"""
+csm = on_regex(r"^(.*?)([吃喝])什么$", priority=5, block=True)
+czg = on_regex(r"^([吃喝])这个\s*(.+?)$", priority=5, block=True)
+hcm = on_regex(r"^好([吃喝])吗\s+(.+?)(?:\s+(-?\d+))?$", priority=5, block=True)
+kyc = on_regex(r"^([吃喝])什么\s+(.*)$", priority=5, block=True)
+phb = on_regex(r"^([吃喝])什么排行榜\s*(?:\s+(-?\d+))?$", priority=5, block=True)
+admin = on_regex(r"^(sudo\s+(WhatFood|what_food|whatfood))\s+(.+)$", permission=SUPERUSER, rule=to_me(), priority=1)
 
-    matched = matcher.state["_matched"]  # 返回`re.search()`匹配组结果
+# ------ functions ------
 
-    content, category = matched.groups()
-    user_id, _ = get_event_info(event)
+@csm.handle()
+async def _(event: MessageEvent, matcher: Matcher, groups: tuple = RegexGroup()):
+    """处理「吃什么」"""
+    user_input, action = groups
+    category = 'Food' if action == '吃' else 'Drink'
 
-    menu = menu_manager.get_menu(category)
-    item = menu.choice(menu_manager.get_offset(user_id))
+    preference = await services.get_user_preference(int(event.get_user_id()))
 
-    # 内容替换规则
-    if any(i in content for i in NICKNAMES):
-        await matcher.finish(SPECIAL_NOTICE)
-    content = content.replace("你", "他")
-    content = content.replace("我", "你")
-    message = choice(MESSAGES).format(item.name, content)
-    if item.is_wine:
-        message += "\n" + ALCOHOL_NOTICE
-    await matcher.finish(message)
-
-
-on_this_food = on_regex(r"^(吃|喝)这个\s+([^有没\s]+.*?)(?:\s+(有酒|没有酒))?$", priority=5, block=True)
-
-
-@on_this_food.handle()
-async def _(event: MessageEvent, matcher: Matcher):
-    """处理命令: 吃这个 xxx 有酒/ 喝这个 xxx 没有酒"""
-    user_id, group_id = get_event_info(event)
-    matched = matcher.state["_matched"]
-    category, content, wine = matched.groups()
-    menu = menu_manager.get_menu(category)
-    is_wine = False
-    if wine and len(wine) < 3:
-        is_wine = True
-
-    item_names = content_cut(content)
-
-    new_items: List[Eatable] = list()
-    exist_items: List[Eatable] = list()
-
-    # 预检查
-    for item_name in item_names:
-        try:
-            if re.fullmatch(r"\d+", item_name):
-                await matcher.finish("真的有纯数字的餐点吗…")
-                return
-        except (ValueError, TypeError):
-            pass
-
-    for item_name in item_names:
-        # 查找对应的食物或饮品，如果不存在则直接添加，否则修改酒精属性
-        item_id = menu.get_item_id_by_name(item_name)
-        if item_id >= 0:
-            # 存在
-            item = menu.get_item(item_id)
-            if item.is_wine == is_wine:
-                continue  # 不需要改
-            # 进行调整
-            menu.set_is_wine(item_id, is_wine, user_id, group_id)
-            exist_items.append(item)
-        else:
-            new_item = menu.cls(
-                name=item_name,
-                adder=user_id,
-                score=menu.score,
-                is_wine=is_wine
-            )
-            menu.add_item(new_item, group_id)
-            item = menu.get_item_by_name(item_name)
-            new_items.append(item)
-    if len(new_items) + len(exist_items) <= 0:
-        await matcher.finish("这些餐点在小梨的菜单上已经都有了喔——")
+    item = await services.choice_item(category=category, offset=preference.offset)    
+    if not item:
+        await matcher.finish(get_reply('csm_no_items'))
         return
-    if new_items:
-        await matcher.send(f"小梨已经把以下{"含有" if is_wine else "不含"}酒精的餐点添加到餐点列表咯！\n" +
-                           '；'.join([f"{item_show_id_text(item)}{item.name}" for item in new_items]))
-    if exist_items:
-        await matcher.send(f"小梨已经把以下的餐点标记为{"含有" if is_wine else "不含"}酒精咯！\n" +
-                           '；'.join([f"{item_show_id_text(item)}{item.name}" for item in exist_items]))
+
+    await matcher.finish(get_reply('csm_success', user=pronoun_switch(user_input), food=item.name))
+
+
+@czg.handle()
+async def _(event: MessageEvent, matcher: Matcher, groups: tuple = RegexGroup()):
+    """处理「吃这个」"""
+    action, food = groups
+    category = 'Food' if action == '吃' else 'Drink'
+
+    existing = await services.get_item_by_name(food, category)
+    if existing:
+       # 已存在该餐点
+        await matcher.finish(get_reply('czg_existing', food=food))
+        return
+
+    await matcher.send(get_reply('czg_loading', food=food))
+
+    ai_info = await ai_service.get_ai_service().analyze_food(food)
+    alcohol = ai_info.get("contains_alcohol", False)
+
+    await services.add_item(food, category, int(event.get_user_id()), alcohol,
+                            ai_score=ai_info.get("score", None), ai_reason=ai_info.get("reason", None))
+
+    await matcher.finish(get_reply('czg_success', food=food) + (get_reply('alcohol_warning') if alcohol else ""))
+
+
+@hcm.handle()
+async def _(event: MessageEvent, matcher: Matcher, groups: tuple = RegexGroup()):
+    """处理「好吃吗」"""
+    action, food, score = groups
+    category = 'Food' if action == '吃' else 'Drink'
+
+    item = await services.get_item_by_name(food, category)
+    if not item:
+        await matcher.finish(get_reply('hcm_no_item', food=food))
+
+    if not score:
+        # 查询逻辑
+        await matcher.finish(get_reply('hcm_score', food=food, current_score=item.current_score))
+    else:
+        # 评分逻辑
+        try:
+            score = int(score)
+            if score < 1 or score > 5:
+                raise ValueError
+        except ValueError:
+            await matcher.finish(get_reply('hcm_wrong_score'))
+        current_score = await services.set_score(item.id, int(event.get_user_id()), score)
+        await matcher.finish(get_reply('hcm_set_score', food=food, score=score, current_score=current_score))
+
+
+@kyc.handle()
+async def _(event: MessageEvent, matcher: Matcher, groups: tuple = RegexGroup()):
+    """处理「吃什么 好吃的」，设置 offset 倾向"""
+    _, user_input = groups
+
+    try:
+        offset = float(user_input)
+    except ValueError:
+        offset = None
+
+    if offset is None:
+        level_map = {
+            "好吃的": 3.8,
+            "能吃的": 3.1,
+            "都行的": 2.2,
+            "正常的": 2.2,
+            "好玩的": -3.2,
+            "猎奇的": -2.2
+        }
+        # 解析文本偏好
+        offset = level_map.get(user_input.strip(), None)
+
+    if offset is None:
+        # 借助 AI 解析偏好
+        offset = await ai_service.get_ai_service().parse_user_preference(user_input)
+
+    if offset is not None:
+        tip = f"{'大于' if offset > 0 else '小于'}{offset}"
+        await services.set_user_preference(int(event.get_user_id()), offset)
+        await matcher.finish(get_reply('kyc_success', tip=tip))
+    else:
+        await matcher.finish(get_reply('kuc_not_understand'))
+
+
+@phb.handle()
+async def _(event: MessageEvent, matcher: Matcher, groups: tuple = RegexGroup()):
+    """处理「吃什么排行榜」，展示排行榜"""
+
+    action, page = groups
+    category = 'Food' if action == '吃' else 'Drink'
+    page = int(page) if page else 1
+
+    await matcher.finish("排行榜功能重构进行中！")
     return
 
 
-on_score = on_regex(r"^好([吃喝])吗\s+(.+?)(?:\s+(-?\d+))?$", priority=3, block=True)
-
-
-@on_score.handle()
-async def _(event: MessageEvent, matcher: Matcher):
-    """统一处理：没有分数则查询；有分数则评分（支持 id 或 名称）"""
-    user_id, group_id = get_event_info(event)
-    matched = matcher.state["_matched"]
-    category, item_key_str, score_str = matched.groups()
-    menu = menu_manager.get_menu(category)
-
-    item_id_matched = re.match(r"^([a-zA-Z])?(\d+)$", item_key_str.strip())
-    if item_id_matched:
-        # 按 ID 或 FullID 解析
-        letter, item_id_str = item_id_matched.groups()
-        new_menu = menu_manager.get_menu(letter)
-        menu = new_menu if new_menu else menu
-        item = menu.get_item(int(item_id_str))
-    else:
-        # 按名称解析
-        item = menu.get_item_by_name(item_key_str.strip())
-
-    # 空检查
-    if item is None:
-        await matcher.finish(f"小梨没在菜单找到这个餐点诶qwq")
-
-    # 如果没有附带分数，走查询分数路径
-    if score_str is None:
-        await matcher.finish(f"据小梨的菜单数据，{item_show_id_text(item)}{item.name} 现在是 {item.get_score():.2f} 分喔！")
-        return
-
-    # 有分数，走评分路径
-    score = int(score_str)
-    # 用户评分限制为 1~5
-    if score in {1, 2, 3, 4, 5}:
-        menu.set_score(item.num, score, user_id, group_id)
-        await matcher.finish(
-            f"已经记录评分！你当前为 {item_show_id_text(item)}{item.name} 给出了{score}分的分数。"
-            f"目前评分均值在{item.get_score():.2f}"
-        )
-    else:
-        await matcher.finish("评分只能用1~5的整数评分哦~")
-
-
-on_score_filter = on_regex(r"^(可以[吃喝]|[吃喝]什么)\s+(.+)$", priority=1, block=True)
-
-
-@on_score_filter.handle()
-async def _(event: MessageEvent, matcher: Matcher):
-    """处理命令: 可以吃 xxx"""
-    user_id, group_id = get_event_info(event)
-    matched = matcher.state["_matched"]
-    _, level = matched.groups()
-
-    level_map = {
-        "好": 3.8,
-        "能吃": 3.1,
-        "都行": 2.2,
-        "正常": 2.2,
-        "好玩": -3.2,
-        "猎奇": -2.2
-    }
-
-    offset = level_map.get(level, None)
-    offset = offset if offset else level_map.get(level[:-1], None)
-    if offset is None:
-        await matcher.finish(
-            "小梨不确定你的接受范围喔！可以使用以下五种范围指标（默认为「都行的」）：\n好的；能吃的；都行的；好玩的；猎奇的")
-        return
-    menu_manager.set_offset(user_id, offset, group_id)
-    await matcher.finish(
-        f"小梨已经记录你的「吃什么」可接受范围！在该范围下，抽选结果评分一定{"大" if offset >= 0 else "小"}于{abs(offset):.1f}分喔。")
-
-
-on_score_rank = on_regex(r"^([吃喝])什么排行榜\s*(-?\d+)?$", priority=10, block=True)
-
-
-@on_score_rank.handle()
-async def _(matcher: Matcher):
-    """处理命令: 吃什么排行榜 / 喝什么排行榜2 / 吃什么排行榜-1"""
-
-    matched = matcher.state["_matched"]
-
-    category, page_str = matched.groups()  # page_str 可能为 None
-    # 解析页码：None -> 默认 1；支持负数如 "-1"
-    try:
-        page = int(page_str)
-    except (ValueError, TypeError):
-        page = 1
-    page = page if page != 0 else 1
-
-    # 每页条数
-    per_page = 10
-
-    menu = menu_manager.get_menu(category)
-    items = menu.get_items()
-    menu_count = len(items)
-    if menu_count <= 0:
-        await matcher.finish(f"小梨的「{category}什么」菜单评分排行榜！……是空的！快去找莉莉丝阿姐递菜单！")
-
-    # 计算当前页的切片
-    start = per_page * (abs(page) - 1)
-    end = start + per_page
-    step = 1
-    if page < 1:
-        # 负数页码，从尾部开始计算
-        start = -(start + 1)
-        end = -(end + 1)
-        step = -1
-    rank_list: List[Eatable] = items[start:end:step]
-
-    if not rank_list:
-        await matcher.finish(f"小梨的「{category}什么」菜单评分排行榜！(第{page}页)\n\n……没这么多页面啦！不要耍小梨！")
-
-    rank_msg_list: List[str] = []
-    for idx, item in enumerate(rank_list, start=1 if page > 0 else 0):
-        global_index = start + (idx if step > 0 else menu_count - idx)
-        rank_line = (
-            f"{global_index:>{len(str(end))}} "  # 编号对齐
-            f"{item_show_id_text(item)} {item.name}"  # '[F42] 名称'
-            f"{' ' * 2}{item.get_score():.2f}"  # 分数
-        )
-        rank_msg_list.append(rank_line)
-
-    await matcher.finish(f"小梨的「{category}什么」菜单评分排行榜！(第{page}页)\n\n" + "\n".join(rank_msg_list))
-
-
-on_superuser = on_regex(r"^(suLyra\s+(WhatFood|what_food))\s+(.*)", permission=SUPERUSER)
-
-
-@on_superuser.handle()
-async def _(event: MessageEvent, matcher: Matcher):
-    """Superuser 操作：批量获取未评分内容/统一评分"""
-    user_id, group_id = get_event_info(event)
-    matched = matcher.state["_matched"]
-    _, content = matched.groups()
-
-    content_list = content.split("\n")
-    commands = content_list[0].split(" ")
-    if commands[0] in ["获取未评分项目", "获取未评分餐点", "获取未评分内容"]:
-        _, category, check_user_id_str = commands + ["" for _ in range(3 - len(commands))]  # 保证长度为3
-        # menu 为空则表示获取全部类别
-        menu = menu_manager.get_menu(category)
-        menus = [menu] if menu else [menu_manager.food, menu_manager.drink]
-        items_no_score: List[Eatable] = list()
-        check_user_id: Optional[int] = int(check_user_id_str) if check_user_id_str else None
-        for menu in menus:
-            if check_user_id:
-                items_no_score += menu.get_items_if_no_score(check_user_id)
-            else:
-                items_no_score += menu.get_items_if_superuser_no_score()
-
-        if len(items_no_score) > 20:
-            output_items = items_no_score[:20]
-        elif len(items_no_score) < 1:
-            target = str(check_user_id) if check_user_id else "Superuser"
-            await matcher.finish(f"[Superuser] 目前{target}没有需要评分的项目。")
-            return
-        else:
-            output_items = items_no_score
-        await matcher.finish(
-            f"[Superuser] 待评分项目 ({len(output_items)}/{len(items_no_score)})\n" +
-            '\n'.join([f"{item_show_id_text(item)} {item.name}" for item in output_items]))
-
-    elif commands[0] == "批量评分":
-        # todo: SUPERUSER 批量评分无法成功评分，待修复
-        score_infos = []
-        for text in content_list[1:]:  # 跳过第一行的命令内容
-            m = re.match(r"([DF])\s*(\d+)\s*(-?\d+)", text.strip())
-            if m:
-                score_infos.append(m.groups())
-        result_food = menu_manager.food.set_score_from_super_user(
-            {i: s for i, s in [(int(item[1]), int(item[2])) for item in score_infos if item[0] == "F"]},
-            user_id, group_id)
-        result_drink = menu_manager.drink.set_score_from_super_user(
-            {i: s for i, s in [(int(item[1]), int(item[2])) for item in score_infos if item[0] == "D"]},
-            user_id, group_id)
-        rf, tf = result_food
-        rd, td = result_drink
-        await matcher.finish(f"[Superuser] 成功评分：Food( {rf}/{tf} )，Drink( {rd}/{td} )。")
-
-    elif commands[0] in ["禁用", "恢复"]:
-        if len(commands) < 2:
-            await matcher.finish("[Superuser] 缺少FullID参数。")
-            return
-        category, item_id = re.match(r"([DF])(\d+)", commands[1]).groups()
-        item_id = int(item_id)
-        if not all([category, item_id]):
-            await matcher.finish("[Superuser] 不正确的FullID参数。")
-            return
-        menu = menu_manager.get_menu(category)
-        menu.set_enabled(item_id, False if commands[0] == "禁用" else True, user_id)
-        await matcher.finish(f"[Superuser] 已{commands[0]} {category}{item_id} 。")
-    else:
-        await matcher.finish("""[Superuser] 当前可用命令：
-- 获取未评分项目 (<类别>)
-- 批量评分  // 后续多行输入评分数据<类别><ID><分数>
-- 删除 <FullID>
-- 恢复 <FullID>""")
+@admin.handle()
+async def _(event: MessageEvent, matcher: Matcher, groups: tuple = RegexGroup()):
+    """处理管理员命令"""
+    # sudo whatfood enabled/disabled itemname  # 启用/禁用餐点
+    # sudo whatfood setscore itemname score reason weight # 设置餐点的高权重评分和理由
+    # sudo whatfood ban userid time(minutes)  # 禁止用户在该群使用插件一段时间
+    # sudo whatfood unban userid  # 解除用户禁令
+    # sudo whatfood init  # 将初始菜品填入数据库
+    return
