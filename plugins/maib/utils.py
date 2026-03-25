@@ -10,77 +10,7 @@ from typing import Dict, Optional, List, Tuple, Literal
 from PIL import Image
 from loguru import logger
 
-
-# 完成率别名映射
-rate_alias_map: Dict[str, float] = {}
-for rate_value, aliases in {
-    101.0000: ("ap+", "理论"),
-    100.7500: ("ap",),
-    100.5000: ("鸟加", "鸟家", "sss+", "3s+"),
-    100.0000: ("鸟", "鸟s", "sss", "3s"),
-    99.5000:  ("ss+", "2s+"),
-    99.0000:  ("ss", "2s"),
-    98.0000:  ("s+", "1s+"),
-    97.0000:  ("s", "1s"),
-    94.0000:  ("鸟a", "aaa", "3a"),
-    90.0000:  ("aa", "2a"),
-    80.0000:  ("a", "1a"),
-    75.0000:  ("鸟b", "bbb", "3b"),
-    70.0000:  ("bb", "2b"),
-    60.0000:  ("b", "1b"),
-    50.0000:  ("c", "1c"),
-    0.0000:   ("d", "1d"),
-}.items():
-    for alias in aliases:
-        rate_alias_map[alias.lower()] = rate_value
-
-
-# 完成率对应的评分因子表
-RATE_FACTOR_TABLE: List[Tuple[float, float]] = [
-    (100.5000, 0.224),
-    (100.4999, 0.222),
-    (100.0000, 0.216),
-    (99.9999, 0.214),
-    (99.5000, 0.211),
-    (99.0000, 0.208),
-    (98.9999, 0.206),
-    (98.0000, 0.203),
-    (97.0000, 0.200),
-    (96.9999, 0.176),
-    (94.0000, 0.168),
-    (90.0000, 0.152),
-    (80.0000, 0.136),
-    (79.9999, 0.128),
-    (75.0000, 0.120),
-    (70.0000, 0.112),
-    (60.0000, 0.096),
-    (50.0000, 0.080),
-    (40.0000, 0.064),
-    (30.0000, 0.048),
-    (20.0000, 0.032),
-    (10.0000, 0.016),
-]
-
-# Diving-Fish 的 FC/FS 解析映射
-DF_FC_MAP = {v: i for i, v in enumerate(['fc', 'fcp', 'ap', 'app'], start=1)}
-DF_FS_MAP = {v: i for i, v in enumerate(['sync', 'fs', 'fsp', 'fsd', 'fsdp'], start=1)}
-# 难度颜色字符串解析映射
-DIFFS_MAP = {v: i for i, v in enumerate(["蓝", "绿", "黄", "红", "紫", "白"], start=1)}
-
-# 服务器标识类型
-SERVER_TAG = Literal["JP", "INTL", "CN"]
-
-# 基础路径及 yml 数据
-PLUGIN_BASE_PATH = Path(__file__).parent
-ASSETS_PATH = PLUGIN_BASE_PATH / "assets"
-GENRES_YAML_PATH = ASSETS_PATH / "genres.yaml"
-GENRES_DATA = yaml.safe_load(GENRES_YAML_PATH.read_text(encoding="utf-8"))
-VERSIONS_YAML_PATH = ASSETS_PATH / "versions.yaml"
-VERSIONS_DATA = yaml.safe_load(VERSIONS_YAML_PATH.read_text(encoding="utf-8"))
-
-# DXRating 版本分界线
-BOUNDARIES_DX_RATING = [0, 1000, 2000, 5000, 7000, 10000, 12000, 13000, 14000, 14500, 15000]
-BOUNDARIES_DX_RATING_NEW = [0, 1000, 2000, 5000, 7000, 10000, 12000, 13000, 14000, 14250, 14500, 14750, 15000, 15250, 15500, 15750, 16000, 16250, 16500, 16750]
+from .constants import *  # 导入常量表
 
 def parse_status(target: str, mapping: Dict[str, int]) -> int:
     """通过映射表常量进行数值获取"""

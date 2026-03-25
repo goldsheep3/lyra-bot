@@ -179,7 +179,7 @@ class MaiData(Model):
 
 # ====== 工厂函数 ======
 
-class MaiDataModelFactory:
+class MaiDataModel:
     """模型工厂类，提供获取模型的接口"""
 
     @staticmethod

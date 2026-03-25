@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 from . import utils
 from .models import MaiData, MaiChart, MaiChartAch, MaiAlias
 from .bot_registry import PluginRegistry
+from .constants import *
 
 get_session = PluginRegistry.get_session
 
@@ -91,7 +92,7 @@ async def get_song_by_version(version: int, cn: bool = False) -> Sequence[MaiDat
 
 
 # --- 根据谱面难度 (lv) 筛选 shortid 列表 ---
-async def get_shortids_by_lv(min_lv: float, max_lv: float, server: utils.SERVER_TAG) -> Sequence[int]:
+async def get_shortids_by_lv(min_lv: float, max_lv: float, server: SERVER_TAG) -> Sequence[int]:
     """查询定数在指定范围内的所有乐曲 ID"""
     async with get_session() as session:
         statement = (
@@ -216,7 +217,7 @@ async def delete_alias_by_id(alias_id: int):
         await session.commit()
 
 
-async def refresh_dxrating_cache(shortid: int, difficulty: int, server: utils.SERVER_TAG):
+async def refresh_dxrating_cache(shortid: int, difficulty: int, server: SERVER_TAG):
     """当定数改变时，重新计算该谱面下所有用户的 dxrating 缓存"""
     jp_ver, cn_ver = utils.get_current_versions()
     current_version = cn_ver if server == "CN" else jp_ver
@@ -271,7 +272,7 @@ async def sync_cn_data_batch(
         commit_every = 200
 
     hit_song_count = 0
-    changed_tasks: set[tuple[int, int, utils.SERVER_TAG]] = set()
+    changed_tasks: set[tuple[int, int, SERVER_TAG]] = set()
 
     async with get_session() as session:
         for idx, (shortid, version_cn, ds) in enumerate(data, start=1):

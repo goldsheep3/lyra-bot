@@ -62,6 +62,7 @@ async def _request(url: str, method: str = "GET", developer_token: Optional[str]
         kwargs["headers"] = header
     
     client = get_http_client()
+    response = None
     for i in range(retries):
         try:
             response = await client.request(method=method, url=url, **kwargs)
@@ -76,9 +77,11 @@ async def _request(url: str, method: str = "GET", developer_token: Optional[str]
                 logger.error(f"[{project_name}] 最终请求失败: {url} | Error: {e}")
     return response
 
-async def request_json(url: str, method: str = "GET", developer_token: Optional[str] = None, **kwargs) -> Optional[Any]:
+async def request_json(url: str, method: str = "GET", **kwargs) -> Optional[Any]:
     """请求并解析 JSON，失败时返回 None"""
-    response = await _request(url, method=method, developer_token=developer_token, **kwargs)
+    if not url:
+        return
+    response = await _request(url, method=method, **kwargs)
     if response:
         try:
             return response.json()
@@ -86,9 +89,9 @@ async def request_json(url: str, method: str = "GET", developer_token: Optional[
             logger.error(f"JSON 解析失败: {url} | Error: {e}")
     return None
 
-async def request_image(url: str, method: str = "GET", developer_token: Optional[str] = None, **kwargs) -> Optional[bytes]:
+async def request_image(url: str, method: str = "GET", **kwargs) -> Optional[bytes]:
     """请求并获取图片二进制数据，失败时返回 None"""
-    response = await _request(url, method=method, developer_token=developer_token, **kwargs)
+    response = await _request(url, method=method, **kwargs)
     if response:
         return response.content
     return None

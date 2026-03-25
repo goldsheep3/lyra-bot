@@ -1,21 +1,32 @@
 import io
 import re
-import yaml
 from pathlib import Path
 from typing import Optional, List
 
 from . import services, image_gen, network, bot_services
-from .utils import rate_alias_map, MaiData, MaiChart, MaiChartAch, parse_status, DIFFS_MAP
+from .utils import MaiData, MaiChart, MaiChartAch, parse_status
+from .constants import *
 
-from nonebot import logger, on_regex
+from nonebot import logger, on_regex, on_message
+from nonebot.rule import Rule
 from nonebot.params import RegexGroup
 from nonebot.internal.matcher import Matcher
-from nonebot.adapters.onebot.v11 import Bot, Event, Message, MessageSegment
+from nonebot.adapters.onebot.v11 import Bot, Event, Message, MessageSegment, MessageEvent, PrivateMessageEvent
 
 
 DEVELOPER_TOKEN: Optional[str] = None
 
+# --- rule ---
+
+# 规则：必须是私聊事件，且消息段中包含 file
+def is_private_file():
+    async def _check(event: MessageEvent) -> bool:
+        return isinstance(event, PrivateMessageEvent) and \
+               any(seg.type == "file" for seg in event.get_message())
+    return Rule(_check)
+
 # --- matcher ---
+
 # 下载谱面
 adx_download = on_regex(r"^下载[铺谱]面\s*(\d*)\s*(.*)$", priority=10, block=True)
 # 查询乐曲信息 (id / info)
@@ -30,6 +41,8 @@ scorelist = on_regex(r'^(.*?)\s*(完成表|进度|列表)$', priority=5, block=T
 b50 = on_regex(r'(b50|kkb)', priority=1, block=True)
 # ra 计算
 ra_calc = on_regex(r"^ra\s+(\S+)?\s+(\S+)", priority=5, block=True)
+# 上传 JSON 配置数据
+file_receiver = on_message(priority=25, rule=is_private_file())
 
 
 # =================================
@@ -203,7 +216,7 @@ async def _(matcher: Matcher, groups: tuple = RegexGroup()):
     try:
         achievement = float(rate)
     except (ValueError, TypeError):
-        achievement = rate_alias_map.get(rate.lower(), -100)
+        achievement = RATE_ALIAS_MAP.get(rate.lower(), -100)
 
     # 1. 尝试以定数形式解析
     try:
@@ -263,3 +276,89 @@ async def _(matcher: Matcher, groups: tuple = RegexGroup()):
     await matcher.finish("小梨算出来咯！\n"
                         f"定数{level}*{achievement:.4f}% -> Rating: {ra}"
                         "\n该 ra 不考虑 AP 的额外分数哦！" if achievement > 100.5 else "")
+
+
+@file_receiver.handle()
+async def _(bot: Bot, event: PrivateMessageEvent, matcher: Matcher):
+    # 此时进入这里的逻辑绝对是私聊且带文件的
+    file_seg = event.get_message()["file"][0] # 直接切片取第一个文件段
+    file_id = file_seg.data.get("file_id")
+    file_name = file_seg.data.get("file", "")
+    
+    if not file_name.endswith(".json"):
+        await matcher.finish("请发送 .json 格式的文件。")
+        return
+
+    url = (await bot.get_file(file_id=file_id)).get("url", "")
+    data = await network.request_json(url)
+    if not data:
+        await matcher.finish("下载或解析文件失败了哦，请确认文件内容正确并重试。")
+
+    # 处理数据
+    if isinstance(data, list) and len(data) > 0 and "sheetId" not in data[0]:
+        del data  # 文件不是 lyra-maimai，在该处理予以释放
+        return
+    await matcher.send("检查到 lyra-maimai 导出数据！小梨正在记录你的游玩数据~")
+
+    user_id = int(event.get_user_id())
+
+    # 准备转换数据
+    ach_list = []
+    title_to_shortid = {}  # 缓存查询结果
+    
+    for record in data:
+        try:
+            title = record.get("title", "")
+            difficulty_str = record.get("diff", "").lower()
+            server = record.get("server", "JP")
+            achievement = float(record.get("achievement", 0))
+            dxscore = int(record.get("dxscore", 0))
+            combo_str = record.get("combo", "").lower()
+            sync_str = record.get("sync", "").lower()
+
+            # 如果标题没被查询过，进行查询
+            if title not in title_to_shortid:
+                songs = await services.get_song_by_name(title)
+                if songs:
+                    title_to_shortid[title] = songs[0].shortid
+                else:
+                    title_to_shortid[title] = None
+
+            shortid = title_to_shortid[title]
+            if shortid is None:
+                logger.warning(f"无法找到曲目: {title}")
+                continue
+
+            # 获取难度编号
+            difficulty = DIFFS_MAP.get(difficulty_str, -1)
+            if difficulty < 0:
+                logger.warning(f"未知难度: {difficulty_str}")
+                continue
+
+            # 转换 combo 和 sync
+            combo = DF_FC_MAP.get(combo_str, 0)
+            sync = DF_FS_MAP.get(sync_str, 0)
+
+            ach_obj = MaiChartAch(
+                shortid=shortid,
+                difficulty=difficulty,
+                server=server,
+                achievement=achievement,
+                dxscore=dxscore,
+                combo=combo,
+                sync=sync,
+                user_id=user_id
+            )
+            ach_list.append(ach_obj)
+
+        except (ValueError, TypeError, KeyError) as e:
+            logger.warning(f"处理单条记录失败: {record}, 错误: {e}")
+            continue
+
+    # 批量上传成绩
+    if ach_list:
+        await services.upload_achievements_batch(user_id, ach_list)
+        await matcher.finish(f"成功导入 {len(ach_list)} 条成绩！")
+    else:
+        import time
+        await matcher.finish(f"已解析，但似乎没有有效的成绩诶qwq\n当前的时间为：{time.strftime('%Y-%m-%d %H:%M:%S')}，请截图发送给监护人确认情况。\n果咩纳塞qwq")

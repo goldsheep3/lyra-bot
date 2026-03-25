@@ -7,7 +7,8 @@ from dataclasses import dataclass
 
 from PIL import Image, ImageDraw, ImageFont, ImageChops
 
-from .utils import ASSETS_PATH, GENRES_DATA, VERSIONS_DATA, MaiData, MaiChart, MaiB50Manager, SERVER_TAG
+from .utils import MaiData, MaiChart, MaiB50Manager
+from .constants import *
 
 # ========================================
 # 基础常量

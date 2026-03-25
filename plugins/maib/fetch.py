@@ -13,7 +13,8 @@ from nonebot_plugin_datastore.db import post_db_init
 
 from. import models, network, services
 from .bot_registry import PluginRegistry
-from .utils import MaiData, MaiChart, GENRES_DATA, VERSIONS_DATA, SimaiNoteCount, SERVER_TAG
+from .utils import MaiData, MaiChart, SimaiNoteCount
+from .constants import *
 
 
 def initialize_genres_data_rev():
@@ -436,7 +437,7 @@ async def upsert_maidata(session: AsyncSession, data: MaiData):
         existing.zip_path = str(data.zip_path)
     else:
         # 创建新数据
-        existing = models.MaiDataModelFactory.mai_data(data)
+        existing = models.MaiDataModel.mai_data(data)
         session.add(existing)
         existing.charts = existing.charts or []
         existing.aliases = existing.aliases or []
@@ -466,14 +467,14 @@ async def upsert_maidata(session: AsyncSession, data: MaiData):
                 ) = chart.notes
         else:
             # 添加新谱面
-            new_chart = models.MaiDataModelFactory.mai_chart(chart, data.shortid)
+            new_chart = models.MaiDataModel.mai_chart(chart, data.shortid)
             existing.charts.append(new_chart)
 
     # 处理别名数据
     existing_alias_names = {a.alias for a in existing.aliases}
     for alias_obj in data.aliases:
         if alias_obj.alias not in existing_alias_names:
-            new_alias = models.MaiDataModelFactory.mai_alias(alias_obj)
+            new_alias = models.MaiDataModel.mai_alias(alias_obj)
             existing.aliases.append(new_alias)
             existing_alias_names.add(alias_obj.alias)
 
