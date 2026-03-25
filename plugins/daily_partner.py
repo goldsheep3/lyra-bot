@@ -60,6 +60,7 @@ REPLY_DICT: Dict[str, str] = {
     "hlg_none": "还没有人娶到你喔ww",
     # qq: 成功、自己、未指定、对方已婚、上限、离过婚了
     "qq_success": "怎么还有强制play（）总之恭喜娶到 {qq} ！",
+    "qq_success_ntr": "我去，还有大权限NTR（）{qq} 现在已经被你强娶了。让我们可怜原配三秒钟（",
     "qq_self": "终归是要水仙啊……那我先磕！",
     "qq_usage": "若想强娶那个TA，请勇敢地@出来=w=",
     "qq_with_bot_self": "小梨不能跟你们玩这种游戏啦！莉莉丝阿姐听说了会生气的qwq",
@@ -155,20 +156,19 @@ class GroupInstance:
         async with self._lock:
             member = self.get_member(user_id)
             
-            # 1. 离婚状态检查
+            # 离婚状态检查
             if member.count == -1:
-                return "hlp_lh", None # 对应 (翻笔记) 那个回复
-            
-            # 2. 次数限制检查
-            if member.count >= MAX_COUNT:
-                return "hlp_limit", None
-            
-            # 3. 正常更换逻辑
-            member.count += 1
+                return "hlp_lh", None
+
+            # 解除关系并记录前任ID
             ex_partner_id = member.wife
             self._clear_relation(user_id)
 
-            # 即使上游池刷新，也显式保证不回抽刚离婚对象。
+            # 次数限制检查
+            if member.count >= MAX_COUNT:
+                return "hlp_limit", None
+            
+            member.count += 1
             clean_pool = [m for m in pool if m != ex_partner_id]
             target_id = self.random_partner(clean_pool, user_id, hope, ex_partner_id)
             self._update_relation(user_id, target_id)
@@ -192,7 +192,7 @@ class GroupInstance:
             self._clear_relation(user_id)
             return ("hlp_limit" if member.count > MAX_COUNT else "hlg_success"), husband_id
 
-    async def handle_qq(self, user_id: int, target_id: int, bot_id: int) -> Tuple[str, int | None]:
+    async def handle_qq(self, user_id: int, target_id: int, bot_id: int, is_admin: bool = False) -> Tuple[str, int | None]:
         async with self._lock:
             member = self.get_member(user_id)
             
@@ -205,20 +205,24 @@ class GroupInstance:
             # 强娶机器人判定
             if target_id == bot_id:
                 return "qq_with_lyra", None
-            # 自己
-            if user_id == target_id:
-                self._clear_relation(user_id)
-                member.count += 1
-                self._update_relation(user_id, user_id)
-                return "qq_self", user_id
-            # 对方已婚判定
-            if self.get_member(target_id).husband: 
-                return "qq_fail_married", None
-            
+
+            target_member = self.get_member(target_id)
+            if target_member.husband:
+                if not is_admin:
+                    return "qq_fail_married", None
+                # 管理员NTR已婚对象，先清理对方关系
+                self._clear_relation(target_id)
+                success_key = "qq_success_ntr"
+            elif target_id == user_id:
+                # 水仙
+                success_key = "qq_self"
+            else:
+                success_key = "qq_success"
+
             self._clear_relation(user_id)
             member.count += 1
             self._update_relation(user_id, target_id)
-            return "qq_success", target_id
+            return success_key, target_id
 
     async def handle_lh(self, user_id: int) -> Tuple[str, Optional[int]]:
         async with self._lock:
@@ -473,6 +477,7 @@ async def _(bot: Bot, event: MessageEvent):
 
     if not target_id:
         await qq.finish(REPLY_DICT["qq_usage"])
+        return
 
     if isinstance(event, PrivateMessageEvent):
         config = await plugin_manager.load_config()
@@ -486,9 +491,10 @@ async def _(bot: Bot, event: MessageEvent):
 
     if not isinstance(event, GroupMessageEvent): return
     now_date = datetime.now().strftime("%Y%m%d")
+    is_admin = event.sender.role in ("owner", "admin")
 
     group = await plugin_manager.get_group(event.group_id, now_date)
-    status, partner_id = await group.handle_qq(event.user_id, target_id, int(bot.self_id))
+    status, partner_id = await group.handle_qq(event.user_id, target_id, int(bot.self_id), is_admin=is_admin)
     
     await plugin_manager.save_group(event.group_id, now_date)
     await qq.finish(await build_message(bot, event.group_id, event.user_id, REPLY_DICT[status], partner_id))
