@@ -4,7 +4,7 @@ import re
 import shutil
 import tarfile
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Literal
 from pathlib import Path
 
 import anyio
@@ -106,18 +106,18 @@ class GroupInstance:
         b = self.get_member(user_b)
         a.wife, b.husband = user_b, user_a
 
-    def _clear_relation(self, user_id: int) -> None:
+    def _clear_relation(self, user_id: int, target: Literal['wife', 'husband', 'both']) -> None:
         """清除关系，确保双向解绑"""
         user = self.get_member(user_id)
         # 清理老婆
-        if user.wife:
+        if user.wife and target in ('wife', 'both'):
             wife = self.get_member(user.wife)
             wife.husband = None
             user.wife = None
             if wife.count == -1 or wife.count > MAX_COUNT:
                 wife.count = MAX_COUNT - 1
         # 清理老公
-        if user.husband:
+        if user.husband and target in ('husband', 'both'):
             husband = self.get_member(user.husband)
             husband.wife = None
             user.husband = None
@@ -162,7 +162,7 @@ class GroupInstance:
 
             # 解除关系并记录前任ID
             ex_partner_id = member.wife
-            self._clear_relation(user_id)
+            self._clear_relation(user_id, 'wife')
 
             # 次数限制检查
             if member.count >= MAX_COUNT:
@@ -189,7 +189,7 @@ class GroupInstance:
                 return "hlg_none", None
             husband_id = member.husband
             member.count += 1
-            self._clear_relation(user_id)
+            self._clear_relation(user_id, 'husband')
             return ("hlp_limit" if member.count > MAX_COUNT else "hlg_success"), husband_id
 
     async def handle_qq(self, user_id: int, target_id: int, bot_id: int, is_admin: bool = False) -> Tuple[str, int | None]:
@@ -211,7 +211,7 @@ class GroupInstance:
                 if not is_admin:
                     return "qq_fail_married", None
                 # 管理员NTR已婚对象，先清理对方关系
-                self._clear_relation(target_id)
+                self._clear_relation(target_id, 'husband')
                 success_key = "qq_success_ntr"
             elif target_id == user_id:
                 # 水仙
@@ -219,7 +219,7 @@ class GroupInstance:
             else:
                 success_key = "qq_success"
 
-            self._clear_relation(user_id)
+            self._clear_relation(user_id, 'wife')
             member.count += 1
             self._update_relation(user_id, target_id)
             return success_key, target_id
@@ -233,7 +233,7 @@ class GroupInstance:
             partner_id = member.wife
             status = "lh_self" if partner_id == user_id else "lh_success"
             
-            self._clear_relation(user_id)
+            self._clear_relation(user_id, 'wife')
             # 设置离婚标记：count 为 -1
             member.count = -1 
             return status, partner_id
