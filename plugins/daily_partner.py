@@ -230,7 +230,8 @@ class PluginManager:
     _instance: Optional["PluginManager"] = None
     
     # 使用标准库的 Path 类型进行注解
-    groups: Dict[int, GroupInstance]
+    # TODO: 可以考虑设置清理机制，避免内存占用过大
+    groups: Dict[Tuple[int, str], GroupInstance]
     config_path: Path 
 
     def __new__(cls):
@@ -241,9 +242,10 @@ class PluginManager:
             cls._instance.config_path = get_plugin_data_dir() / "config.json"
         return cls._instance
 
-    async def get_group(self, group_id: int) -> GroupInstance:
-        if group_id not in self.groups:
-            path = get_plugin_cache_dir() / datetime.now().strftime("%Y%m%d") / f"{group_id}.json"
+    async def get_group(self, group_id: int, date_str: str) -> GroupInstance:
+        group_key = (group_id, date_str)
+        if group_key not in self.groups:
+            path = get_plugin_cache_dir() / date_str / f"{group_id}.json"
             data = {}
             if path.exists():
                 try:
@@ -253,13 +255,18 @@ class PluginManager:
                     logger.warning(f"读取群 {group_id} 数据异常，启用空配置: {e}")
                 except Exception as e:
                     logger.error(f"未知异常读取缓存: {e}")
-            self.groups[group_id] = GroupInstance(group_id, data)
-        return self.groups[group_id]
+            self.groups[group_key] = GroupInstance(group_id, data)
+        return self.groups[group_key]
 
-    async def save_group(self, group_id: int) -> None:
-        path = get_plugin_cache_dir() / datetime.now().strftime("%Y%m%d") / f"{group_id}.json"
+    async def save_group(self, group_id: int, date_str: str) -> None:
+        path = get_plugin_cache_dir() / date_str / f"{group_id}.json"
+        group_key = (group_id, date_str)
+        instance = self.groups.get(group_key)
+        if not instance:
+            return
+
         await anyio.Path(path.parent).mkdir(parents=True, exist_ok=True)
-        dumped_dict = {str(k): getattr(v, "model_dump", v.dict)() for k, v in self.groups[group_id].members.items()}
+        dumped_dict = {str(k): getattr(v, "model_dump", v.dict)() for k, v in instance.members.items()}
         dumped_bytes = orjson.dumps(dumped_dict, option=orjson.OPT_INDENT_2)
         await anyio.Path(path).write_bytes(dumped_bytes)
 
@@ -377,35 +384,38 @@ toggle_status = on_regex(r"^(不当老婆|当老婆|不娶bot|娶bot)$", priorit
 @jrlp.handle()
 async def _(bot: Bot, event: MessageEvent):
     if not isinstance(event, GroupMessageEvent): return
+    now_date = datetime.now().strftime("%Y%m%d")
     config = await plugin_manager.load_config()
     if event.user_id in config["not_allowed"]: 
         return  # 直接返回，保持沉默
         
     pool = await get_pool(bot, event.group_id, event.user_id, config)
-    group = await plugin_manager.get_group(event.group_id)
+    group = await plugin_manager.get_group(event.group_id, now_date)
     status, partner_id = await group.handle_jrlp(event.user_id, pool, config["allowed"].get(str(event.user_id), {}).get("hope"))
     
-    await plugin_manager.save_group(event.group_id)
+    await plugin_manager.save_group(event.group_id, now_date)
     await jrlp.finish(await build_message(bot, event.group_id, event.user_id, REPLY_DICT[status], partner_id))
 
 @hlp.handle()
 async def _(bot: Bot, event: MessageEvent):
     if not isinstance(event, GroupMessageEvent): return
+    now_date = datetime.now().strftime("%Y%m%d")
     config = await plugin_manager.load_config()
     pool = await get_pool(bot, event.group_id, event.user_id, config)
-    group = await plugin_manager.get_group(event.group_id)
+    group = await plugin_manager.get_group(event.group_id, now_date)
     status, partner_id = await group.handle_hlp(event.user_id, pool, config["allowed"].get(str(event.user_id), {}).get("hope"))
     
-    await plugin_manager.save_group(event.group_id)
+    await plugin_manager.save_group(event.group_id, now_date)
     await hlp.finish(await build_message(bot, event.group_id, event.user_id, REPLY_DICT[status], partner_id))
 
 @hlg.handle()
 async def _(bot: Bot, event: MessageEvent):
     if not isinstance(event, GroupMessageEvent): return
-    group = await plugin_manager.get_group(event.group_id)
+    now_date = datetime.now().strftime("%Y%m%d")
+    group = await plugin_manager.get_group(event.group_id, now_date)
     status, partner_id = await group.handle_hlg(event.user_id)
     
-    await plugin_manager.save_group(event.group_id)
+    await plugin_manager.save_group(event.group_id, now_date)
     await hlg.finish(await build_message(bot, event.group_id, event.user_id, REPLY_DICT[status], partner_id, "husband"))
 
 @qq.handle()
@@ -436,26 +446,29 @@ async def _(bot: Bot, event: MessageEvent):
         return
 
     if not isinstance(event, GroupMessageEvent): return
+    now_date = datetime.now().strftime("%Y%m%d")
 
-    group = await plugin_manager.get_group(event.group_id)
+    group = await plugin_manager.get_group(event.group_id, now_date)
     status, partner_id = await group.handle_qq(event.user_id, target_id, int(bot.self_id))
     
-    await plugin_manager.save_group(event.group_id)
+    await plugin_manager.save_group(event.group_id, now_date)
     await qq.finish(await build_message(bot, event.group_id, event.user_id, REPLY_DICT[status], partner_id))
 
 @lh.handle()
 async def _(bot: Bot, event: MessageEvent):
     if not isinstance(event, GroupMessageEvent): return
-    group = await plugin_manager.get_group(event.group_id)
+    now_date = datetime.now().strftime("%Y%m%d")
+    group = await plugin_manager.get_group(event.group_id, now_date)
     status, partner_id = await group.handle_lh(event.user_id)
     
-    await plugin_manager.save_group(event.group_id)
+    await plugin_manager.save_group(event.group_id, now_date)
     await lh.finish(await build_message(bot, event.group_id, event.user_id, REPLY_DICT[status], partner_id))
 
 @jrlg.handle()
 async def _(bot: Bot, event: MessageEvent):
     if not isinstance(event, GroupMessageEvent): return
-    group = await plugin_manager.get_group(event.group_id)
+    now_date = datetime.now().strftime("%Y%m%d")
+    group = await plugin_manager.get_group(event.group_id, now_date)
     member = group.get_member(event.user_id)
     if not member.husband: 
         await jrlg.finish(REPLY_DICT["jrlg_none"])
