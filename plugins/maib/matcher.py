@@ -4,7 +4,7 @@ import yaml
 from pathlib import Path
 from typing import Optional, List
 
-from . import services, image_gen, network
+from . import services, image_gen, network, bot_services
 from .utils import rate_alias_map, MaiData, MaiChart, MaiChartAch, parse_status, DIFFS_MAP
 
 from nonebot import logger, on_regex
@@ -15,12 +15,26 @@ from nonebot.adapters.onebot.v11 import Bot, Event, Message, MessageSegment
 
 DEVELOPER_TOKEN: Optional[str] = None
 
-# =================================
-# ADX 谱面下载
-# =================================
-
+# --- matcher ---
+# 下载谱面
 adx_download = on_regex(r"^下载[铺谱]面\s*(\d*)\s*(.*)$", priority=10, block=True)
+# 查询乐曲信息 (id / info)
+mai_info = on_regex(r"^(id|info)(\d+)", priority=10, block=True)
+# 查询乐曲信息 (是什么歌)
+mai_what_song = on_regex(r"^(\S+?)是什么歌([?？]?)$", priority=10, block=True)
+# 设置乐曲别名
+alias_setting = on_regex(r'^(添加|删除)别名\s+(?:id)?(\d+)\s+([^\s]+)$', priority=5, block=True)
+# 列表查询（完成表/进度/列表）
+scorelist = on_regex(r'^(.*?)\s*(完成表|进度|列表)$', priority=5, block=True)
+# b50 查询
+b50 = on_regex(r'(b50|kkb)', priority=1, block=True)
+# ra 计算
+ra_calc = on_regex(r"^ra\s+(\S+)?\s+(\S+)", priority=5, block=True)
 
+
+# =================================
+# 业务逻辑
+# =================================
 
 @adx_download.handle()
 async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
@@ -64,38 +78,23 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
     song_name = mdt.title
 
     group_id = getattr(event, "group_id", None)
+    
     if group_id:
-        try:
-            await bot.call_api(
-                "upload_group_file",
-                group_id=group_id,
-                file=chart_file_path.resolve().as_posix(),
-                name=file_name
-            )
-        except Exception as e:
-            logger.error(f"上传失败: {e}")
+        result = await bot_services.update_group_file(bot, group_id, chart_file_path, file_name=file_name)
+        if result:
+            logger.error(f"上传失败: {result}")
             await matcher.finish("小梨上传谱面时遇到了问题，请联系监护人确认喔qwq")
             return
         await matcher.finish(f"小梨已经帮你把 {song_name} 的谱面传到群里啦！")
     else:
         user_id = event.get_user_id()
-        try:
-            await bot.call_api(
-                "upload_private_file",
-                user_id=user_id,
-                file=chart_file_path.resolve().as_posix(),
-                name=file_name
-            )
-        except Exception as e:
-            logger.error(f"上传失败: {e}")
+        result = await bot_services.upload_private_file(bot, user_id, chart_file_path, file_name=file_name)
+        if result:
+            logger.error(f"上传失败: {result}")
             await matcher.finish("小梨上传谱面时遇到了问题，请联系监护人确认喔qwq")
             return
         await matcher.finish(f"登登~请查收 {song_name} 谱面！")
 
-
-# =================================
-# 查歌
-# =================================
 
 async def get_song_image(mdt: services.MaiData, user_id: str | int) -> bytes:
     """提取的共用查歌并生成图片的逻辑"""
@@ -114,9 +113,6 @@ async def get_song_image(mdt: services.MaiData, user_id: str | int) -> bytes:
     return output.getvalue()
 
 
-mai_info = on_regex(r"^(id|info)(\d+)", priority=10, block=True)  # `id11451`,`info11451`
-
-
 @mai_info.handle()
 async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
     """处理命令: id11451 / info11451"""
@@ -133,9 +129,6 @@ async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
         return
     img_bytes = await get_song_image(mdt, user_id)
     await matcher.finish(Message(f"{mdt.shortid}. {mdt.title}") + MessageSegment.image(img_bytes))
-
-
-mai_what_song = on_regex(r"^(\S+?)是什么歌([?？]?)$", priority=10, block=True)
 
 
 @mai_what_song.handle()
@@ -173,8 +166,6 @@ async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
     await matcher.finish(msg + Message().join(imgs))
 
 
-alias_setting = on_regex(r'^(添加|删除)别名\s+(?:id)?(\d+)\s+([^\s]+)$', priority=5, block=True)
-
 @alias_setting.handle()
 async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
     """处理命令: 添加别名 id11451 xxx / 删除别名 id11451 xxx"""
@@ -200,17 +191,6 @@ async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
             await matcher.finish("这个别名似乎已经存在了捏~")
     else:
         await matcher.finish("还不支持自主删除别名喔，请联系监护人处理~")
-
-scorelist = on_regex(r'^([\u4E00-\u9FFF]{2,3}|\d+\.\d|\d+\+|\d+)\s*(完成表|进度|列表)$', priority=5, block=True)
-
-b50 = on_regex(r'b50', priority=1, block=True)
-
-
-# =================================
-# Rating 计算
-# =================================
-
-ra_calc = on_regex(r"^ra\s+(\S+)?\s+(\S+)", priority=5, block=True)
 
 
 @ra_calc.handle()
