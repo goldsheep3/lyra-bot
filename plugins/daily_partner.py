@@ -67,6 +67,7 @@ REPLY_DICT: Dict[str, str] = {
     "qq_fail_married": "不可以哦——TA已经有老婆了，TA的老婆会闹情绪的！",
     "qq_fail_limit": "再换老婆你可就没有老婆了，今天安安心心过这日子吧（",
     "qq_fail_lh": "你今天已经离过婚了，不可以再找新老婆了！",
+    "qq_fail_not_allowed": "TA似乎不太愿意玩这个喔……",
     # lh: 成功、自己、还没有老婆
     "lh_success": "你已经和 {qq} 离婚了。（记笔记）",
     "lh_self": "水仙也要离婚吗（大脑过载）\n那便如此吧（",
@@ -375,8 +376,8 @@ async def get_pool(bot: Bot, group_id: int, user_id: int, config: dict, group_in
     now = datetime.now().timestamp()
     pool = []
     for member_info in member_list:
-        member_id = member_info["user_id"]
-        if member_id in config["not_allowed"] or member_id == user_id: 
+        member_id: int = member_info["user_id"]
+        if str(member_id) in config["not_allowed"] or member_id == user_id: 
             continue
         member_data = group_instance.get_member(member_id)
         if member_data.husband and member_data.husband != user_id:
@@ -423,43 +424,49 @@ async def _():
 
 @jrlp.handle()
 async def _(bot: Bot, event: MessageEvent):
+    user_id, group_id = int(event.user_id), int(getattr(event, "group_id", -1))
     if not isinstance(event, GroupMessageEvent): return
     now_date = datetime.now().strftime("%Y%m%d")
     config = await plugin_manager.load_config()
-    if event.user_id in config["not_allowed"]: 
+    if user_id in config["not_allowed"]: 
         return  # 直接返回，保持沉默
 
-    group = await plugin_manager.get_group(event.group_id, now_date)
-    pool = await get_pool(bot, event.group_id, event.user_id, config, group)
-    status, partner_id = await group.handle_jrlp(event.user_id, pool, config["allowed"].get(str(event.user_id), {}).get("hope"))
+    group = await plugin_manager.get_group(group_id, now_date)
+    pool = await get_pool(bot, group_id, user_id, config, group)
+    status, partner_id = await group.handle_jrlp(user_id, pool, config["allowed"].get(str(user_id), {}).get("hope"))
     
-    await plugin_manager.save_group(event.group_id, now_date)
-    await jrlp.finish(await build_message(bot, event.group_id, event.user_id, REPLY_DICT[status], partner_id))
+    await plugin_manager.save_group(group_id, now_date)
+    await jrlp.finish(await build_message(bot, group_id, user_id, REPLY_DICT[status], partner_id))
 
 @hlp.handle()
 async def _(bot: Bot, event: MessageEvent):
+    user_id, group_id = int(event.user_id), int(getattr(event, "group_id", -1))
     if not isinstance(event, GroupMessageEvent): return
     now_date = datetime.now().strftime("%Y%m%d")
     config = await plugin_manager.load_config()
-    group = await plugin_manager.get_group(event.group_id, now_date)
-    pool = await get_pool(bot, event.group_id, event.user_id, config, group)
-    status, partner_id = await group.handle_hlp(event.user_id, pool, config["allowed"].get(str(event.user_id), {}).get("hope"))
+    group = await plugin_manager.get_group(group_id, now_date)
+    pool = await get_pool(bot, group_id, user_id, config, group)
+    status, partner_id = await group.handle_hlp(user_id, pool, config["allowed"].get(str(user_id), {}).get("hope"))
     
-    await plugin_manager.save_group(event.group_id, now_date)
-    await hlp.finish(await build_message(bot, event.group_id, event.user_id, REPLY_DICT[status], partner_id))
+    await plugin_manager.save_group(group_id, now_date)
+    await hlp.finish(await build_message(bot, group_id, user_id, REPLY_DICT[status], partner_id))
 
 @hlg.handle()
 async def _(bot: Bot, event: MessageEvent):
+    user_id, group_id = int(event.user_id), int(getattr(event, "group_id", -1))
+   
     if not isinstance(event, GroupMessageEvent): return
     now_date = datetime.now().strftime("%Y%m%d")
-    group = await plugin_manager.get_group(event.group_id, now_date)
-    status, partner_id = await group.handle_hlg(event.user_id)
+    group = await plugin_manager.get_group(group_id, now_date)
+    status, partner_id = await group.handle_hlg(user_id)
     
-    await plugin_manager.save_group(event.group_id, now_date)
-    await hlg.finish(await build_message(bot, event.group_id, event.user_id, REPLY_DICT[status], partner_id, "husband"))
+    await plugin_manager.save_group(group_id, now_date)
+    await hlg.finish(await build_message(bot, group_id, user_id, REPLY_DICT[status], partner_id, "husband"))
 
 @qq.handle()
 async def _(bot: Bot, event: MessageEvent):
+    user_id, group_id = int(event.user_id), int(getattr(event, "group_id", -1))
+
     target_id = None
     for segment in event.get_message():
         if segment.type == "at":
@@ -480,8 +487,9 @@ async def _(bot: Bot, event: MessageEvent):
         return
 
     if isinstance(event, PrivateMessageEvent):
+        # 设定 hope 的私聊接口
         config = await plugin_manager.load_config()
-        uid_str = str(event.user_id)
+        uid_str = str(user_id)
         if uid_str not in config["allowed"]:
             config["allowed"][uid_str] = {}
         config["allowed"][uid_str]["hope"] = target_id
@@ -489,43 +497,53 @@ async def _(bot: Bot, event: MessageEvent):
         await qq.finish(REPLY_DICT["hope_set"].replace("{qq}", str(target_id)))
         return
 
-    if not isinstance(event, GroupMessageEvent): return
-    now_date = datetime.now().strftime("%Y%m%d")
-    is_admin = event.sender.role in ("owner", "admin")
+    if isinstance(event, GroupMessageEvent):
+        # 群内的「强娶」逻辑线
+        config = await plugin_manager.load_config()
+        if str(target_id) in config["not_allowed"]:
+            await qq.finish(REPLY_DICT["qq_fail_not_allowed"])
+            return
+        now_date = datetime.now().strftime("%Y%m%d")
+        is_admin = event.sender.role in ("owner", "admin")  # 管理员权限检查
 
-    group = await plugin_manager.get_group(event.group_id, now_date)
-    status, partner_id = await group.handle_qq(event.user_id, target_id, int(bot.self_id), is_admin=is_admin)
-    
-    await plugin_manager.save_group(event.group_id, now_date)
-    await qq.finish(await build_message(bot, event.group_id, event.user_id, REPLY_DICT[status], partner_id))
+        group = await plugin_manager.get_group(group_id, now_date)
+        status, partner_id = await group.handle_qq(user_id, target_id, int(bot.self_id), is_admin=is_admin)
+        
+        await plugin_manager.save_group(group_id, now_date)
+        await qq.finish(await build_message(bot, group_id, user_id, REPLY_DICT[status], partner_id))
 
 @lh.handle()
 async def _(bot: Bot, event: MessageEvent):
+    user_id, group_id = int(event.user_id), int(getattr(event, "group_id", -1))
+
     if not isinstance(event, GroupMessageEvent): return
     now_date = datetime.now().strftime("%Y%m%d")
-    group = await plugin_manager.get_group(event.group_id, now_date)
-    status, partner_id = await group.handle_lh(event.user_id)
-    
-    await plugin_manager.save_group(event.group_id, now_date)
-    await lh.finish(await build_message(bot, event.group_id, event.user_id, REPLY_DICT[status], partner_id))
+    group = await plugin_manager.get_group(group_id, now_date)
+    status, partner_id = await group.handle_lh(user_id)
+
+    await plugin_manager.save_group(group_id, now_date)
+    await lh.finish(await build_message(bot, group_id, user_id, REPLY_DICT[status], partner_id))
 
 @jrlg.handle()
 async def _(bot: Bot, event: MessageEvent):
+    user_id, group_id = int(event.user_id), int(getattr(event, "group_id", -1))
+
     if not isinstance(event, GroupMessageEvent): return
     now_date = datetime.now().strftime("%Y%m%d")
-    group = await plugin_manager.get_group(event.group_id, now_date)
-    member = group.get_member(event.user_id)
+    group = await plugin_manager.get_group(group_id, now_date)
+    member = group.get_member(user_id)
     if not member.husband: 
         await jrlg.finish(REPLY_DICT["jrlg_none"])
         
-    await jrlg.finish(await build_message(bot, event.group_id, event.user_id, REPLY_DICT["jrlg_status"], member.husband, "husband"))
+    await jrlg.finish(await build_message(bot, group_id, user_id, REPLY_DICT["jrlg_status"], member.husband, "husband"))
 
 @toggle_status.handle()
 async def _(bot: Bot, event: MessageEvent):
+    user_id, _group_id = int(event.user_id), int(getattr(event, "group_id", -1))
+
     if not isinstance(event, GroupMessageEvent): return
     cmd = event.get_plaintext().strip()
     config = await plugin_manager.load_config()
-    user_id = event.user_id
     uid_str = str(user_id)
     
     if cmd == "不当老婆":
