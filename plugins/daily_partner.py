@@ -204,7 +204,7 @@ class GroupInstance:
                 return "qq_fail_limit", None
             # 强娶机器人判定
             if target_id == bot_id:
-                return "qq_with_lyra", None
+                return "qq_with_bot_self", None
             # 自己
             if user_id == target_id:
                 self._clear_relation(user_id)
