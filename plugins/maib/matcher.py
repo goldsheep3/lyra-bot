@@ -279,8 +279,8 @@ async def _(matcher: Matcher, groups: tuple = RegexGroup()):
 
 @file_receiver.handle()
 async def _(bot: Bot, event: PrivateMessageEvent, matcher: Matcher):
-    # 此时进入这里的逻辑绝对是私聊且带文件的
-    file_seg = event.get_message()["file"][0] # 直接切片取第一个文件段
+    # 1. 获取文件基础信息
+    file_seg = event.get_message()["file"][0]
     file_id = file_seg.data.get("file_id")
     file_name = file_seg.data.get("file", "")
     
@@ -288,14 +288,15 @@ async def _(bot: Bot, event: PrivateMessageEvent, matcher: Matcher):
         await matcher.finish("请发送 .json 格式的文件。")
         return
 
-    # 获取文件信息
+    # 获取文件下载/路径信息
     file_info = await bot.get_file(file_id=file_id)
     url = file_info.get("url", "")
-    local_path = Path(file_info.get("file", ""))  # NapCat 提供的本地路径
+    raw_path = file_info.get("file")
+    local_path = Path(raw_path) if raw_path else None
     
     data = None
 
-    # --- 策略 1: 尝试从本地磁盘直接读取 (解决 NapCat 同机部署问题) ---
+    # --- 策略 1: 优先从本地路径读取 (解决 NapCat 路径报错) ---
     if local_path and local_path.exists():
         try:
             async with aiofiles.open(local_path, "rb") as f:
@@ -303,89 +304,85 @@ async def _(bot: Bot, event: PrivateMessageEvent, matcher: Matcher):
                 data = orjson.loads(content)
             logger.info(f"成功从本地路径读取文件: {local_path}")
         except Exception as e:
-            logger.warning(f"尝试读取本地文件失败，准备切网络请求: {e}")
+            logger.warning(f"本地读取失败，尝试网络下载: {e}")
 
-    # --- 策略 2: 如果本地没读到，且有 URL，则尝试网络下载 ---
+    # --- 策略 2: 降级走网络请求 ---
     if not data and url:
         if url.startswith("http"):
             try:
                 data = await network.request_json(url)
-                logger.info(f"成功从 URL 下载文件: {url}")
             except Exception as e:
-                logger.error(f"网络请求文件失败: {e}")
+                logger.error(f"网络请求失败: {e}")
         else:
-            logger.error(f"获取到的 URL 协议非法: {url}")
+            logger.error(f"URL 协议错误: {url}")
 
-    # 最终检查
     if not data:
-        await matcher.finish("下载或解析文件失败了哦，请确认文件内容正确并重试。")
+        await matcher.finish("读取或解析文件失败，请重试。")
 
-    # --- 处理数据逻辑 ---
+    # 2. 校验数据格式
     if isinstance(data, list) and len(data) > 0 and "sheetId" not in data[0]:
-        del data  # 文件不是 lyra-maimai，在该处理予以释放
         return
 
-    await matcher.send("检查到 lyra-maimai 导出数据！小梨正在记录你的游玩数据~")
+    await matcher.send("检查到数据导出！正在识别曲目并记录成绩...")
 
     user_id = int(event.get_user_id())
-
-    # 准备转换数据
     ach_list = []
-    title_to_shortid = {}  # 缓存查询结果
+    title_cache = {}  # 缓存标题查询结果
     
+    # 3. 解析并修正 SD/DX ID
     for record in data:
         try:
             title = record.get("title", "")
-            difficulty_str = record.get("diff", "").lower()
-            server = record.get("server", "JP")
-            achievement = float(record.get("achievement", 0))
-            dxscore = int(record.get("dxscore", 0))
-            combo_str = record.get("combo", "").lower()
-            sync_str = record.get("sync", "").lower()
-
-            # 如果标题没被查询过，进行查询
-            if title not in title_to_shortid:
+            record_type = str(record.get("type", "sd")).lower() # 'sd' 或 'dx'
+            
+            if title not in title_cache:
                 songs = await services.get_song_by_name(title)
-                if songs:
-                    title_to_shortid[title] = songs[0].shortid
-                else:
-                    title_to_shortid[title] = None
+                if not songs:
+                    title_cache[title] = None
+                title_cache[title] = songs[0].shortid if songs else None
 
-            shortid = title_to_shortid[title]
-            if shortid is None:
+            base_id = title_cache[title]
+            if base_id is None:
                 logger.warning(f"无法找到曲目: {title}")
                 continue
 
-            # 获取难度编号
-            difficulty = DIFFS_MAP.get(difficulty_str, -1)
-            if difficulty < 0:
-                logger.warning(f"未知难度: {difficulty_str}")
-                continue
+            # --- 关键：SD/DX ID 偏移逻辑 ---
+            if record_type == "dx":
+                # DX 曲目：如果是基础 ID (<10000)，则补足 10000
+                shortid = base_id + 10000 if base_id < 10000 else base_id
+            else:
+                # SD 曲目：如果是偏移 ID (>=10000)，则剔除 10000
+                shortid = base_id - 10000 if base_id >= 10000 else base_id
 
-            # 转换 combo 和 sync
-            combo = DF_FC_MAP.get(combo_str, 0)
-            sync = DF_FS_MAP.get(sync_str, 0)
+            # 提取其他字段
+            difficulty = DIFFS_MAP.get(record.get("diff", "").lower(), -1)
+            if difficulty < 0: continue
 
             ach_obj = MaiChartAch(
                 shortid=shortid,
                 difficulty=difficulty,
-                server=server,
-                achievement=achievement,
-                dxscore=dxscore,
-                combo=combo,
-                sync=sync,
+                server=record.get("server", "JP"),
+                achievement=float(record.get("achievement", 0)),
+                dxscore=int(record.get("dxscore", 0)),
+                combo=DF_FC_MAP.get(record.get("combo", "").lower(), 0),
+                sync=DF_FS_MAP.get(record.get("sync", "").lower(), 0),
                 user_id=user_id
             )
             ach_list.append(ach_obj)
 
-        except (ValueError, TypeError, KeyError) as e:
-            logger.warning(f"处理单条记录失败: {record}, 错误: {e}")
+        except Exception as e:
+            logger.warning(f"单条记录处理失败: {e}")
             continue
 
-    # 批量上传成绩
+    # 4. 批量上传
     if ach_list:
-        await services.upload_achievements_batch(user_id, ach_list)
-        await matcher.finish(f"成功导入 {len(ach_list)} 条成绩！")
+        try:
+            # 该方法内部应包含去重/更新逻辑以防止 IntegrityError 
+            await services.upload_achievements_batch(user_id, ach_list)
+            await matcher.finish(f"成功导入 {len(ach_list)} 条成绩！")
+        except Exception as e:
+            logger.error(f"数据库写入崩溃: {e}")
+            await matcher.finish("同步到数据库时出错了……请联系监护人确认情况哦qwq")
     else:
         import time
         await matcher.finish(f"已解析，但似乎没有有效的成绩诶qwq\n当前的时间为：{time.strftime('%Y-%m-%d %H:%M:%S')}，请截图发送给监护人确认情况。\n果咩纳塞qwq")

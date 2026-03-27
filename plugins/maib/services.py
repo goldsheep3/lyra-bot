@@ -325,14 +325,22 @@ async def upload_achievements_batch(user_id: int, ach_list: List[utils.MaiChartA
     """批量上传接口"""
     jp_ver, cn_ver = utils.get_current_versions()
 
-    # 1. 按 shortid 分组，减少后续查询次数
-    ach_group = defaultdict(list)
+    # --- 1. 预处理：对输入数据进行内部去重，防止 ach_list 自身包含重复 key ---
+    # 唯一键定义为 (shortid, difficulty, server)
+    unique_incoming = {}
     for a in ach_list:
+        key = (a.shortid, a.difficulty, a.server)
+        if key not in unique_incoming or a.achievement > unique_incoming[key].achievement:
+            unique_incoming[key] = a
+
+    # 将去重后的数据按 shortid 分组
+    ach_group = defaultdict(list)
+    for a in unique_incoming.values():
         ach_group[a.shortid].append(a)
 
     async with get_session() as session:
         for shortid, incoming_items in ach_group.items():
-            # 2. 一次性获取该乐曲的所有谱面及该用户已有的所有成绩
+            # 2. 获取谱面信息
             chart_stmt = select(MaiChart).where(MaiChart.shortid == shortid)
             chart_models = (await session.execute(chart_stmt)).scalars().all()
             if not chart_models:
@@ -340,12 +348,12 @@ async def upload_achievements_batch(user_id: int, ach_list: List[utils.MaiChartA
             
             chart_dict = {c.difficulty: c for c in chart_models}
             
+            # 获取该用户已有的成绩
             exist_ach_stmt = select(MaiChartAch).where(
                 MaiChartAch.user_id == user_id,
                 MaiChartAch.shortid == shortid
             )
             existing_achs = (await session.execute(exist_ach_stmt)).scalars().all()
-            # 唯一索引 key: (difficulty, server)
             existing_ach_dict = {(a.difficulty, a.server): a for a in existing_achs}
 
             for incoming in incoming_items:
@@ -355,31 +363,26 @@ async def upload_achievements_batch(user_id: int, ach_list: List[utils.MaiChartA
                 mct = chart_dict[incoming.difficulty]
                 existing = existing_ach_dict.get((incoming.difficulty, incoming.server))
                 
-                # 转换到 Utils 进行逻辑判定
                 maichart = mct.to_data()
                 if existing:
                     maichart.set_ach(existing.to_data())
                 
-                # 记录原始状态用于对比是否真的需要更新
                 old_achievement = maichart.get_ach(incoming.server).achievement
                 
-                # 3. 执行合并与 Rating 计算
-                # 确定当前环境版本
+                # 3. 计算逻辑
                 cur_ver = cn_ver if incoming.server == "CN" else jp_ver
                 ap_bonus = 1 if 2000 > cur_ver >= 25 else 0
-                
-                # apply_item_achievement 会调用 update_with (取 max)
                 updated_utils = maichart.update_ach(incoming)
                 
-                # 4. 只有当数据确实发生变化时（如成就率提高或牌子更新），才操作 Model
+                # 4. 判断更新或新增
                 # 如果是新成绩，或者成就率/DX分数等有提升
                 if not existing or updated_utils.achievement > old_achievement or \
                    (existing.dxscore < updated_utils.dxscore):
                     
-                    # 重新计算该环境下的缓存 Rating
                     calculated_rating = maichart.get_dxrating(server=incoming.server, ap_bonus=ap_bonus)
                     
                     if existing:
+                        # 更新已有记录
                         existing.achievement = updated_utils.achievement
                         existing.dxscore = updated_utils.dxscore
                         existing.dxrating = calculated_rating
@@ -387,6 +390,7 @@ async def upload_achievements_batch(user_id: int, ach_list: List[utils.MaiChartA
                         existing.sync = updated_utils.sync
                         existing.update_time = int(time.time())
                     else:
+                        # 新增记录
                         new_ach = MaiChartAch(
                             user_id=user_id,
                             shortid=shortid,
@@ -401,6 +405,12 @@ async def upload_achievements_batch(user_id: int, ach_list: List[utils.MaiChartA
                             update_time=int(time.time())
                         )
                         session.add(new_ach)
+                        # 重要：为了防止下一个 shortid 循环时 select 触发 autoflush 导致冲突
+                        # 我们可以选择手动 flush 或者在去重逻辑做严以后通过最终 commit 解决
 
-        # 5. 最后一次性提交所有变更
-        await session.commit()
+        # 5. 提交
+        try:
+            await session.commit()
+        except Exception as e:
+            await session.rollback()
+            raise e
