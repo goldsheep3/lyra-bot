@@ -379,10 +379,10 @@ async def _(bot: Bot, event: PrivateMessageEvent, matcher: Matcher):
         try:
             # 该方法内部应包含去重/更新逻辑以防止 IntegrityError 
             await services.upload_achievements_batch(user_id, ach_list)
-            await matcher.finish(f"成功导入 {len(ach_list)} 条成绩！")
         except Exception as e:
             logger.error(f"数据库写入崩溃: {e}")
             await matcher.finish("同步到数据库时出错了……请联系监护人确认情况哦qwq")
+        await matcher.finish(f"成功导入 {len(ach_list)} 条成绩！")
     else:
         import time
         await matcher.finish(f"已解析，但似乎没有有效的成绩诶qwq\n当前的时间为：{time.strftime('%Y-%m-%d %H:%M:%S')}，请截图发送给监护人确认情况。\n果咩纳塞qwq")
