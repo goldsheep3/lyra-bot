@@ -1,5 +1,4 @@
-import io
-import re
+import io, re, orjson, aiofiles
 from pathlib import Path
 from typing import Optional, List
 
@@ -289,15 +288,43 @@ async def _(bot: Bot, event: PrivateMessageEvent, matcher: Matcher):
         await matcher.finish("请发送 .json 格式的文件。")
         return
 
-    url = (await bot.get_file(file_id=file_id)).get("url", "")
-    data = await network.request_json(url)
+    # 获取文件信息
+    file_info = await bot.get_file(file_id=file_id)
+    url = file_info.get("url", "")
+    local_path = Path(file_info.get("file", ""))  # NapCat 提供的本地路径
+    
+    data = None
+
+    # --- 策略 1: 尝试从本地磁盘直接读取 (解决 NapCat 同机部署问题) ---
+    if local_path and local_path.exists():
+        try:
+            async with aiofiles.open(local_path, "rb") as f:
+                content = await f.read()
+                data = orjson.loads(content)
+            logger.info(f"成功从本地路径读取文件: {local_path}")
+        except Exception as e:
+            logger.warning(f"尝试读取本地文件失败，准备切网络请求: {e}")
+
+    # --- 策略 2: 如果本地没读到，且有 URL，则尝试网络下载 ---
+    if not data and url:
+        if url.startswith("http"):
+            try:
+                data = await network.request_json(url)
+                logger.info(f"成功从 URL 下载文件: {url}")
+            except Exception as e:
+                logger.error(f"网络请求文件失败: {e}")
+        else:
+            logger.error(f"获取到的 URL 协议非法: {url}")
+
+    # 最终检查
     if not data:
         await matcher.finish("下载或解析文件失败了哦，请确认文件内容正确并重试。")
 
-    # 处理数据
+    # --- 处理数据逻辑 ---
     if isinstance(data, list) and len(data) > 0 and "sheetId" not in data[0]:
         del data  # 文件不是 lyra-maimai，在该处理予以释放
         return
+
     await matcher.send("检查到 lyra-maimai 导出数据！小梨正在记录你的游玩数据~")
 
     user_id = int(event.get_user_id())
