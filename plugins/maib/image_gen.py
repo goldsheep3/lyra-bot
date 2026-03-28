@@ -1,4 +1,3 @@
-import yaml
 import bisect
 from pathlib import Path
 from enum import IntEnum
@@ -216,14 +215,14 @@ def bcm(t: str, f: str):
 
 # 倍率缩放类
 class MS:
-    def __init__(self, multiple: int):
-        self.multiple = multiple
+    def __init__(self, multiple: int | float):
+        self.multiple = float(multiple)
 
     def set_multiple(self, multiple: float):
-        self.multiple = multiple // 1
+        self.multiple = float(round(multiple))
 
-    def x(self, x: int | float) -> int:
-        return int(x * self.multiple)
+    def x(self, val: int | float) -> int:
+        return int(val * self.multiple)
 
     def xy(self, x: int | float, y: int | float) -> tuple[int, int]:
         return self.x(x), self.x(y)
@@ -234,9 +233,13 @@ class MS:
     def rev(self, x: float) -> float:
         return x / self.multiple
 
-    # 魔法方法：乘运算，将数值和 self.multiple 相乘，返回新 MS 对象
+    def __repr__(self):
+        return f"MS(multiple={self.multiple})"
+
     def __mul__(self, other: int | float) -> 'MS':
-        return MS(int(self.multiple * other))
+        if not isinstance(other, (int, float)):
+            return NotImplemented
+        return MS(self.multiple * other)
 
 
 def get_difficulty(diff: int) -> Difficulty:
@@ -550,7 +553,7 @@ class DrawUnit:
             self.img.paste(overlay, self.ms.xy(x, y), mask=combined_mask)
 
         except (FileNotFoundError, AttributeError, Exception):
-            return
+            pass
 
         # 绘制边框（即使图片加载失败）
         if outline and outline_width > 0:
@@ -941,15 +944,21 @@ class DrawB50Boxex(DrawFactory):
         # 头像
         user_avatar = user_avatar if user_avatar else Image.new('RGB', (10, 10), color='#CCC')
         du.image(x, y, 32, 32, radius=5, outline='#FFF', outline_width=1, png=user_avatar)
-        # DX Rating
-        
-        dxra_fram_path = PIC_PATH / "dxrating" / b50manager.dxrating_filename
-        if dxra_fram_path.exists():
-            du.image(x+36, y, 70, 14, radius=0, png=dxra_fram_path)
         # Username
         du.rounded_rect(x+36, y+15, 100, 17, fill='#333', radius=2)
         du.text(x+36, y+23.5, text=' ' + get_full_width_text(user_name), fill='#FFF', anchor='lm',
                 font=MIS_DB.font_variant(size=self.ms.x(10)))
+        # DX Rating
+        dxra_fram_path = PIC_PATH / "dxrating" / b50manager.dxrating_filename
+        if dxra_fram_path.exists():
+            du.image(x+36, y, 70, 14, radius=0, png=dxra_fram_path)
+        # Rating Number
+        font = MIS_DB.font_variant(size=self.ms.x(8))
+        for i, digit in enumerate(str(b50manager.dxrating)[::-1]):
+            dx = 57.5 - 5.5 * i
+            du.text(x+36+dx, y+7.1, text=digit, fill='#FCC916', anchor='mm', font=font,
+                    stroke=(0.35, '#333'))
+
         y += 32 + margin * 2
 
         b35, b15 = b50manager.get_lists()

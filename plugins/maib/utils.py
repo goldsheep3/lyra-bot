@@ -17,8 +17,8 @@ def parse_status(target: str, mapping: Dict[str, int]) -> int:
 
 def get_current_versions():
     """从 VERSIONS_DATA 获取当前最新版本号"""
-    jp_versions = [v for v in VERSIONS_DATA.keys() if v < 2000]
-    cn_versions = [v for v in VERSIONS_DATA.keys() if v >= 2000]
+    jp_versions: list[int] = [v for v in VERSIONS_DATA.keys() if v < 2000]
+    cn_versions: list[int] = [v for v in VERSIONS_DATA.keys() if v >= 2000]
     
     jp_current = max(jp_versions) if jp_versions else 0
     cn_current = max(cn_versions) if cn_versions else 0
@@ -320,6 +320,9 @@ class MaiData:
         """解析来自水鱼查分器的响应体数据，填充 MaiChartAch 分数信息"""
 
         for record in records:
+            if record.get("song_id") != self.shortid:
+                continue  # 过滤掉不匹配曲目的记录，兼容 b50 接口
+
             # 1. 难度转换
             level_idx = record.get("level_index")
             if level_idx is None:

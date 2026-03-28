@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Optional, List
 
 from . import services, image_gen, network, bot_services
-from .utils import MaiData, MaiChart, MaiChartAch, parse_status
+from .utils import MaiData, MaiChart, MaiChartAch, parse_status, MaiB50Manager, get_current_versions
 from .constants import *
 
 from nonebot import logger, on_regex, on_message
@@ -37,7 +37,7 @@ alias_setting = on_regex(r'^(添加|删除)别名\s+(?:id)?(\d+)\s+([^\s]+)$', p
 # 列表查询（完成表/进度/列表）
 scorelist = on_regex(r'^(.*?)\s*(完成表|进度|列表)$', priority=5, block=True)
 # b50 查询
-b50 = on_regex(r'(b50|kkb)', priority=1, block=True)
+b50 = on_regex(r'^([a-z0-9+]*?)(b50|kkb)\s*(.*)$', priority=1, block=True)
 # ra 计算
 ra_calc = on_regex(r"^ra\s+(\S+)?\s+(\S+)", priority=5, block=True)
 # 上传 JSON 配置数据
@@ -272,9 +272,57 @@ async def _(matcher: Matcher, groups: tuple = RegexGroup()):
     chart.set_ach(MaiChartAch(shortid=0, difficulty=0, server="CN", achievement=achievement))
     ra = chart.get_dxrating()
 
-    await matcher.finish("小梨算出来咯！\n"
-                        f"定数{level}*{achievement:.4f}% -> Rating: {ra}"
-                        "\n该 ra 不考虑 AP 的额外分数哦！" if achievement > 100.5 else "")
+    msg = f"小梨算出来咯！\n定数{level}*{achievement:.4f}% -> Rating: {ra}"
+    if achievement > 100.5:
+        msg += "\n该 ra 不考虑 AP 的额外分数哦！"
+    await matcher.finish(msg)
+
+
+@b50.handle()
+async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
+    """处理命令: xxxb50/xxxkkb xxx"""
+    keyword, _, extra = groups
+    user_id, server = None, None
+    extra: str = extra.strip()
+    if extra:
+        extra_list = extra.split(' ')
+        for item in extra_list:
+            if (not user_id) and item.isdigit():
+                user_id = int(item)  # 其次解析纯数字 QQ 号
+            if (not server) and item.lower() in ['jp', 'cn', 'all']:
+                server = item.upper()  # 解析服务器信息
+        for segment in event.get_message():
+            if segment.type == "at":
+                user_id = int(segment.data["qq"])  # 优先解析 @ 的用户信息
+                break
+    if not user_id:
+        user_id = int(event.get_user_id())  # 最后默认使用发送者的 QQ 号
+    if not server:
+        server = "CN"  # 默认服务器为 CN
+    
+    # 当前：解析水鱼读取 b50
+    # TODO: 修改为同步到数据库并可选查询
+    sy_b50_list = await network.sy_query_player(qq=user_id)
+    if not sy_b50_list:
+        await matcher.finish("没有找到你的水鱼数据哦qwq")
+        return
+    sy_b50_records = sy_b50_list.get('records', [])
+    music_set = {int(record.get('song_id')) for record in sy_b50_records if record.get('song_id') is not None}
+    maidata_list = []
+    for shortid in music_set:
+        mdt = await services.get_song_by_id(shortid)
+        if mdt:
+            maidata = mdt.to_data()
+            maidata.parse_sy_player_record(sy_b50_records)  # 填入水鱼数据
+            maidata_list.append(maidata)
+    await matcher.send("小梨绘制中……")
+    manager = MaiB50Manager(current_version=get_current_versions()[1], server='CN')
+    img = image_gen.DrawB50Boxex(manager, sy_b50_list.get('nickname', ''), cn_level=1).get_image()
+    output = io.BytesIO()
+    img.save(output, format="jpeg")
+    img_bytes = output.getvalue()
+    await matcher.finish(MessageSegment.image(img_bytes))
+    
 
 
 @file_receiver.handle()
