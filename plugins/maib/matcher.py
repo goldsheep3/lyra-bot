@@ -269,7 +269,7 @@ async def _(matcher: Matcher, groups: tuple = RegexGroup()):
 
     # 调用 MaiChart 计算 DX Rating
     chart = MaiChart(shortid=0, difficulty=0, lv=level)
-    chart.set_ach(MaiChartAch(shortid=0, difficulty=0, server="CN", achievement=achievement))
+    chart.set_ach(MaiChartAch(shortid=0, difficulty=0, server="JP", achievement=achievement))
     ra = chart.get_dxrating()
 
     msg = f"小梨算出来咯！\n定数{level}*{achievement:.4f}% -> Rating: {ra}"
@@ -281,7 +281,7 @@ async def _(matcher: Matcher, groups: tuple = RegexGroup()):
 @b50.handle()
 async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
     """处理命令: xxxb50/xxxkkb xxx"""
-    keyword, _, extra = groups
+    _keyword, _, extra = groups
     user_id, server = None, None
     extra: str = extra.strip()
     if extra:
@@ -295,29 +295,41 @@ async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
             if segment.type == "at":
                 user_id = int(segment.data["qq"])  # 优先解析 @ 的用户信息
                 break
-    if not user_id:
-        user_id = int(event.get_user_id())  # 最后默认使用发送者的 QQ 号
-    if not server:
-        server = "CN"  # 默认服务器为 CN
+    user_id = user_id or int(event.get_user_id())  # 最后默认使用发送者的 QQ 号
+    server = server or 'ALL'
+    
     
     # 当前：解析水鱼读取 b50
     # TODO: 修改为同步到数据库并可选查询
-    sy_b50_list = await network.sy_query_player(qq=user_id)
-    if not sy_b50_list:
+    sy_b50_data = await network.sy_query_player(qq=user_id)
+    if not sy_b50_data:
         await matcher.finish("没有找到你的水鱼数据哦qwq")
         return
-    sy_b50_records = sy_b50_list.get('records', [])
-    music_set = {int(record.get('song_id')) for record in sy_b50_records if record.get('song_id') is not None}
+    sy_b50_records = sy_b50_data.get('records', [])
+    sy_b50_records = sy_b50_records or sum(sy_b50_data.get('charts', {'': []}).values(), [])
+    music_dict = dict()
     maidata_list = []
-    for shortid in music_set:
+    for record in sy_b50_records:
+        if shortid := record.get('song_id'):
+            l = music_dict.get(shortid, [])
+            l.append(record)
+            music_dict[shortid] = l
+    for shortid, records in music_dict.items():
         mdt = await services.get_song_by_id(shortid)
         if mdt:
             maidata = mdt.to_data()
-            maidata.parse_sy_player_record(sy_b50_records)  # 填入水鱼数据
-            maidata_list.append(maidata)
+            maidata.parse_sy_player_record(records)  # 填入水鱼数据
+            for record in records:
+                # 构造数据-难度元组
+                diff = record.get('level_index', 3) + 2
+                maidata_list.append((maidata, diff))
+    if not maidata_list:
+        await matcher.finish("没有找到可用于绘制的谱面记录哦qwq")
+        return
     await matcher.send("小梨绘制中……")
     manager = MaiB50Manager(current_version=get_current_versions()[1], server='CN')
-    img = image_gen.DrawB50Boxex(manager, sy_b50_list.get('nickname', ''), cn_level=1).get_image()
+    manager.add_entries(maidata_list)
+    img = image_gen.DrawB50Boxex(manager, sy_b50_data.get('nickname', ''), cn_level=1).get_image()
     output = io.BytesIO()
     img.save(output, format="jpeg")
     img_bytes = output.getvalue()
@@ -425,7 +437,6 @@ async def _(bot: Bot, event: PrivateMessageEvent, matcher: Matcher):
     # 4. 批量上传
     if ach_list:
         try:
-            # 该方法内部应包含去重/更新逻辑以防止 IntegrityError 
             await services.upload_achievements_batch(user_id, ach_list)
         except Exception as e:
             logger.error(f"数据库写入崩溃: {e}")
