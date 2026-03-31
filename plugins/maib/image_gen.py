@@ -3,6 +3,7 @@ from pathlib import Path
 from enum import IntEnum
 from typing import Optional, Tuple, Literal, List
 from dataclasses import dataclass
+from functools import lru_cache
 
 from PIL import Image, ImageDraw, ImageFont, ImageChops
 
@@ -14,22 +15,72 @@ from .constants import *
 # ========================================
 
 # 模块版本
-MODEL_VERSION: str = "260321"
+MODEL_VERSION: str = "260330"
 
 # 字体常量
-FONT_PATH = ASSETS_PATH / "fonts"
-MIS_DB = ImageFont.truetype(FONT_PATH / "MiSans-Demibold.otf", 10.5)
-MIS_HE = ImageFont.truetype(FONT_PATH / "MiSans-Heavy.otf", 10.5)
-JBM_BD = ImageFont.truetype(FONT_PATH / "JetBrainsMono-Bold.ttf", 10.5)
-JBM_EB = ImageFont.truetype(FONT_PATH / "JetBrainsMono-ExtraBold.ttf", 10.5)
-NSS_RG = ImageFont.truetype(FONT_PATH / "NotoSansSymbols2-Regular.ttf", 10.5)
+class FontManager:
+    _font_dict = {
+        'MIS_DB': "MiSans-Demibold.otf",
+        'MIS_HE': "MiSans-Heavy.otf",
+        'JBM_BD': "JetBrainsMono-Bold.ttf",
+        'JBM_EB': "JetBrainsMono-ExtraBold.ttf",
+        'NCE_RG': 'NotoColorEmoji-Regular.ttf',
+        'NSS_RG': "NotoSansSymbols2-Regular.ttf"
+    }
 
-# 图片路径常量
-IMG_PATH = ASSETS_PATH / "img"
-PIC_PATH = ASSETS_PATH / "pic"
-DXRATING_PATH = PIC_PATH / "dxrating"
-PLATE_PATH = PIC_PATH / "plate"
-VER_PATH = PIC_PATH / "ver"
+    def __init__(self, font_path: Path):
+        self._font_path = font_path
+
+    @lru_cache(maxsize=128)
+    def _get_font(self, font_file: Path, size: int) -> ImageFont.FreeTypeFont:
+        return ImageFont.truetype(str(font_file), size)
+
+    def font(self, font_code: str, size: float) -> ImageFont.FreeTypeFont:
+        istool_size = int(round(size))
+
+        font_name = self._font_dict.get(font_code, f"{font_code}.ttf")
+        font_file = self._font_path / font_name
+
+        try:
+            return self._get_font(font_file, istool_size)
+        except Exception as e:
+            if not font_file.exists():
+                raise FileNotFoundError(f"字体文件缺失: {font_file}")
+            raise e
+FONT = FontManager(ASSETS_PATH / "fonts")
+
+# 图片常量
+class AssetsManager:
+    def __init__(self, assets_path: Path):
+        self._assets_path = assets_path
+        self._pic_path = self._assets_path / "pic"
+        self._dxrating_path = self._pic_path / "dxrating"
+        self._plate_path = self._pic_path / "plate"
+        self._ver_path = self._pic_path / "ver"
+
+    @staticmethod
+    @lru_cache(maxsize=64)
+    def _get_image(path: Path, size: Tuple[int, int] | None = None) -> Image.Image | None:
+        if not path.exists():
+            raise FileNotFoundError(f"图片文件缺失: {path}")
+        try:
+            img = Image.open(path).convert('RGBA')
+            if size is not None:
+                img = img.resize(size, Image.Resampling.LANCZOS)
+            return img
+        except Exception as e:
+            return None
+
+    def version_image(self, version: int, size: Tuple[int, int] | None = None) -> Image.Image | None:
+        return self._get_image(self._ver_path / f"{version}.png", size)
+
+    def dxrating_image(self, rating_filename: str, size: Tuple[int, int] | None = None) -> Image.Image | None:
+        return self._get_image(self._dxrating_path / rating_filename, size)
+
+    def background(self, size: Tuple[int, int] | None = None) -> Image.Image | None:
+        return self._get_image(self._assets_path / "img" / "bakamai.png", size)
+
+ASSETS = AssetsManager(ASSETS_PATH)
 
 # 基础颜色常量
 COLOR_DXSCORE_GN = '#0A5'
@@ -221,6 +272,7 @@ class MS:
     def set_multiple(self, multiple: float):
         self.multiple = float(round(multiple))
 
+    @lru_cache(maxsize=32)
     def x(self, val: int | float) -> int:
         return int(val * self.multiple)
 
@@ -376,9 +428,9 @@ class DrawUnit:
         self.img.paste(temp_layer, (int(box_size[0]), int(box_size[1])), mask=mask)
 
     def difficulty(self, x: float, y: float, diff: Difficulty, text: Optional[str] = None, limit_width: float = -1):
-        f = MIS_HE.font_variant(size=self.ms.x(4.8))
+        f = FONT.font('MIS_HE', self.ms.x(4.8))
         if all((not text, self.cn == 2)):
-            fs = MIS_HE.font_variant(size=self.ms.x(3.3))
+            fs = FONT.font('MIS_HE', self.ms.x(3.3))
             _x1, _y1, x2, y2 = f.getbbox(diff.text_title, anchor='lm', stroke_width=self.ms.x(0.8))
             mx2, my2 = self.ms.rev(x2), self.ms.rev(y2)
             self.text(x+mx2+0.5, y+my2, diff.text_title_cn, diff.text, 'ld',
@@ -394,7 +446,7 @@ class DrawUnit:
 
         self.rounded_rect(x, y, 20, 5, fill=COLOR_SD, radius=5)
         offset = 0.6 if self.cn else 0
-        font = MIS_HE.font_variant(size=self.ms.x(3 + offset))
+        font = FONT.font('MIS_HE', self.ms.x(3 + offset))
         if self.cn:
             text = "标 准"
         else:
@@ -407,7 +459,7 @@ class DrawUnit:
 
         self.rounded_rect(x, y, 20, 5, fill='#FFF', radius=5)
         offset = 0.4 if self.cn else 0
-        font = MIS_HE.font_variant(size=self.ms.x(3.5 + offset))
+        font = FONT.font('MIS_HE', self.ms.x(3.5 + offset))
         if self.cn:
             text = "DX"
             self.text(x+10, y+2.5, text, COLOR_DX, 'mm', font)
@@ -438,37 +490,35 @@ class DrawUnit:
 
         # 等级 `LV`
         if self.cn == 2:
-            draw.text(ms.xy(x - 1, y), text="等级", fill=diff.frame, anchor='ls',
-                      font=MIS_DB.font_variant(size=ms.x(3)),
+            draw.text(ms.xy(x - 1, y), text="等级", fill=diff.frame, anchor='ls', font=FONT.font('MIS_DB', size=ms.x(3)),
                       stroke_width=ms.x(0.5), stroke_fill=diff.frame)
-            draw.text(ms.xy(x - 1, y), text="等级", fill=diff.level_text, anchor='ls',
-                      font=MIS_DB.font_variant(size=ms.x(3)))
+            draw.text(ms.xy(x - 1, y), text="等级", fill=diff.level_text, anchor='ls', font=FONT.font('MIS_DB', size=ms.x(3)))
         else:
-            draw.text(ms.xy(x, y), text="LV", fill=diff.frame, anchor='ls', font=JBM_BD.font_variant(size=ms.x(4)),
+            draw.text(ms.xy(x, y), text="LV", fill=diff.frame, anchor='ls', font=FONT.font('JBM_BD', size=ms.x(4)),
                       stroke_width=ms.x(0.5), stroke_fill=diff.frame)
-            draw.text(ms.xy(x, y), text="LV", fill=diff.level_text, anchor='ls', font=JBM_BD.font_variant(size=ms.x(4)))
+            draw.text(ms.xy(x, y), text="LV", fill=diff.level_text, anchor='ls', font=FONT.font('JBM_BD', size=ms.x(4)))
         # 等级 `xx.x`
-        draw.text(ms.xy(x + 6, y), text=f, fill=diff.frame, anchor='ls', font=JBM_BD.font_variant(size=ms.x(6)),
+        draw.text(ms.xy(x + 6, y), text=f, fill=diff.frame, anchor='ls', font=FONT.font('JBM_BD', size=ms.x(6)),
                   stroke_width=ms.x(0.5), stroke_fill=diff.frame)
-        draw.text(ms.xy(x + 6, y), text=f, fill=diff.level_text, anchor='ls', font=JBM_BD.font_variant(size=ms.x(6)))
+        draw.text(ms.xy(x + 6, y), text=f, fill=diff.level_text, anchor='ls', font=FONT.font('JBM_BD', size=ms.x(6)))
         if not ignore_decimal:
             draw.text(ms.xy(x + 13, y), text="." + d, fill=diff.frame, anchor='ls',
-                      font=JBM_BD.font_variant(size=ms.x(5)), stroke_width=ms.x(0.5), stroke_fill=diff.frame)
+                      font=FONT.font('JBM_BD', size=ms.x(5)), stroke_width=ms.x(0.5), stroke_fill=diff.frame)
             draw.text(ms.xy(x + 13, y), text="." + d, fill=diff.level_text, anchor='ls',
-                      font=JBM_BD.font_variant(size=ms.x(5)))
+                      font=FONT.font('JBM_BD', size=ms.x(5)))
         # 等级 `+`
         if plus:
             draw.text(ms.xy(x + 13.7, y - 2.8), text="+", fill=diff.frame, anchor='ls',
-                      font=JBM_BD.font_variant(size=ms.x(3.5)),
+                      font=FONT.font('JBM_BD', size=ms.x(3.5)),
                       stroke_width=ms.x(0.5), stroke_fill=diff.frame)
             draw.text(ms.xy(x + 13.7, y - 2.8), text="+", fill=diff.level_text, anchor='ls',
-                      font=JBM_BD.font_variant(size=ms.x(3.5)))
+                      font=FONT.font('JBM_BD', size=ms.x(3.5)))
 
     def ach_frame(self, x: float, y: float, diff: Difficulty):
         text = " 达成率" if self.cn == 2 else " ACHIEVEMENT"
 
         self.rounded_rect(x, y, 60, 14, fill=bcm(diff.bg, '#FFF9'), radius=1.5)
-        self.text(x, y, text=text, fill=diff.frame, anchor='la', font=MIS_HE.font_variant(size=self.ms.x(2)))
+        self.text(x, y, text=text, fill=diff.frame, anchor='la', font=FONT.font('MIS_HE', size=self.ms.x(2)))
 
     def ach_value(self, x: float, y: float, ach_percent: float, color: Optional[AchColor] = None):
         if -100 < ach_percent < 1000:
@@ -484,7 +534,7 @@ class DrawUnit:
             text = " --.----%"
             color = ACH_B
 
-        self.text(x, y, text=text, fill=color.fill, anchor='la', font=JBM_EB.font_variant(size=self.ms.x(10)),
+        self.text(x, y, text=text, fill=color.fill, anchor='la', font=FONT.font('JBM_EB', size=self.ms.x(10)),
                   shadow=(0.4, color.shadow), stroke=(0.35, color.stroke))
 
     def ach(self, x: float, y: float, diff: Difficulty, ach_percent: float, color: Optional[AchColor] = None):
@@ -510,10 +560,10 @@ class DrawUnit:
                                                            star_count=star_count)
 
         self.rounded_rect(x, y, 24, 9, fill=bcm(diff.bg, '#FFF9'), radius=1.5)
-        self.text(x, y, text=title, fill=COLOR_DXSCORE_GN, anchor='la', font=MIS_HE.font_variant(size=self.ms.x(2)))
-        self.text(x + 12, y + 4.5, text=text, fill='#333', anchor='mm', font=MIS_DB.font_variant(size=self.ms.x(3)))
+        self.text(x, y, text=title, fill=COLOR_DXSCORE_GN, anchor='la', font=FONT.font('MIS_HE', size=self.ms.x(2)))
+        self.text(x + 12, y + 4.5, text=text, fill='#333', anchor='mm', font=FONT.font('MIS_DB', size=self.ms.x(3)))
         self.text(x + 12, y + 6, text=star_text, fill=star_color, anchor='ma',
-                  font=NSS_RG.font_variant(size=self.ms.x(2.2)))
+                  font=FONT.font('NSS_RG', size=self.ms.x(2.2)))
 
     def dxscore_lite(self, x: float, y: float, score: int, max_score: int, star_count: int, diff: Difficulty):
         title, text, star_text, star_color = self._dxscore(cn_level=self.cn, score=score, max_score=max_score,
@@ -521,13 +571,13 @@ class DrawUnit:
 
         self.rounded_rect(x, y, 42, 3, fill=bcm(diff.bg, '#FFF9'), radius=2)
         self.text(x + 0.5, y + 1.5, text=title, fill=COLOR_DXSCORE_GN, anchor='lm',
-                  font=MIS_HE.font_variant(size=self.ms.x(2)))
-        self.text(x + 40, y + 1.5, text=text, fill='#333', anchor='rm', font=MIS_DB.font_variant(size=self.ms.x(2.5)))
+                  font=FONT.font('MIS_HE', size=self.ms.x(2)))
+        self.text(x + 40, y + 1.5, text=text, fill='#333', anchor='rm', font=FONT.font('MIS_DB', size=self.ms.x(2.5)))
         self.text(x + 20, y + 1.8, text=star_text, fill=star_color, anchor='mm',
-                  font=NSS_RG.font_variant(size=self.ms.x(2.2)))
+                  font=FONT.font('NSS_RG', size=self.ms.x(2.2)))
 
     def evaluate(self, x: float, y: float, text: str, color: EvaluateColor, offset: float = 0):
-        self.text(x, y, text=text, fill=color.fill, anchor='lm', font=MIS_HE.font_variant(size=self.ms.x(3 + offset)),
+        self.text(x, y, text=text, fill=color.fill, anchor='lm', font=FONT.font('MIS_HE', size=self.ms.x(3 + offset)),
                   stroke=(0.65, color.shadow), shadow=(0.5, color.shadow))
 
     def infos(self, x: float, y: float, lines: list[str], font: ImageFont.FreeTypeFont, fill='#FFF',
@@ -542,7 +592,9 @@ class DrawUnit:
               outline: Optional[str] = None, outline_width: float = 0):
         try:
             overlay = (png if isinstance(png, Image.Image) else Image.open(png)).convert('RGBA')
-            overlay = overlay.resize(self.ms.xy(w, h), Image.Resampling.LANCZOS)
+            w, h = overlay.size
+            if (w, h) != self.ms.xy(w, h):
+                overlay = overlay.resize(self.ms.xy(w, h), Image.Resampling.LANCZOS)
             alpha = overlay.getchannel('A')
 
             mask = Image.new('L', overlay.size, 0)
@@ -572,11 +624,9 @@ class DrawFactory:
         ms = ms_multiple if isinstance(ms_multiple, MS) else MS(ms_multiple)
         self.ms = ms  # 缩放倍率
 
-        # 预生成字体
-        self.font_mdb = {k: MIS_DB.font_variant(size=ms.x(k)) for k in range(2, 15)}
         # 背景图片
-        img = Image.open(IMG_PATH / "bakamai.png").convert('RGBA')
-        self.img = img.resize(ms.xy(width, height), Image.Resampling.LANCZOS)
+        self.img: Image.Image = ASSETS.background(ms.xy(width, height)) or Image.new('RGBA', ms.xy(width, height), COLOR_THEME)
+        self.img.convert('RGBA')
 
         # 绘图单元
         self.cn_level: Literal[0, 1, 2] = cn_level
@@ -598,12 +648,12 @@ class DrawFactory:
         x1, y1, x2, y2 = -1, -1, width, -1  # 预设值，确定至少进入一次循环
         while x2 - x1 > width * 0.9:  # 0.9x 留出一定边距，避免过于贴边
             font_size -= 0.2
-            font = MIS_DB.font_variant(size=self.ms.x(font_size))
+            font = FONT.font('MIS_DB', size=self.ms.x(font_size))
             x1, y1, x2, y2 = font.getbbox(CR_INFO)  # 预加载字体
         height = int(max((y2 - y1) * 1.1, 6))  # 1.1x 行距，留出一定边距
         self.du.rounded_rect(0, y, width, height, fill='#313d7c', radius=0)  # 后续修改为遮罩渐变合成
         self.du.text(x + width // 2, y + height // 2, text=CR_INFO, fill=COLOR_THEME, anchor='mm',
-                     font=MIS_DB.font_variant(size=self.ms.x(3.5)))
+                     font=FONT.font('MIS_DB', size=self.ms.x(3.5)))
         return width, height
 
     def chart_box(self, x, y, chart: MaiChart, cabinet_dx: bool, server: SERVER_TAG, plus_level: int = 6,
@@ -640,7 +690,7 @@ class DrawFactory:
 
         du.rounded_rect(x + 64, y + 9, 42, 25, fill=bcm(diff.bg, '#0009'), radius=1.5)
         du.infos(x + 65.5, y + 21.65, lines=(info_line5 + [''] * 5)[:5], line_height=4.5, limit_width=-1,
-                 font=MIS_DB.font_variant(size=self.ms.x(3.2)))
+                 font=FONT.font('MIS_DB', size=self.ms.x(3.2)))
 
         return width, height
 
@@ -750,7 +800,7 @@ class DrawFactory:
         du.draw.rectangle(ms.size(x, y + 2, width, 5), fill=diff.title_bg)
 
         # 标题栏文字
-        limit_t = MIS_HE.font_variant(size=ms.x(4.6)).getlength('I' * 62)
+        limit_t = FONT.font('MIS_HE', size=ms.x(4.6)).getlength('I' * 62)
         du.difficulty(x + 36, y + 4.2, diff, text=f'#{data.shortid}', limit_width=limit_t)
 
         # 曲绘
@@ -808,8 +858,8 @@ class DrawFactory:
         du.rounded_rect(x + 53, y + 25, 42, 5, fill=bcm(diff.bg, '#0009'), radius=2)
         du.rounded_rect(x + 53, y + 25, 16, 5, fill='#006', radius=2)
         b_type = '15' if is_b15 else '35'
-        du.text(x+61, y+27.5, f"b{b_type} #{index}", fill='#FFF', anchor='mm', font=MIS_DB.font_variant(size=ms.x(3))) 
-        du.text(x+70, y+27.5, f"{chart.lv:.1f} > {data.get_chart_dxrating(diff_number, server, current_version)}", fill='#FFF', anchor='lm', font=MIS_DB.font_variant(size=ms.x(3)))
+        du.text(x+61, y+27.5, f"b{b_type} #{index}", fill='#FFF', anchor='mm', font=FONT.font('MIS_DB', size=ms.x(3)))
+        du.text(x+70, y+27.5, f"{chart.lv:.1f} > {data.get_chart_dxrating(diff_number, server, current_version)}", fill='#FFF', anchor='lm', font=FONT.font('MIS_DB', size=ms.x(3)))
 
         return w, h
 
@@ -835,52 +885,50 @@ class DrawInfo(DrawFactory):
         t = cover_size + margin
         # 标题
         du.text(x + t, y, text=maidata.title, fill='#FFF', anchor='la',
-                font=MIS_HE.font_variant(size=self.ms.x(11)))
+                font=FONT.font('MIS_HE', size=self.ms.x(11)))
         # 艺术家
-        du.text(x + t, y + 14, text=maidata.artist, fill='#FFF', anchor='la', font=self.font_mdb[5])
+        du.text(x + t, y + 14, text=maidata.artist, fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=self.ms.x(5)))
         # ShortID, BPM
-        du.text(x + t, y + 23, text=f"ID {maidata.shortid}", fill='#FFF', anchor='la', font=self.font_mdb[6])
-        du.text(x + t + 30, y + 23, text=f"BPM {maidata.bpm}", fill='#FFF', anchor='la', font=self.font_mdb[6])
-        du.text(x + t + 60, y + 23, text=f"数据来源: {maidata.converter}", fill='#FFF', anchor='la', font=self.font_mdb[6])
+        du.text(x + t, y + 23, text=f"ID {maidata.shortid}", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=self.ms.x(6)))
+        du.text(x + t + 30, y + 23, text=f"BPM {maidata.bpm}", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=self.ms.x(6)))
+        du.text(x + t + 60, y + 23, text=f"数据来源: {maidata.converter}", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=self.ms.x(6)))
         # Genre, Version
         gvv_title = y + 34
         gvv_la = gvv_title + 5
         gvv_mm = gvv_la + 9
 
         p = 34 + margin
-        du.text(x+t, gvv_title, text="流派", fill='#FFF', anchor='la', font=self.font_mdb[4])
-        du.text(x+t+p, gvv_title, text="JP", fill='#FFF', anchor='la', font=self.font_mdb[4])
-        du.text(x+t+p*2, gvv_title, text="CN", fill='#FFF', anchor='la', font=self.font_mdb[4])
+        du.text(x+t, gvv_title, text="流派", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=self.ms.x(4)))
+        du.text(x+t+p, gvv_title, text="JP", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=self.ms.x(4)))
+        du.text(x+t+p*2, gvv_title, text="CN", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=self.ms.x(4)))
 
         # Genre
         genre_text, genre_fill = get_genre(maidata.genre, cn_level=self.cn_level)
-        du.text(x+t+17, gvv_mm, text=genre_text, fill='#FFF', anchor='mm', font=self.font_mdb[5],
+        du.text(x+t+17, gvv_mm, text=genre_text, fill='#FFF', anchor='mm', font=FONT.font('MIS_DB', size=self.ms.x(5)),
                 shadow=(1.5, '#FFF'))
-        du.text(x+t+17, gvv_mm, text=genre_text, fill=genre_fill, anchor='mm', font=self.font_mdb[5],
+        du.text(x+t+17, gvv_mm, text=genre_text, fill=genre_fill, anchor='mm', font=FONT.font('MIS_DB', size=self.ms.x(5)),
                 shadow=(1, '#FFF'))
         # JP
-        ver_jp_path = VER_PATH / f"{maidata.version}.png"
-        if ver_jp_path.exists():
-            du.image(x+t+p, gvv_la, 34, 16, radius=0, png=ver_jp_path)
+        if ver_jp := ASSETS.version_image(maidata.version, size=self.ms.xy(34, 16)):
+            du.image(x+t+p, gvv_la, 34, 16, radius=0, png=ver_jp)
         else:
             text = VERSIONS_DATA.get(maidata.version, str(maidata.version))
             text = text.replace(' ', '\n')
             du.text(x+t+p+17, gvv_mm, text=text,
-                    fill='#FFF', anchor='mm', font=self.font_mdb[5])
+                    fill='#FFF', anchor='mm', font=FONT.font('MIS_DB', size=self.ms.x(5)))
         # CN: 需要考虑不存在
         if maidata.version_cn:
-            ver_cn_path = VER_PATH / f"{maidata.version_cn}.png"
-            if ver_cn_path.exists():
-                du.image(x+t+p*2, gvv_la, 34, 16, radius=0, png=ver_cn_path)
+            if ver_cn := ASSETS.version_image(maidata.version_cn, size=self.ms.xy(34, 16)):
+                du.image(x+t+p*2, gvv_la, 34, 16, radius=0, png=ver_cn)
             else:
                 text = VERSIONS_DATA.get(maidata.version_cn, str(maidata.version_cn))
                 text = text.replace(' ', '\n')
                 du.text(x+t+p*2+17, gvv_mm, text=text,
-                        fill='#FFF', anchor='mm', font=self.font_mdb[5])
+                        fill='#FFF', anchor='mm', font=FONT.font('MIS_DB', size=self.ms.x(5)))
         else:
-            du.text(x+t+p*2+17, gvv_mm, text="X\n", fill='#F00', anchor='mm', font=self.font_mdb[4],
+            du.text(x+t+p*2+17, gvv_mm, text="X\n", fill='#F00', anchor='mm', font=FONT.font('MIS_DB', size=self.ms.x(4)),
                     stroke=(0.8, '#FFF'))
-            du.text(x+t+p*2+17, gvv_mm, text="\n国服无此乐曲", fill='#FFF', anchor='mm', font=self.font_mdb[4])
+            du.text(x+t+p*2+17, gvv_mm, text="\n国服无此乐曲", fill='#FFF', anchor='mm', font=FONT.font('MIS_DB', size=self.ms.x(4)))
 
         y += cover_size + margin
 
@@ -890,17 +938,17 @@ class DrawInfo(DrawFactory):
             padding = 5
 
             # 绘制标题
-            du.text(x, y, text="这首歌的别名包括：", fill='#FFF', anchor='la', font=self.font_mdb[5])
+            du.text(x, y, text="这首歌的别名包括：", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=self.ms.x(5)))
             y += line_height
             current_x_offset = 0
 
             for alias in maidata.aliases:
-                alias_width = self.ms.rev(self.font_mdb[5].getlength(alias.alias))
+                alias_width = self.ms.rev(FONT.font('MIS_DB', size=self.ms.x(5)).getlength(alias.alias))
                 if current_x_offset + alias_width > width:
                     y += line_height
                     current_x_offset = 0
 
-                du.text(x + current_x_offset, y, text=alias.alias, fill='#FFF', anchor='la', font=self.font_mdb[5])
+                du.text(x + current_x_offset, y, text=alias.alias, fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=self.ms.x(5)))
                 current_x_offset += alias_width + padding
 
             y += line_height + margin
@@ -947,13 +995,12 @@ class DrawB50Boxex(DrawFactory):
         # Username
         du.rounded_rect(x+36, y+15, 100, 17, fill='#333', radius=2)
         du.text(x+36, y+23.5, text=' ' + get_full_width_text(user_name), fill='#FFF', anchor='lm',
-                font=MIS_DB.font_variant(size=self.ms.x(10)))
+                font=FONT.font('MIS_DB', size=self.ms.x(10)))
         # DX Rating
-        dxra_fram_path = PIC_PATH / "dxrating" / b50manager.dxrating_filename
-        if dxra_fram_path.exists():
-            du.image(x+36, y, 70, 14, radius=0, png=dxra_fram_path)
+        if dxra_frame := ASSETS.dxrating_image(b50manager.dxrating_filename, size=self.ms.xy(70, 14)):
+            du.image(x+36, y, 70, 14, radius=0, png=dxra_frame)
         # Rating Number
-        font = MIS_DB.font_variant(size=self.ms.x(8))
+        font = FONT.font('MIS_DB', size=self.ms.x(8))
         for i, digit in enumerate(str(b50manager.dxrating)[::-1]):
             dx = 57.5 - 5.5 * i
             du.text(x+36+dx, y+7.1, text=digit, fill='#FCC916', anchor='mm', font=font,
@@ -985,7 +1032,7 @@ def simple_list(maidata_list: List[MaiData]) -> Image.Image:
     """生成一个简单的文本列表图，展示多个曲目的信息"""
     text = '\n'.join([f"{maidata.shortid}.\t{maidata.title}"
                       for maidata in maidata_list])
-    font = MIS_DB.font_variant(size=16)
+    font = FONT.font('MIS_DB', size=16)
 
     x1, y1, x2, y2 = ImageDraw.Draw(Image.new('RGB', (1, 1), color='#FFF')).multiline_textbbox((0, 0), text=text, font=font)
     width, height = int(x2 - x1 + 10), int(y2 - y1 + 10)
