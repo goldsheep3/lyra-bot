@@ -1,7 +1,7 @@
 import bisect
 from pathlib import Path
-from enum import IntEnum
-from typing import Optional, Tuple, Literal, List
+from enum import Enum
+from typing import Optional, Tuple, Literal, List, Iterator, Any
 from dataclasses import dataclass
 from functools import lru_cache
 
@@ -79,7 +79,6 @@ class AssetsManager:
 
     def background(self, size: Tuple[int, int] | None = None) -> Image.Image | None:
         return self._get_image(self._assets_path / "img" / "bakamai.png", size)
-
 ASSETS = AssetsManager(ASSETS_PATH)
 
 # 基础颜色常量
@@ -88,10 +87,10 @@ COLOR_DXSCORE_OR = '#C72'
 COLOR_DXSCORE_GD = '#ED4'
 COLOR_THEME = '#64d2ce'
 
-
-# 难度颜色组
-@dataclass
-class Difficulty:
+# 难度
+@dataclass(frozen=True)  # 使用 frozen 保证成员不可变
+class Diff:
+    code: int
     text_title: str
     text_title_cn: str
     bg: str
@@ -102,94 +101,103 @@ class Difficulty:
     _level_text: Optional[str] = None
 
     @property
-    def level_text(self): return self._level_text if self._level_text else self.text
+    def level_text(self) -> str:
+        return self._level_text if self._level_text else self.text
 
+class Difficulty(Enum):
+    NONE = Diff(0, "N/A", "N/A", bg='#FFF', frame='#FFF', text='#FFF', deep='#FFF', title_bg='#FFF')
+    EASY = Diff(1, "EASY", "简单", bg='#FFF', frame='#FFF', text='#FFF', deep='#FFF', title_bg='#FFF')
+    BASIC = Diff(2, "BASIC", "基础", bg='#7E6', frame='#053', text='#FFF', deep='#8D5', title_bg='#2B5')
+    ADVANCED = Diff(3, "ADVANCED", "高级", bg='#FD3', frame='#B41', text='#FFF', deep='#FB1', title_bg='#F92')
+    EXPERT = Diff(4, "EXPERT", "专家", bg='#F88', frame='#C23', text='#FFF', deep='#F9A', title_bg='#F46')
+    MASTER = Diff(5, "MASTER", "大师", bg='#C7F', frame='#618', text='#FFF', deep='#B3D', title_bg='#94E')
+    REMASTER = Diff(6, "Re:MASTER", "宗师", bg='#EDE', frame='#82D', text='#D5F', deep='#FFF', title_bg='#B6F', _level_text='#FFF')
+    UTAGE = Diff(7, "U·TA·GE", "宴·会·场", bg='#E6E', frame='#D0B', text='#FFF', deep='#F6F', title_bg='#F4F')
 
-EASY = Difficulty("EASY", "简单", bg='#FFF', frame='#FFF', text='#FFF', deep='#FFF', title_bg='#FFF')
-BASIC = Difficulty("BASIC", "基础", bg='#7E6', frame='#053', text='#FFF', deep='#8D5', title_bg='#2B5')
-ADVANCED = Difficulty("ADVANCED", "高级", bg='#FD3', frame='#B41', text='#FFF', deep='#FB1', title_bg='#F92')
-EXPERT = Difficulty("EXPERT", "专家", bg='#F88', frame='#C23', text='#FFF', deep='#F9A', title_bg='#F46')
-MASTER = Difficulty("MASTER", "大师", bg='#C7F', frame='#618', text='#FFF', deep='#B3D', title_bg='#94E')
-REMASTER = Difficulty("Re:MASTER", "宗师",
-                      bg='#EDE', frame='#82D', text='#D5F', deep='#FFF', title_bg='#B6F', _level_text='#FFF')
-UTAGE = Difficulty("U·TA·GE", "宴·会·场", bg='#E6E', frame='#D0B', text='#FFF', deep='#F6F', title_bg='#F4F')  # 是圆形重复
-
-DIFFICULTIES = [
-    None,  # 0 - NONE
-    EASY,  # 1 - EASY
-    BASIC,  # 2 - BASIC
-    ADVANCED,  # 3 - ADVANCED
-    EXPERT,  # 4 - EXPERT
-    MASTER,  # 5 - MASTER
-    REMASTER,  # 6 - Re:MASTER
-    UTAGE  # 7 - UTAGE
-]
+    @classmethod
+    def get(cls, code: int) -> Diff:
+        for item in cls:
+            if item.value.code == code:
+                return item.value
+        return cls.NONE.value
 
 COLOR_UTAGE_TAG_BG = '#236'
 COLOR_UTAGE_TAG_FRAME = '#BEF'
 COLOR_BUDDY_TAG_BG = '#411'
 COLOR_BUDDY_TAG_FRAME = '#FEA'
 
-
-# 达成率颜色组
-@dataclass
+# 达成率
+@dataclass(frozen=True)
 class AchColor:
     fill: str
     stroke: str
     shadow: str
 
+class Achievement(Enum):
+    S = AchColor(fill='#F93', stroke='#C00', shadow='#EB5')
+    A = AchColor(fill='#D77', stroke='#834', shadow='#B77')
+    B = AchColor(fill='#3AD', stroke='#239', shadow='#58B')
 
-ACH_S = AchColor(fill='#F93', stroke='#C00', shadow='#EB5')
-ACH_A = AchColor(fill='#D77', stroke='#834', shadow='#B77')
-ACH_B = AchColor(fill='#3AD', stroke='#239', shadow='#58B')
+    @classmethod
+    def get_by_percent(cls, percent: float) -> AchColor:
+        if percent >= 97:
+            return cls.S.value
+        if percent >= 80:
+            return cls.A.value
+        return cls.B.value
 
-
-# 评价颜色组
-@dataclass
+# 评价类型
+@dataclass(frozen=True)
 class EvaluateColor:
     fill: str
     shadow: str
 
+_EVAL_GN = EvaluateColor(fill='#7D5', shadow='#162')  # FC / FC+
+_EVAL_GD = EvaluateColor(fill='#FE2', shadow='#A02')  # AP / AP+ / FDX / FDX+
+_EVAL_BE = EvaluateColor(fill='#6DF', shadow='#038')  # FS / FS+
+_EVAL_DB = EvaluateColor(fill='#038', shadow='#FFF')  # SYNC PLAY
 
-EVAL_GN = EvaluateColor(fill='#7D5', shadow='#162')  # FC / FC+
-EVAL_GD = EvaluateColor(fill='#FE2', shadow='#A02')  # AP / AP+ / FDX / FDX+
-EVAL_BE = EvaluateColor(fill='#6DF', shadow='#038')  # FS / FS+
-EVAL_DB = EvaluateColor(fill='#038', shadow='#FFF')  # SYNC PLAY
+@dataclass(frozen=True)
+class EvalInfo:
+    code: int
+    color: EvaluateColor
+    full_name: str
+    short_name: str
+    cn_name: str
 
+    def __iter__(self) -> Iterator[Any]:
+        # 使 EvalInfo 可以直接解包为 (color, full_name, short_name, cn_name)
+        return iter((self.color, self.full_name, self.short_name, self.cn_name))
 
-# 评价类型
-class Combo(IntEnum):
-    NONE = 0
-    FC = 1
-    FC_PLUS = 2
-    AP = 3
-    AP_PLUS = 4
+class Combo(Enum):
+    NONE    = EvalInfo(0, _EVAL_GN, '', '', '')
+    FC      = EvalInfo(1, _EVAL_GN, 'FULL COMBO', 'FC', '全连击')
+    FC_PLUS = EvalInfo(2, _EVAL_GN, 'FULL COMBO +', 'FC+', '全连击+')
+    AP      = EvalInfo(3, _EVAL_GD, 'ALL PERFECT', 'AP', '完美无缺')
+    AP_PLUS = EvalInfo(4, _EVAL_GD, 'ALL PERFECT +', 'AP+', '完美无缺+')
 
+    @classmethod
+    def get(cls, code: int) -> EvalInfo:
+        for item in cls:
+            if item.value.code == code:
+                return item.value
+        return cls.NONE.value
 
-class Sync(IntEnum):
-    NONE = 0
-    SYNC = 1
-    FS = 2
-    FS_PLUS = 3
-    FDX = 4
-    FDX_PLUS = 5
+class Sync(Enum):
+    NONE     = EvalInfo(0, _EVAL_DB, '', '', '')
+    SYNC     = EvalInfo(1, _EVAL_DB, 'SYNC PLAY', 'SYNC', '同步游玩')
+    FS       = EvalInfo(2, _EVAL_BE, 'FULL SYNC', 'FS', '全完同步')  # 原文如此
+    FS_PLUS  = EvalInfo(3, _EVAL_BE, 'FULL SYNC +', 'FS+', '全完同步+')  # 原文如此
+    FDX      = EvalInfo(4, _EVAL_GD, 'FULL SYNC DX', 'FDX', '完全同步DX')
+    FDX_PLUS = EvalInfo(5, _EVAL_GD, 'FULL SYNC DX +', 'FDX+', '完全同步DX+')
 
+    @classmethod
+    def get(cls, code: int) -> EvalInfo:
+        for item in cls:
+            if item.value.code == code:
+                return item.value
+        return cls.NONE.value
 
-COMBO_DICT = {
-    0: (EVAL_GN, '', '', ''),
-    1: (EVAL_GN, 'FULL COMBO', 'FC', '全连击'),
-    2: (EVAL_GN, 'FULL COMBO +', 'FC+', '全连击+'),
-    3: (EVAL_GD, 'ALL PERFECT', 'AP', '完美无缺'),
-    4: (EVAL_GD, 'ALL PERFECT +', 'AP+', '完美无缺+'),
-}
-SYNC_DICT = {
-    0: (EVAL_DB, '', '', ''),
-    1: (EVAL_DB, 'SYNC PLAY', 'SYNC', '同步游玩'),
-    2: (EVAL_BE, 'FULL SYNC', 'FS', '全完同步'),  # 原文如此
-    3: (EVAL_BE, 'FULL SYNC +', 'FS+', '全完同步+'),
-    4: (EVAL_GD, 'FULL SYNC DX', 'FDX', '完全同步DX'),
-    5: (EVAL_GD, 'FULL SYNC DX +', 'FDX+', '完全同步DX+'),
-}
 
 # 全角映射
 def _build_full_width_table():
@@ -292,13 +300,6 @@ class MS:
         if not isinstance(other, (int, float)):
             return NotImplemented
         return MS(self.multiple * other)
-
-
-def get_difficulty(diff: int) -> Difficulty:
-    """根据难度数值获取 Difficulty 对象"""
-    if not 1 <= diff <= 7:
-        raise ValueError("Difficulty must be between 1 and 7")
-    return DIFFICULTIES[diff]
 
 
 def get_full_width_text(text: str) -> str:
@@ -427,7 +428,7 @@ class DrawUnit:
 
         self.img.paste(temp_layer, (int(box_size[0]), int(box_size[1])), mask=mask)
 
-    def difficulty(self, x: float, y: float, diff: Difficulty, text: Optional[str] = None, limit_width: float = -1):
+    def difficulty(self, x: float, y: float, diff: Diff, text: Optional[str] = None, limit_width: float = -1):
         f = FONT.font('MIS_HE', self.ms.x(4.8))
         if all((not text, self.cn == 2)):
             fs = FONT.font('MIS_HE', self.ms.x(3.3))
@@ -480,7 +481,7 @@ class DrawUnit:
         else:
             self.draw_sd_badge(x, y)
 
-    def level(self, x: float, y: float, diff: Difficulty, level: float, plus: bool = False,
+    def level(self, x: float, y: float, diff: Diff, level: float, plus: bool = False,
               ignore_decimal: bool = False):
         draw = self.draw
         ms = self.ms
@@ -514,7 +515,7 @@ class DrawUnit:
             draw.text(ms.xy(x + 13.7, y - 2.8), text="+", fill=diff.level_text, anchor='ls',
                       font=FONT.font('JBM_BD', size=ms.x(3.5)))
 
-    def ach_frame(self, x: float, y: float, diff: Difficulty):
+    def ach_frame(self, x: float, y: float, diff: Diff):
         text = " 达成率" if self.cn == 2 else " ACHIEVEMENT"
 
         self.rounded_rect(x, y, 60, 14, fill=bcm(diff.bg, '#FFF9'), radius=1.5)
@@ -523,21 +524,15 @@ class DrawUnit:
     def ach_value(self, x: float, y: float, ach_percent: float, color: Optional[AchColor] = None):
         if -100 < ach_percent < 1000:
             text = f"{ach_percent:.4f}%".replace('0', 'O').rjust(9)
-            if not color:
-                if ach_percent >= 97:
-                    color = ACH_S
-                elif ach_percent >= 80:
-                    color = ACH_A
-                else:
-                    color = ACH_B
+            color = color or Achievement.get_by_percent(ach_percent)
         else:
             text = " --.----%"
-            color = ACH_B
+            color = color or Achievement.B.value
 
         self.text(x, y, text=text, fill=color.fill, anchor='la', font=FONT.font('JBM_EB', size=self.ms.x(10)),
                   shadow=(0.4, color.shadow), stroke=(0.35, color.stroke))
 
-    def ach(self, x: float, y: float, diff: Difficulty, ach_percent: float, color: Optional[AchColor] = None):
+    def ach(self, x: float, y: float, diff: Diff, ach_percent: float, color: Optional[AchColor] = None):
         self.ach_frame(x=x, y=y, diff=diff)
         self.ach_value(x=x + 2.8, y=y + 1.5, ach_percent=ach_percent, color=color)
 
@@ -555,7 +550,7 @@ class DrawUnit:
         star_text = "✦ " * star_count if 0 <= star_count <= 5 else ""
         return title, text, star_text.strip(), color
 
-    def dxscore(self, x: float, y: float, score: int, max_score: int, star_count: int, diff: Difficulty):
+    def dxscore(self, x: float, y: float, score: int, max_score: int, star_count: int, diff: Diff):
         title, text, star_text, star_color = self._dxscore(cn_level=self.cn, score=score, max_score=max_score,
                                                            star_count=star_count)
 
@@ -565,7 +560,7 @@ class DrawUnit:
         self.text(x + 12, y + 6, text=star_text, fill=star_color, anchor='ma',
                   font=FONT.font('NSS_RG', size=self.ms.x(2.2)))
 
-    def dxscore_lite(self, x: float, y: float, score: int, max_score: int, star_count: int, diff: Difficulty):
+    def dxscore_lite(self, x: float, y: float, score: int, max_score: int, star_count: int, diff: Diff):
         title, text, star_text, star_color = self._dxscore(cn_level=self.cn, score=score, max_score=max_score,
                                                            star_count=star_count)
 
@@ -660,7 +655,7 @@ class DrawFactory:
                   is_utage: bool = False) -> Tuple[int, int]:
         """组件：谱面信息框"""
         du = self.du
-        diff = get_difficulty(chart.difficulty)
+        diff = Difficulty.get(chart.difficulty)
 
         width, height = 108, 36
         # noinspection DuplicatedCode
@@ -678,9 +673,9 @@ class DrawFactory:
         du.ach(x + 2, y + 9, diff, ach.achievement)
         dxs, dxs_max, dxs_star = ach.dxscore_tuple
         du.dxscore(x + 38, y + 25, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
-        c, t, _tl, tc = COMBO_DICT[ach.combo]
+        c, t, _tl, tc = Combo.get(ach.combo)
         du.evaluate(x + 3, y + 27, text=tc if self.du.cn == 2 else t, color=c)
-        c, t, _tl, tc = SYNC_DICT[ach.sync]
+        c, t, _tl, tc = Sync.get(ach.sync)
         du.evaluate(x + 3, y + 32, text=tc if self.du.cn == 2 else t, color=c)
 
         info_line5 = [
@@ -698,7 +693,7 @@ class DrawFactory:
                        is_utage: bool = False) -> Tuple[int, int]:
         """组件：谱面信息框 Lite"""
         du = self.du
-        diff = get_difficulty(chart.difficulty)
+        diff = Difficulty.get(chart.difficulty)
 
         width, height = 108, 25
         # noinspection DuplicatedCode
@@ -716,9 +711,9 @@ class DrawFactory:
         du.ach(x + 46, y + 9, diff, ach.achievement)
         dxs, dxs_max, dxs_star = ach.dxscore_tuple
         du.dxscore_lite(x + 2, y + 20, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
-        c, t, _tl, tc = COMBO_DICT[ach.combo]
+        c, t, _tl, tc = Combo.get(ach.combo)
         du.evaluate(x + 3, y + 12, text=tc if self.du.cn == 2 else t, color=c)
-        c, t, _tl, tc = SYNC_DICT[ach.sync]
+        c, t, _tl, tc = Sync.get(ach.sync)
         du.evaluate(x + 3, y + 17, text=tc if self.du.cn == 2 else t, color=c)
 
         return width, height
@@ -727,7 +722,7 @@ class DrawFactory:
                        is_utage: bool = False, server: SERVER_TAG = "JP") -> Tuple[int, int]:
         """组件：谱面信息框 Mini (更紧凑的布局，适用于多行并列或背景填充)"""
         du = self.du
-        diff = get_difficulty(chart.difficulty)
+        diff = Difficulty.get(chart.difficulty)
         ach = chart.get_ach(server=server)
 
         # 定义 Mini 尺寸：宽度略窄，高度大幅度压缩 (从 25 降至 16)
@@ -757,9 +752,9 @@ class DrawFactory:
 
         # 5. 状态 (FC/Sync) - 采用水平并列或极窄间距
         # 在 Mini 模式下，如果空间有限，FC 和 Sync 通常并排显示或缩小字体
-        c_combo, t_combo, _tl, tc_combo = COMBO_DICT[ach.combo]
-        c_sync, t_sync, _tl, tc_sync = SYNC_DICT[ach.sync]
-        
+        c_combo, t_combo, _tl, tc_combo = Combo.get(ach.combo)
+        c_sync, t_sync, _tl, tc_sync = Sync.get(ach.sync)
+
         # 使用 self.du.cn 判定语言，2 为全中文
         text_combo = tc_combo if du.cn == 2 else t_combo
         text_sync = tc_sync if du.cn == 2 else t_sync
@@ -778,7 +773,7 @@ class DrawFactory:
         """组件：Mini 成绩框"""
         du = self.du
         ms = self.ms
-        diff = get_difficulty(diff_number)
+        diff = Difficulty.get(diff_number)
         chart = data.get_chart(diff_number)
         if not chart:
             return 0, 0  # 未绘制
@@ -816,12 +811,12 @@ class DrawFactory:
         offset = 1 if self.cn_level == 2 else 0
         # FC/FC+/AP/AP+
         if ach.combo:
-            c, _t, tl, tc = COMBO_DICT[ach.combo]
+            c, _t, tl, tc = Combo.get(ach.combo)
             du.evaluate(x + 36, y + 27, text=tc if self.cn_level == 2 else tl, color=c)
             
         # SYNC/FS/FS+/FDX/FDX+
         if ach.sync:
-            c, _t, tl, tc = SYNC_DICT[ach.sync]
+            c, _t, tl, tc = Sync.get(ach.sync)
             du.evaluate(x + 36, y + 32, text=tc if self.cn_level == 2 else tl, color=c, offset=offset)
 
         # INFO
@@ -848,7 +843,7 @@ class DrawFactory:
         """组件：B50 成绩框"""
         du = self.du
         ms = self.ms
-        diff = get_difficulty(diff_number)
+        diff = Difficulty.get(diff_number)
         chart = data.get_chart(diff_number)
         if not chart:
             return 0, 0  # 未绘制
