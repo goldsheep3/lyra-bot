@@ -7,7 +7,7 @@ from functools import lru_cache
 
 from PIL import Image, ImageDraw, ImageFont, ImageChops
 
-from .utils import MaiData, MaiChart, MaiB50Manager
+from .utils import MaiData, MaiChart, MaiChartAch, MaiAlias, MaiB50Manager
 from .constants import *
 
 # ========================================
@@ -33,6 +33,8 @@ class FontManager:
 
     @lru_cache(maxsize=128)
     def _get_font(self, font_file: Path, size: int) -> ImageFont.FreeTypeFont:
+        if size <= 0:
+            return ImageFont.truetype(str(font_file), 10000)
         return ImageFont.truetype(str(font_file), size)
 
     def font(self, font_code: str, size: float) -> ImageFont.FreeTypeFont:
@@ -222,6 +224,7 @@ BOUNDARIES_DX_RATING_NEW = [0, 1000, 2000, 5000, 7000, 10000, 12000, 13000, 1400
 
 def get_image_from_path_or_weburl(path_or_url: str | Path) -> Optional[Image.Image]:
     """从本地路径或网络 URL 获取图片。对 str 识别为 URL，对 Path 识别为本地路径。"""
+    # TODO: 最终要从这个模块中迁移出去
     if isinstance(path_or_url, str):
         # 从 URL 下载到临时目录
         import httpx
@@ -262,6 +265,7 @@ def get_range_index_left_closed(boundaries, value):
 
 def bcm(t: str, f: str):
     """颜色混合函数 (背景色 t，前景色 f)"""
+    # TODO: 最终要更换成 Pillow 的混合函数
     r1, g1, b1 = (int(t[i] * 2, 16) for i in range(1, 4))
     r2, g2, b2, a = \
         (int(f[i] * 2, 16) for i in range(1, 5)) if len(f) == 5 else (int(f[i:i + 2], 16) for i in range(1, 9, 2))
@@ -274,15 +278,20 @@ def bcm(t: str, f: str):
 
 # 倍率缩放类
 class MS:
-    def __init__(self, multiple: int | float):
-        self.multiple = float(multiple)
+    def __init__(self, multiple: float):
+        self.multiple = multiple
+        self._cache: dict[float, int] = {}  # 计算缓存
 
     def set_multiple(self, multiple: float):
-        self.multiple = float(round(multiple))
+        self.multiple = multiple
+        self._cache = {}
 
-    @lru_cache(maxsize=32)
     def x(self, val: int | float) -> int:
-        return int(val * self.multiple)
+        val = float(val)
+        if result := self._cache.get(val):
+            return result
+        self._cache[val] = round(val * self.multiple)
+        return self._cache[val]
 
     def xy(self, x: int | float, y: int | float) -> tuple[int, int]:
         return self.x(x), self.x(y)
@@ -302,6 +311,9 @@ class MS:
         return MS(self.multiple * other)
 
 
+_MS_DEFAULT = MS(8)  # 默认倍率
+
+
 def get_full_width_text(text: str) -> str:
     """将文本中的半角 ASCII 字符转换为全角形式"""
     if not text:
@@ -311,7 +323,7 @@ def get_full_width_text(text: str) -> str:
 
 def get_genre(genre_id: int, cn_level: Literal[0, 1, 2]) -> Tuple[str, str]:
     """获取流派信息"""
-    genre_info = GENRES_DATA.get(str(genre_id), {})
+    genre_info = GENRES_DATA.get(genre_id, {})
     target = {0: 'jp', 1: 'intl', 2: 'cn'}
     genre = genre_info.get(target.get(cn_level, 'jp'), 'N/A')
     color = genre_info.get('color', COLOR_THEME)
@@ -322,14 +334,13 @@ def get_genre(genre_id: int, cn_level: Literal[0, 1, 2]) -> Tuple[str, str]:
 # 元件方法
 # ========================================
 
-
 class DrawUnit:
-    def __init__(self, img: Image.Image, multiple: MS | int = 8, cn: Literal[0, 1, 2] = 0):
+    def __init__(self, img: Image.Image, multiple: MS | int = 8, cn_level: Literal[0, 1, 2] = 0):
         self.img: Image.Image = img
         self.draw: ImageDraw.ImageDraw = ImageDraw.Draw(self.img)
         self.ms: MS = multiple if isinstance(multiple, MS) else MS(multiple)
 
-        self.cn: Literal[0, 1, 2] = cn
+        self.cn_level: Literal[0, 1, 2] = cn_level
 
     @staticmethod
     def limit_text(text: str, font: ImageFont.FreeTypeFont, max_width: float) -> str:
@@ -430,7 +441,7 @@ class DrawUnit:
 
     def difficulty(self, x: float, y: float, diff: Diff, text: Optional[str] = None, limit_width: float = -1):
         f = FONT.font('MIS_HE', self.ms.x(4.8))
-        if all((not text, self.cn == 2)):
+        if all((not text, self.cn_level == 2)):
             fs = FONT.font('MIS_HE', self.ms.x(3.3))
             _x1, _y1, x2, y2 = f.getbbox(diff.text_title, anchor='lm', stroke_width=self.ms.x(0.8))
             mx2, my2 = self.ms.rev(x2), self.ms.rev(y2)
@@ -442,45 +453,6 @@ class DrawUnit:
         text = text if text else diff.text_title
         self.text(x, y, text, diff.text, 'lm', f, shadow=(0.8, diff.deep), shadow2=(0.8, diff.frame, 0.7))
 
-    def draw_sd_badge(self, x: float, y: float):
-        COLOR_SD = '#4AF'
-
-        self.rounded_rect(x, y, 20, 5, fill=COLOR_SD, radius=5)
-        offset = 0.6 if self.cn else 0
-        font = FONT.font('MIS_HE', self.ms.x(3 + offset))
-        if self.cn:
-            text = "标 准"
-        else:
-            text = "スタンダード"
-        self.text(x+10, y+2.5, text, '#FFF', 'mm', font)
-
-    def draw_dx_badge(self, x: float, y: float):
-        COLOR_DX = '#F71'
-        COLOR_DELUXE = ('#FF4646', '#FFA02D', '#FFDC00', '#9AC948', '#00AAE6')
-
-        self.rounded_rect(x, y, 20, 5, fill='#FFF', radius=5)
-        offset = 0.4 if self.cn else 0
-        font = FONT.font('MIS_HE', self.ms.x(3.5 + offset))
-        if self.cn:
-            text = "DX"
-            self.text(x+10, y+2.5, text, COLOR_DX, 'mm', font)
-        else:
-            text = "でらっくす"
-            total_text_width = self.ms.rev(font.getlength(text))
-            start_x = (x + 10) - (total_text_width / 2)
-            current_x = start_x
-            center_y = y + 2.5
-            for char, color in zip(text, COLOR_DELUXE):
-                self.text(current_x, center_y, char, color, 'lm', font)
-                char_width = self.ms.rev(font.getlength(char))
-                current_x += char_width
-
-    def draw_badge(self, x: float, y: float, is_cabinet_dx: bool):
-        if is_cabinet_dx:
-            self.draw_dx_badge(x, y)
-        else:
-            self.draw_sd_badge(x, y)
-
     def level(self, x: float, y: float, diff: Diff, level: float, plus: bool = False,
               ignore_decimal: bool = False):
         draw = self.draw
@@ -490,7 +462,7 @@ class DrawUnit:
         d = str(round(level % 1 * 10)).replace('0', 'O')  # 小数部分
 
         # 等级 `LV`
-        if self.cn == 2:
+        if self.cn_level == 2:
             draw.text(ms.xy(x - 1, y), text="等级", fill=diff.frame, anchor='ls', font=FONT.font('MIS_DB', size=ms.x(3)),
                       stroke_width=ms.x(0.5), stroke_fill=diff.frame)
             draw.text(ms.xy(x - 1, y), text="等级", fill=diff.level_text, anchor='ls', font=FONT.font('MIS_DB', size=ms.x(3)))
@@ -516,7 +488,7 @@ class DrawUnit:
                       font=FONT.font('JBM_BD', size=ms.x(3.5)))
 
     def ach_frame(self, x: float, y: float, diff: Diff):
-        text = " 达成率" if self.cn == 2 else " ACHIEVEMENT"
+        text = " 达成率" if self.cn_level == 2 else " ACHIEVEMENT"
 
         self.rounded_rect(x, y, 60, 14, fill=bcm(diff.bg, '#FFF9'), radius=1.5)
         self.text(x, y, text=text, fill=diff.frame, anchor='la', font=FONT.font('MIS_HE', size=self.ms.x(2)))
@@ -551,7 +523,7 @@ class DrawUnit:
         return title, text, star_text.strip(), color
 
     def dxscore(self, x: float, y: float, score: int, max_score: int, star_count: int, diff: Diff):
-        title, text, star_text, star_color = self._dxscore(cn_level=self.cn, score=score, max_score=max_score,
+        title, text, star_text, star_color = self._dxscore(cn_level=self.cn_level, score=score, max_score=max_score,
                                                            star_count=star_count)
 
         self.rounded_rect(x, y, 24, 9, fill=bcm(diff.bg, '#FFF9'), radius=1.5)
@@ -561,7 +533,7 @@ class DrawUnit:
                   font=FONT.font('NSS_RG', size=self.ms.x(2.2)))
 
     def dxscore_lite(self, x: float, y: float, score: int, max_score: int, star_count: int, diff: Diff):
-        title, text, star_text, star_color = self._dxscore(cn_level=self.cn, score=score, max_score=max_score,
+        title, text, star_text, star_color = self._dxscore(cn_level=self.cn_level, score=score, max_score=max_score,
                                                            star_count=star_count)
 
         self.rounded_rect(x, y, 42, 3, fill=bcm(diff.bg, '#FFF9'), radius=2)
@@ -583,30 +555,201 @@ class DrawUnit:
             dy = y + (i - len(lines_new) // 2) * line_height + offset
             self.text(x, dy, text=lines_new[i], fill=fill, anchor='lm', font=font)
 
-    def image(self, x: float, y: float, w: float, h: float, png: Image.Image | Path, radius: float = 1.5,
-              outline: Optional[str] = None, outline_width: float = 0):
-        try:
-            overlay = (png if isinstance(png, Image.Image) else Image.open(png)).convert('RGBA')
-            w, h = overlay.size
-            if (w, h) != self.ms.xy(w, h):
-                overlay = overlay.resize(self.ms.xy(w, h), Image.Resampling.LANCZOS)
-            alpha = overlay.getchannel('A')
+class ImageUnit:
 
-            mask = Image.new('L', overlay.size, 0)
-            draw = ImageDraw.Draw(mask)
-            draw.rounded_rectangle((0, 0, overlay.size[0], overlay.size[1]), radius=self.ms.x(radius), fill=255)
-            combined_mask = ImageChops.darker(mask, alpha)
+    # 获取圆角 L 遮罩
+    @lru_cache(maxsize=8)
+    def get_mask(self, w: int, h: int, radius: float,
+                 ms: MS = _MS_DEFAULT) -> Image.Image:
+        # 画布大小应包含完整的 w 和 h
+        mask = Image.new('L', ms.xy(w, h), 0)
+        draw = ImageDraw.Draw(mask)
+        # 直接绘制充满画布的圆角矩形，坐标为 (0, 0, w, h)
+        draw.rounded_rectangle(ms.size(0, 0, w, h), radius=ms.x(radius), fill=255)
+        return mask
 
-            self.img.paste(overlay, self.ms.xy(x, y), mask=combined_mask)
+    # 难度式文本样式
+    def diff_text(self, diff: Diff, text: Optional[str] = None, limit_width: float = -1, ms: MS = _MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0):
+        # 处理文字长度并计算位置
+        font = FONT.font('MIS_HE', ms.x(4.8))
+        if text:
+            # 自定义文本，需处理宽度顺序
+            text = DrawUnit.limit_text(text, font, limit_width) if limit_width > 0 else text
+            display_text = text
+        else:
+            display_text = diff.text_title
 
-        except (FileNotFoundError, AttributeError, Exception):
-            pass
+        x1, y1, x2, y2 = font.getbbox(display_text, anchor='lm', stroke_width=ms.x(0.8))
+        if cn_level == 2 and not text:
+            # 特殊处理中文默认难度标题的位置
+            cn_font = FONT.font('MIS_HE', ms.x(3.3))
+            cn_x1, _cn_y1, cn_x2, _cn_y2 = cn_font.getbbox(diff.text_title_cn, anchor='lm', stroke_width=ms.x(0.8))
+            cn_width = ms.rev(cn_x2 - cn_x1)
+        else:
+            cn_width = 0
+        width = (ms.rev(x2 - x1) + cn_width) * 1.2
+        height = ms.rev(y2 - y1) * 1.2
 
-        # 绘制边框（即使图片加载失败）
-        if outline and outline_width > 0:
-            self.draw.rounded_rectangle(self.ms.size(x, y, w, h), radius=self.ms.x(radius),
-                                        outline=outline, width=self.ms.x(outline_width))
+        # 实际渲染逻辑
+        img = Image.new('RGBA', ms.xy(width, height), '#FFFFFF00')
+        du = DrawUnit(img, multiple=ms, cn_level=cn_level)
+        du.text(1, height / 2, display_text, diff.text, 'lm', font, shadow=(0.8, diff.deep), shadow2=(0.8, diff.frame, 0.7))
+        if cn_width:
+            du.text(ms.rev(x2 - x1) * 1.1, ms.rev(y2 - y1) * 1.1, diff.text_title_cn, diff.text, 'ld', FONT.font('MIS_HE', ms.x(3.3)),
+                    shadow=(0.8, diff.deep), shadow2=(0.8, diff.frame, 0.7))
 
+        return img
+
+    # 难度文本
+    @lru_cache(maxsize=10)
+    def difficulty(self, diff: Diff, ms: MS = _MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+        return self.diff_text(diff=diff, text=None, limit_width=-1, ms=ms, cn_level=2)
+
+    # FC / FS 评定文本
+    @lru_cache(maxsize=18)
+    def evaluate(self, eval: EvalInfo | None, mini: bool = False, ms: MS = _MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+        size = ms.xy(20, 5) if mini else ms.xy(40, 5)
+        img = Image.new('RGBA', size, "#FFFFFF00")
+        if eval:
+            du = DrawUnit(img, multiple=ms, cn_level=cn_level)
+            text = eval.short_name if mini else (eval.cn_name if cn_level == 2 else eval.full_name)
+            du.text(1, 2.5, text, eval.color.fill, 'lm', FONT.font('MIS_HE', ms.x(3)),
+                stroke=(0.5, eval.color.shadow), shadow=(0.65, eval.color.shadow))
+        return img
+
+    # 谱面类型标记（标准）
+    def draw_sd_badge(self, ms: MS = _MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+        img = Image.new('RGBA', ms.xy(20, 5), "#FFFFFF00")
+        du = DrawUnit(img, multiple=ms, cn_level=cn_level)
+
+        COLOR_SD = '#4AF'
+        du.rounded_rect(0, 0, 20, 5, fill=COLOR_SD, radius=5)
+        offset = 0.6 if cn_level else 0
+        font = FONT.font('MIS_HE', ms.x(3 + offset))
+        text = "标 准" if cn_level else "スタンダード"
+        du.text(10, 2.5, text, '#FFF', 'mm', font)
+        return img
+
+    # 谱面类型标记（DX）
+    def draw_dx_badge(self, ms: MS = _MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+        img = Image.new('RGBA', ms.xy(20, 5), "#FFFFFF00")
+        du = DrawUnit(img, multiple=ms, cn_level=cn_level)
+
+        COLOR_DX = ('#FF7711', '#FFFFFF')
+        COLOR_DELUXE = ('#FF4646', '#FFA02D', '#FFDC00', '#9AC948', '#00AAE6', '#2299EE')
+
+        du.rounded_rect(0, 0, 20, 5, fill='#FFF', radius=5, outline=COLOR_DX[1] if cn_level else COLOR_DELUXE[-1], width=0.5)
+        if cn_level:
+            text = "DX"
+            du.text(10, 2.5, text, COLOR_DX[0], 'mm', FONT.font('MIS_HE', ms.x(4.1)))
+        else:
+            font = FONT.font('MIS_HE', ms.x(3.2))
+            text = "でらっくす"
+            total_text_width = ms.rev(font.getlength(text))
+            start_x = (10) - (total_text_width / 2)
+            current_x = start_x
+            center_y = 2.5
+            for char, color in zip(text, COLOR_DELUXE):
+                du.text(current_x, center_y, char, color, 'lm', font)
+                char_width = ms.rev(font.getlength(char))
+                current_x += char_width
+        return img
+
+    # 谱面类型标记
+    @lru_cache(maxsize=4)
+    def draw_badge(self, is_cabinet_dx: bool, ms: MS = _MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+        return self.draw_dx_badge(ms=ms, cn_level=cn_level) if is_cabinet_dx else self.draw_sd_badge(ms=ms, cn_level=cn_level)
+
+    # 版权信息栏
+    @lru_cache(maxsize=4)
+    def copyright_bar(self, width: int, lines: tuple[str, ...] | None = None,
+                      ms: MS = _MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+        if lines is None:
+            lines = (
+                "Powered by LyraBot (@GoldSheep3)",
+                "Version:" + MODEL_VERSION,
+                "Designer by Bakamai⑨'s Members",
+                "Background Artist by @银色山雾"
+            )
+        
+        cr_info = "    |    ".join(lines)
+        
+        # 基准测量
+        base_size = 5.0
+        test_font = FONT.font('MIS_DB', size=ms.x(base_size))
+        tx1, ty1, tx2, ty2 = test_font.getbbox(cr_info)
+        raw_width = tx2 - tx1
+        raw_height = ty2 - ty1
+
+        target_content_width = width * 0.9  # 预留两侧各 5% 的空白边距
+        # 缩放系数 = 目标宽度 / 原始宽度
+        ratio = min(target_content_width / (raw_width / ms.multiple), 1.0)
+        final_size = max(base_size * ratio, 1.2)
+        
+        font = FONT.font('MIS_DB', size=ms.x(final_size))
+        # 预留上下各 20% 的空间，防止文字过于贴边
+        bar_height = round(max((raw_height * ratio) * 1.4, ms.x(6)))
+
+        # 实际渲染
+        img = Image.new('RGBA', (ms.x(width), bar_height), '#313d7c')
+        du = DrawUnit(img, multiple=ms, cn_level=cn_level)
+        du.text(
+            width // 2, 
+            ms.rev(bar_height) // 2, 
+            text=cr_info, 
+            fill=COLOR_THEME, 
+            anchor='mm',
+            font=font
+        )
+
+        return img
+
+    # -- 大型组件 --
+    # 谱面信息框
+    def chart_box(self, chart: MaiChart, cabinet_dx: bool, server: SERVER_TAG, plus_level: int = 6, is_utage: bool = False,
+                  ms: MS = _MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+        """组件：谱面信息框"""
+        w, h, ow = 108, 36, 1  # w, h, outline_width
+        width, height = w + ow * 2, h + ow * 2
+        diff = Difficulty.get(chart.difficulty)
+
+        img = Image.new('RGBA', ms.xy(width, height), '#FFFFFF00')
+        du = DrawUnit(img, multiple=ms, cn_level=cn_level)
+
+        du.rounded_rect(ow, ow, w, h, radius=4, fill=diff.bg)
+        du.cut_line(ow, ow, w, h, radius=4, line_y=ow + 2, line_h=5, fill=diff.title_bg)
+        du.rounded_rect(ow, ow, w, h, radius=4, fill=None, outline=diff.frame, width=1)
+        # 难度、DX
+        difficulty = IMU.difficulty(diff=diff, ms=ms, cn_level=cn_level)
+        diff_height = ms.rev(difficulty.size[1])
+        img.paste(difficulty, ms.xy(ow + 2.5, ow + 4.3 - diff_height / 2), difficulty)
+        badge = IMU.draw_badge(is_cabinet_dx=cabinet_dx, ms=ms, cn_level=cn_level)
+        img.paste(badge, ms.xy(ow + 85, ow + 2), badge)
+        # 等级 LV
+        plus = round(chart.lv % 1 * 10) >= plus_level
+        du.level(ow + 64, ow + 7.4, diff, chart.lv, plus=plus, ignore_decimal=is_utage)
+        # 达成率
+        ach = chart.get_ach(server=server)
+        du.ach(ow + 2, ow + 9, diff, ach.achievement)
+        dxs, dxs_max, dxs_star = ach.dxscore_tuple
+        du.dxscore(ow + 38, ow + 25, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
+        fc = IMU.evaluate(Combo.get(ach.combo), ms=ms, cn_level=cn_level)
+        img.paste(fc, ms.xy(ow + 3, ow + 27-3), fc)
+        fs = IMU.evaluate(Sync.get(ach.sync), ms=ms, cn_level=cn_level)
+        img.paste(fs, ms.xy(ow + 3, ow + 32-3), fs)
+
+        info_line5 = [
+            f"谱师: {chart.des}",
+            f"拟合定数: {chart.lv_synh:.4f}" if chart.lv_synh else '',
+        ]
+
+        du.rounded_rect(ow + 64, ow + 9, 42, 25, fill=bcm(diff.bg, '#0009'), radius=1.5)
+        du.infos(ow + 65.5, ow + 21.65, lines=(info_line5 + [''] * 5)[:5], line_height=4.5, limit_width=-1,
+                 font=FONT.font('MIS_DB', size=ms.x(3.2)))
+
+        return img
+
+IMU = ImageUnit()  # 全局图像元件实例
 
 # ========================================
 # 组装工厂
@@ -620,36 +763,17 @@ class DrawFactory:
         self.ms = ms  # 缩放倍率
 
         # 背景图片
+        # TODO: 后续修改为分块和遮罩渐变合成的方式，减少内存占用和提高性能
         self.img: Image.Image = ASSETS.background(ms.xy(width, height)) or Image.new('RGBA', ms.xy(width, height), COLOR_THEME)
         self.img.convert('RGBA')
 
         # 绘图单元
         self.cn_level: Literal[0, 1, 2] = cn_level
-        self.du = DrawUnit(self.img, multiple=ms, cn=cn_level)
+        self.du = DrawUnit(self.img, multiple=ms, cn_level=cn_level)
 
     def get_image(self) -> Image.Image:
         """获取绘制完成的图像"""
         return self.img
-
-    def copyright_bar(self, x, y, width: int, lines: list[str] = [
-            "Powered by LyraBot (@GoldSheep3)",
-            "Version:" + MODEL_VERSION,
-            "Designer by Bakamai⑨'s Members",
-            "Background Artist by @银色山雾"
-        ]) -> tuple[int, int]:
-        """组件：版权信息"""
-        CR_INFO = "    |    ".join(lines)
-        font_size = 5
-        x1, y1, x2, y2 = -1, -1, width, -1  # 预设值，确定至少进入一次循环
-        while x2 - x1 > width * 0.9:  # 0.9x 留出一定边距，避免过于贴边
-            font_size -= 0.2
-            font = FONT.font('MIS_DB', size=self.ms.x(font_size))
-            x1, y1, x2, y2 = font.getbbox(CR_INFO)  # 预加载字体
-        height = int(max((y2 - y1) * 1.1, 6))  # 1.1x 行距，留出一定边距
-        self.du.rounded_rect(0, y, width, height, fill='#313d7c', radius=0)  # 后续修改为遮罩渐变合成
-        self.du.text(x + width // 2, y + height // 2, text=CR_INFO, fill=COLOR_THEME, anchor='mm',
-                     font=FONT.font('MIS_DB', size=self.ms.x(3.5)))
-        return width, height
 
     def chart_box(self, x, y, chart: MaiChart, cabinet_dx: bool, server: SERVER_TAG, plus_level: int = 6,
                   is_utage: bool = False) -> Tuple[int, int]:
@@ -664,7 +788,8 @@ class DrawFactory:
         du.rounded_rect(x, y, width, height, radius=4, fill=None, outline=diff.frame, width=1)
         # 难度、DX
         du.difficulty(x + 2.5, y + 4.3, diff)
-        du.draw_badge(x + 85, y + 2, is_cabinet_dx=cabinet_dx)
+        badge = IMU.draw_badge(is_cabinet_dx=cabinet_dx, ms=self.ms, cn_level=self.cn_level)
+        self.img.paste(badge, self.ms.xy(x + 85, y + 2), badge)
         # 等级 LV
         plus = round(chart.lv % 1 * 10) >= plus_level
         du.level(x + 64, y + 7.4, diff, chart.lv, plus=plus, ignore_decimal=is_utage)
@@ -674,9 +799,9 @@ class DrawFactory:
         dxs, dxs_max, dxs_star = ach.dxscore_tuple
         du.dxscore(x + 38, y + 25, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
         c, t, _tl, tc = Combo.get(ach.combo)
-        du.evaluate(x + 3, y + 27, text=tc if self.du.cn == 2 else t, color=c)
+        du.evaluate(x + 3, y + 27, text=tc if self.du.cn_level == 2 else t, color=c)
         c, t, _tl, tc = Sync.get(ach.sync)
-        du.evaluate(x + 3, y + 32, text=tc if self.du.cn == 2 else t, color=c)
+        du.evaluate(x + 3, y + 32, text=tc if self.du.cn_level == 2 else t, color=c)
 
         info_line5 = [
             f"谱师: {chart.des}",
@@ -702,7 +827,8 @@ class DrawFactory:
         du.rounded_rect(x, y, width, height, radius=4, fill=None, outline=diff.frame, width=1)
         # 难度、DX
         du.difficulty(x + 2.5, y + 4.3, diff)
-        du.draw_badge(x + 85, y + 2, is_cabinet_dx=cabinet_dx)
+        badge = IMU.draw_badge(is_cabinet_dx=cabinet_dx, ms=self.ms, cn_level=self.cn_level)
+        self.img.paste(badge, self.ms.xy(x + 85, y + 2), badge)
         # 等级 LV
         plus = round(chart.lv % 1 * 10) >= plus_level
         du.level(x + 64, y + 7.4, diff, chart.lv, plus=plus, ignore_decimal=is_utage)
@@ -712,9 +838,9 @@ class DrawFactory:
         dxs, dxs_max, dxs_star = ach.dxscore_tuple
         du.dxscore_lite(x + 2, y + 20, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
         c, t, _tl, tc = Combo.get(ach.combo)
-        du.evaluate(x + 3, y + 12, text=tc if self.du.cn == 2 else t, color=c)
+        du.evaluate(x + 3, y + 12, text=tc if self.du.cn_level == 2 else t, color=c)
         c, t, _tl, tc = Sync.get(ach.sync)
-        du.evaluate(x + 3, y + 17, text=tc if self.du.cn == 2 else t, color=c)
+        du.evaluate(x + 3, y + 17, text=tc if self.du.cn_level == 2 else t, color=c)
 
         return width, height
 
@@ -737,10 +863,9 @@ class DrawFactory:
         du.rounded_rect(x, y, width, height, radius=2.5, fill=None, outline=diff.frame, width=1)
 
         # 2. 难度文本与 DX 标识 (左侧区域)
-        # 稍微下移以对齐视觉中心
         du.difficulty(x + 2, y + 3.5, diff)
-        # DX 标识移到右侧偏上，避免遮挡
-        du.draw_badge(x + 72, y + 1.5, is_cabinet_dx=cabinet_dx)
+        badge = IMU.draw_badge(is_cabinet_dx=cabinet_dx, ms=self.ms, cn_level=self.cn_level)
+        self.img.paste(badge, self.ms.xy(x + 72, y + 1.5), badge)
 
         # 3. 等级 LV (紧跟在难度后面)
         plus = round(chart.lv % 1 * 10) >= plus_level
@@ -756,8 +881,8 @@ class DrawFactory:
         c_sync, t_sync, _tl, tc_sync = Sync.get(ach.sync)
 
         # 使用 self.du.cn 判定语言，2 为全中文
-        text_combo = tc_combo if du.cn == 2 else t_combo
-        text_sync = tc_sync if du.cn == 2 else t_sync
+        text_combo = tc_combo if du.cn_level == 2 else t_combo
+        text_sync = tc_sync if du.cn_level == 2 else t_sync
 
         # 绘制：水平排列在底部
         du.evaluate(x + 2, y + 11.5, text=text_combo, color=c_combo)
@@ -800,10 +925,15 @@ class DrawFactory:
 
         # 曲绘
         if data.image:
-            du.image(x + 2, y + 2, 32, 32, radius=1.5, outline=diff.frame, outline_width=0.5, png=data.image)
+            mask = IMU.get_mask(w=32, h=32, radius=1.5, ms=self.ms)
+            cover_img = data.image.resize(self.ms.xy(32, 32), Image.Resampling.LANCZOS)
+            self.img.paste(cover_img, self.ms.xy(x + 2, y + 2), mask)
+            
+            
 
         # 谱面类型 (SD/DX)
-        du.draw_badge(x + 75, y + 2, is_cabinet_dx=data.is_cabinet_dx)
+        badge = IMU.draw_badge(is_cabinet_dx=data.is_cabinet_dx, ms=self.ms, cn_level=self.cn_level)
+        self.img.paste(badge, self.ms.xy(x + 75, y + 2), badge)
 
         # 达成率
         du.ach(x + 35, y + 9, diff, ach_percent=ach.achievement)
@@ -858,6 +988,83 @@ class DrawFactory:
 
         return w, h
 
+
+def draw_info_box(maidata: MaiData, server: SERVER_TAG, ms: MS = _MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+    width, fw = 200, 20  # width, frame_width
+    all_width = width + fw * 2
+
+    # Board 1: 曲绘和基本信息
+    cover_width = 54
+    board1 = Image.new('RGBA', (width, cover_width + 2), '#FFFFFF00')
+    du1 = DrawUnit(board1, multiple=ms, cn_level=cn_level)
+    # 曲绘
+    img = maidata.image if maidata.image else Image.new('RGB', (10, 10), color='#999')
+    mask = IMU.get_mask(w=cover_width, h=cover_width, radius=5, ms=ms)
+    cover_img = img.resize(ms.xy(cover_width, cover_width), Image.Resampling.LANCZOS)
+    board1.paste(cover_img, ms.xy(1, 1), mask)
+    du1.rounded_rect(1, 1, cover_width, cover_width, radius=5, fill=None, outline='#FFF', width=1)
+    # 标题、艺术家、ID、BPM、来源
+    dx = cover_width + 5
+    du1.text(dx, 0, text=maidata.title, fill='#FFF', anchor='la', font=FONT.font('MIS_HE', size=ms.x(11)))
+    du1.text(dx, 14, text=maidata.artist, fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=ms.x(5)))
+    du1.text(dx, 23, text=f"ID {maidata.shortid}", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=ms.x(6)))
+    du1.text(dx+30, 23, text=f"BPM {maidata.bpm}", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=ms.x(6)))
+    du1.text(dx+60, 23, text=f"谱面来源: {maidata.converter}", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=ms.x(6)))
+    # 流派、JP/CN 版本、游玩记录版本
+    margin = 5
+    dy = 34
+    im_y1, im_y1_5 = dy+5, dy+14  # 标题高 5，图片高 18：5 + 18/2 = 14
+    genre_x, jpv_x, cnv_x = dx, dx+34+margin, dx+68+margin*2
+    du1.text(genre_x, dy, text="流派", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=ms.x(4)))
+    du1.text(jpv_x, dy, text="JP", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=ms.x(4)))
+    du1.text(cnv_x, dy, text="CN", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=ms.x(4)))
+    if maidata.genre:
+        genre_text, genre_fill = get_genre(maidata.genre, cn_level=cn_level)
+        genre_text = genre_text.replace('\\n', '\n')
+        du1.text(genre_x+17, im_y1_5, text=genre_text, fill=genre_fill, anchor='mm', font=FONT.font('MIS_DB', size=ms.x(5)),
+                shadow=(1.2, '#FFF'))
+    if maidata.version:
+        if ver_jp := ASSETS.version_image(maidata.version, size=ms.xy(34, 16)):
+            board1.paste(ver_jp, ms.xy(jpv_x, im_y1), ver_jp)
+        else:
+            text = VERSIONS_DATA.get(maidata.version, str(maidata.version)).replace(' ', '\n')
+            du1.text(jpv_x+17, im_y1_5, text=text, fill='#FFF', anchor='mm', font=FONT.font('MIS_DB', size=ms.x(5)))
+    if maidata.version_cn:
+        if ver_cn := ASSETS.version_image(maidata.version_cn, size=ms.xy(34, 16)):
+            board1.paste(ver_cn, ms.xy(cnv_x, im_y1), ver_cn)
+        else:
+            text = VERSIONS_DATA.get(maidata.version_cn, str(maidata.version_cn)).replace(' ', '\n')
+            du1.text(cnv_x+17, im_y1_5, text=text, fill='#FFF', anchor='mm', font=FONT.font('MIS_DB', size=ms.x(5)))
+    else:
+        du1.text(cnv_x+17, im_y1_5, text="X\n", fill='#F00', anchor='mm', font=FONT.font('MIS_DB', size=ms.x(4)),
+                stroke=(0.8, '#FFF'))
+        du1.text(cnv_x+17, im_y1_5, text="\n国服无此乐曲", fill='#FFF', anchor='mm', font=FONT.font('MIS_DB', size=ms.x(4)))
+
+    # Board 2: 别名信息
+    if maidata.aliases:
+        board2 = None
+    else:
+        board2 = None
+    # Board 3: 谱面数据
+    board3 = None  # TODO
+    # Board 4: 版权底条
+    board4 = IMU.copyright_bar(width=all_width, ms=ms, cn_level=cn_level)
+    # BoardCraft
+    boards = [board for board in (board1, board2, board3, board4) if board is not None]
+    all_height_msed = sum(board.height for board in boards) + (len(boards) + 2) * ms.x(fw)
+    result_img = Image.new('RGBA', (ms.x(all_width), all_height_msed), '#FFFFFF00')
+    current_y = ms.x(fw)
+    for board in boards:
+        result_img.paste(board, (ms.x(fw), current_y), board)
+        current_y += board.height + ms.x(fw)
+    return result_img
+
+    # self.img: Image.Image = ASSETS.background(ms.xy(width, height)) or Image.new('RGBA', ms.xy(width, height), COLOR_THEME)
+    # self.img.convert('RGBA')
+    
+
+
+
 class DrawInfo(DrawFactory):
     """实现 `info11951` 图像的绘制"""
 
@@ -876,7 +1083,13 @@ class DrawInfo(DrawFactory):
         # 曲绘
         cover_size = 54
         img = maidata.image if maidata.image else Image.new('RGB', (10, 10), color='#999')
-        du.image(x, y, cover_size, cover_size, radius=5, outline='#FFF', outline_width=1, png=img)
+        # du.image(x, y, cover_size, cover_size, radius=5, outline='#FFF', outline_width=1, png=img)
+        
+        mask = IMU.get_mask(w=cover_size, h=cover_size, radius=5, ms=self.ms)
+        cover_img = img.resize(self.ms.xy(cover_size, cover_size), Image.Resampling.LANCZOS)
+        self.img.paste(cover_img, self.ms.xy(x + 2, y + 2), mask)
+        du.rounded_rect(x+2, y+2, cover_size, cover_size, radius=5, fill=None, outline='#FFF', width=1)
+        
         t = cover_size + margin
         # 标题
         du.text(x + t, y, text=maidata.title, fill='#FFF', anchor='la',
@@ -899,13 +1112,14 @@ class DrawInfo(DrawFactory):
 
         # Genre
         genre_text, genre_fill = get_genre(maidata.genre, cn_level=self.cn_level)
+        genre_text = genre_text.replace('\\n', '\n')
         du.text(x+t+17, gvv_mm, text=genre_text, fill='#FFF', anchor='mm', font=FONT.font('MIS_DB', size=self.ms.x(5)),
                 shadow=(1.5, '#FFF'))
         du.text(x+t+17, gvv_mm, text=genre_text, fill=genre_fill, anchor='mm', font=FONT.font('MIS_DB', size=self.ms.x(5)),
                 shadow=(1, '#FFF'))
         # JP
         if ver_jp := ASSETS.version_image(maidata.version, size=self.ms.xy(34, 16)):
-            du.image(x+t+p, gvv_la, 34, 16, radius=0, png=ver_jp)
+            self.img.paste(ver_jp, self.ms.xy(x+t+p, gvv_la), ver_jp)
         else:
             text = VERSIONS_DATA.get(maidata.version, str(maidata.version))
             text = text.replace(' ', '\n')
@@ -914,7 +1128,7 @@ class DrawInfo(DrawFactory):
         # CN: 需要考虑不存在
         if maidata.version_cn:
             if ver_cn := ASSETS.version_image(maidata.version_cn, size=self.ms.xy(34, 16)):
-                du.image(x+t+p*2, gvv_la, 34, 16, radius=0, png=ver_cn)
+                self.img.paste(ver_cn, self.ms.xy(x+t+p*2, gvv_la), ver_cn)
             else:
                 text = VERSIONS_DATA.get(maidata.version_cn, str(maidata.version_cn))
                 text = text.replace(' ', '\n')
@@ -943,6 +1157,7 @@ class DrawInfo(DrawFactory):
                     y += line_height
                     current_x_offset = 0
 
+                # TODO: 增加下划线分辨别名
                 du.text(x + current_x_offset, y, text=alias.alias, fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=self.ms.x(5)))
                 current_x_offset += alias_width + padding
 
@@ -952,7 +1167,11 @@ class DrawInfo(DrawFactory):
         now_x = x
         for i, chart in enumerate(maidata.charts.values()):
             if chart.difficulty >= 4:
-                _w, h = self.chart_box(now_x, y, chart, cabinet_dx=maidata.is_cabinet_dx, server=server)
+                cb = IMU.chart_box(chart, cabinet_dx=maidata.is_cabinet_dx, server=server, ms=self.ms, cn_level=self.cn_level)
+                self.img.paste(cb, self.ms.xy(now_x, y), cb)
+                _w, ht = cb.size
+                h = self.ms.rev(ht)
+                # _w, h = self.chart_box(now_x, y, chart, cabinet_dx=maidata.is_cabinet_dx, server=server)
             else:
                 _w, h = self.chart_box_lite(now_x, y, chart, cabinet_dx=maidata.is_cabinet_dx, server=server)
             if (i + 1) % 2 == 1:
@@ -964,7 +1183,9 @@ class DrawInfo(DrawFactory):
                 y += h + margin
 
         # ========== Module.4 版权信息 ==========
-        _w, h = self.copyright_bar(0, y, 240)
+        cb = IMU.copyright_bar(240, ms=self.ms, cn_level=self.cn_level)
+        self.img.paste(cb, (0, self.ms.x(y)), cb)
+        _w, h = cb.size
         # 切割
         self.img = self.img.crop((0, 0, self.ms.x(240), self.ms.x(y + h)))
         self.img = self.img.convert('RGB')
@@ -986,14 +1207,15 @@ class DrawB50Boxex(DrawFactory):
 
         # 头像
         user_avatar = user_avatar if user_avatar else Image.new('RGB', (10, 10), color='#CCC')
-        du.image(x, y, 32, 32, radius=5, outline='#FFF', outline_width=1, png=user_avatar)
+        # i, m = IMU.radius_image(image=user_avatar, w=32, h=32, radius=5, outline=(1, '#FFF'), ms=self.ms)
+        # self.img.paste(i, self.ms.xy(x, y), m)
         # Username
         du.rounded_rect(x+36, y+15, 100, 17, fill='#333', radius=2)
         du.text(x+36, y+23.5, text=' ' + get_full_width_text(user_name), fill='#FFF', anchor='lm',
                 font=FONT.font('MIS_DB', size=self.ms.x(10)))
         # DX Rating
         if dxra_frame := ASSETS.dxrating_image(b50manager.dxrating_filename, size=self.ms.xy(70, 14)):
-            du.image(x+36, y, 70, 14, radius=0, png=dxra_frame)
+            self.img.paste(dxra_frame, self.ms.xy(x+36, y), dxra_frame)
         # Rating Number
         font = FONT.font('MIS_DB', size=self.ms.x(8))
         for i, digit in enumerate(str(b50manager.dxrating)[::-1]):
@@ -1017,7 +1239,9 @@ class DrawB50Boxex(DrawFactory):
             _w, _h = self.b50_box(tx, ty, maidata, diff_number=diff, server=b50manager.server, current_version=b50manager.current_version, index=i, is_b15=True)
         y += (len(b15) + 3) // 4 * (36 + 3)
 
-        _w, h = self.copyright_bar(0, y, 411)
+        cb = IMU.copyright_bar(411, ms=self.ms, cn_level=self.cn_level)
+        self.img.paste(cb, (0, self.ms.x(y)), cb)
+        _w, h = cb.size
         # 切割
         self.img = self.img.crop((0, 0, self.ms.x(411), self.ms.x(y + h)))
         self.img = self.img.convert('RGB')
@@ -1036,3 +1260,21 @@ def simple_list(maidata_list: List[MaiData]) -> Image.Image:
     img_draw.text((2, 2), text, fill='#000', font=font)
 
     return img
+
+
+if __name__ == "__main__":
+    # 绘图调试
+    aliases = ["transcend lights","超越光","九月的雨","超超光光","美瞳广告","小女孩们的茶话会","超越之光","bright主题曲","别急19","音击的武士","tl","萝莉的雨","音击妹妹","114514","音击的雨"]
+    maidata = MaiData(11451, "Transcend Lights", 70, "曲：小高光太郎／歌：オンゲキシューターズ", 5, 'DX', 18, 2023, 'debug', Path(r"E:\Projects\PythonProjects\lyra-bot\temp\debug_cover.png"), None,
+                      aliases=[MaiAlias(11451, a, 0, -1) for a in aliases])
+    for i in range(2, 7):
+        chart = MaiChart(11451, i, 1+i*3)
+        chart.set_ach(MaiChartAch(11451, i, 'JP', 97.6+i*0.5, combo=3, sync=2))
+        maidata.set_chart(chart)
+    
+    target = DrawInfo(maidata, server='JP').get_image()
+
+    #     target = DrawB50Boxex([(maidata, randint(2, 6)) for _ in range(35)], [(maidata, randint(2, 6)) for _ in range(15)], multiple=1, cn_level=1, user_name="NameWCNM", user_avatar=None,
+    #                       current_version=25, ra=15254).get_image()
+
+    target.save(r"E:\UserFile\Desktop\debug.png")
