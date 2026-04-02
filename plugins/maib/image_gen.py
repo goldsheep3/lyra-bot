@@ -215,14 +215,20 @@ def bcm(t: str, f: str):
 
 # 倍率缩放类
 class MS:
-    def __init__(self, multiple: int | float):
-        self.multiple = float(multiple)
+    def __init__(self, multiple: float):
+        self.multiple = multiple
+        self._cache: dict[float, int] = {}  # 计算缓存
 
     def set_multiple(self, multiple: float):
-        self.multiple = float(round(multiple))
+        self.multiple = multiple
+        self._cache = {}
 
     def x(self, val: int | float) -> int:
-        return int(val * self.multiple)
+        val = float(val)
+        if val in self._cache:
+            return self._cache[val]
+        self._cache[val] = round(val * self.multiple)
+        return self._cache[val]
 
     def xy(self, x: int | float, y: int | float) -> tuple[int, int]:
         return self.x(x), self.x(y)
@@ -242,6 +248,9 @@ class MS:
         return MS(self.multiple * other)
 
 
+_MS_DEFAULT = MS(8)  # 默认倍率
+
+
 def get_difficulty(diff: int) -> Difficulty:
     """根据难度数值获取 Difficulty 对象"""
     if not 1 <= diff <= 7:
@@ -258,9 +267,9 @@ def get_full_width_text(text: str) -> str:
 
 def get_genre(genre_id: int, cn_level: Literal[0, 1, 2]) -> Tuple[str, str]:
     """获取流派信息"""
-    genre_info = GENRES_DATA.get(str(genre_id), {})
+    genre_info = GENRES_DATA.get(genre_id, {})
     target = {0: 'jp', 1: 'intl', 2: 'cn'}
-    genre = genre_info.get(target.get(cn_level, 'jp'), 'N/A')
+    genre = genre_info.get(target.get(cn_level, 'jp'), 'N/A').replace('\\n', '\n')
     color = genre_info.get('color', COLOR_THEME)
     return genre, color
 
@@ -271,7 +280,7 @@ def get_genre(genre_id: int, cn_level: Literal[0, 1, 2]) -> Tuple[str, str]:
 
 
 class DrawUnit:
-    def __init__(self, img: Image.Image, multiple: MS | int = 8, cn: Literal[0, 1, 2] = 0):
+    def __init__(self, img: Image.Image, multiple: MS | int = _MS_DEFAULT, cn: Literal[0, 1, 2] = 0):
         self.img: Image.Image = img
         self.draw: ImageDraw.ImageDraw = ImageDraw.Draw(self.img)
         self.ms: MS = multiple if isinstance(multiple, MS) else MS(multiple)
@@ -568,7 +577,7 @@ class DrawUnit:
 
 class DrawFactory:
 
-    def __init__(self, width: int, height: int, ms_multiple: int | MS = 10, cn_level: Literal[0, 1, 2] = 0):
+    def __init__(self, width: int, height: int, ms_multiple: int | MS = _MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0):
         ms = ms_multiple if isinstance(ms_multiple, MS) else MS(ms_multiple)
         self.ms = ms  # 缩放倍率
 
