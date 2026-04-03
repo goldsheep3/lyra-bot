@@ -1,3 +1,4 @@
+import io
 import bisect
 from pathlib import Path
 from enum import Enum
@@ -229,23 +230,8 @@ BOUNDARIES_DX_RATING_NEW = [0, 1000, 2000, 5000, 7000, 10000, 12000, 13000, 1400
 # ========================================
 
 
-def get_image_from_path_or_weburl(path_or_url: str | Path) -> Optional[Image.Image]:
-    """从本地路径或网络 URL 获取图片。对 str 识别为 URL，对 Path 识别为本地路径。"""
-    # TODO: 最终要从这个模块中迁移出去
-    if isinstance(path_or_url, str):
-        # 从 URL 下载到临时目录
-        import httpx
-        import tempfile
-        with httpx.Client(timeout=10.0) as client:
-            response = client.get(path_or_url)
-            response.raise_for_status()
-            with tempfile.NamedTemporaryFile(delete=False, suffix=Path(path_or_url).suffix) as tmp_file:
-                tmp_file.write(response.content)
-                path = Path(tmp_file.name)
-        if not path.exists():
-            return None
-    elif isinstance(path_or_url, Path):
-        path: Path = path_or_url
+def get_image_from_path_or_weburl(path: Path) -> Optional[Image.Image]:
+    """从本地路径获取图片"""
     if path.exists():
         try:
             return Image.open(path).convert('RGBA')
@@ -1024,7 +1010,7 @@ def draw_b50_4line(b50manager: MaiB50Manager,
     
     # 头像处理
     avatar_size = 32
-    user_avatar = b50manager.user_avatar if b50manager.user_avatar else Image.new('RGB', (10, 10), color='#CCC')
+    user_avatar = b50manager.user_avatar_image or Image.new('RGB', (10, 10), color='#CCC')
     if user_avatar.size != ms.xy(avatar_size, avatar_size):
         user_avatar = user_avatar.resize(ms.xy(avatar_size, avatar_size), Image.Resampling.LANCZOS)
     mask = IMU.get_mask(w=avatar_size, h=avatar_size, radius=5, ms=ms)
@@ -1138,7 +1124,7 @@ def draw_b50_5line(b50manager: MaiB50Manager,
     du1 = DrawUnit(board_title, multiple=ms, cn_level=cn_level)
     
     avatar_size = 32
-    user_avatar = b50manager.user_avatar if b50manager.user_avatar else Image.new('RGB', (10, 10), color='#CCC')
+    user_avatar = b50manager.user_avatar_image or Image.new('RGB', (10, 10), color='#CCC')
     if user_avatar.size != ms.xy(avatar_size, avatar_size):
         user_avatar = user_avatar.resize(ms.xy(avatar_size, avatar_size), Image.Resampling.LANCZOS)
     mask = IMU.get_mask(w=avatar_size, h=avatar_size, radius=5, ms=ms)

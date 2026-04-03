@@ -1,3 +1,4 @@
+import io
 import re
 import time
 import bisect
@@ -363,7 +364,7 @@ class MaiData:
 
 class MaiB50Manager:
     def __init__(self, current_version: int, server: SERVER_TAG,
-                 user_name: str, user_avatar: Image.Image | None = None, update_time: int | None = None):
+                 user_name: str, user_avatar: Image.Image | bytes | None = None, update_time: int | None = None):
         self.current_version = current_version
         self.server: SERVER_TAG = server
         self.user_name = user_name
@@ -372,6 +373,20 @@ class MaiB50Manager:
         # 存储格式: (rating, maidata, diff)
         self._b35: List[Tuple[int, 'MaiData', int]] = []
         self._b15: List[Tuple[int, 'MaiData', int]] = []
+
+    @property
+    def user_avatar_image(self) -> Image.Image | None:
+        """获取用户头像的 PIL.Image 对象"""
+        if isinstance(self.user_avatar, Image.Image):
+            return self.user_avatar
+        elif isinstance(self.user_avatar, bytes):
+            try:
+                img = Image.open(io.BytesIO(self.user_avatar)).convert('RGB')
+                return img
+            except Exception as e:
+                logger.error(f"Failed to load avatar image: {e}")
+                return None
+        return None
 
     @property
     def dxrating(self) -> int:

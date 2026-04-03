@@ -120,7 +120,7 @@ async def get_song_image(mdt: services.MaiData, user_id: str | int) -> bytes:
             maidata.parse_sy_player_record(record_list)  # 若水鱼有数据则进行填入
     # 构建回复图片
     output = io.BytesIO()
-    img = image_gen.DrawInfo(maidata, server=server, cn_level=1 if maidata.version_cn else 0).get_image()
+    img = image_gen.draw_info_box(maidata, server=server)
     img.save(output, format="jpeg")
     return output.getvalue()
 
@@ -296,6 +296,7 @@ async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
                 user_id = int(segment.data["qq"])  # 优先解析 @ 的用户信息
                 break
     user_id = user_id or int(event.get_user_id())  # 最后默认使用发送者的 QQ 号
+    avatar = await network.request_image(f"http://q2.qlogo.cn/headimg_dl?dst_uin={user_id}&spec=100")
     server = server or 'ALL'
     
     
@@ -327,9 +328,10 @@ async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
         await matcher.finish("没有找到可用于绘制的谱面记录哦qwq")
         return
     await matcher.send("小梨绘制中……")
-    manager = MaiB50Manager(current_version=get_current_versions()[1], server='CN')
+    manager = MaiB50Manager(current_version=get_current_versions()[1], server='CN',
+                            user_name=sy_b50_data.get('nickname', 'maimai'))
     manager.add_entries(maidata_list)
-    img = image_gen.DrawB50Boxex(manager, sy_b50_data.get('nickname', ''), cn_level=1).get_image()
+    img = image_gen.draw_b50_5line(manager)
     output = io.BytesIO()
     img.save(output, format="jpeg")
     img_bytes = output.getvalue()
