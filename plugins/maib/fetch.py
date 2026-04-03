@@ -489,13 +489,12 @@ async def maintenance_task():
     
     try:
         # 1. 准备路径和配置
+        logger.info(f"数据同步-步骤 1/5：获取谱面目录")
         data_dir = PluginRegistry.get_data_dir()
         if not data_dir:
             logger.error("数据同步失败：无法获取谱面目录")
             return
         chart_dirs = [data_dir / "charts", data_dir / "charts2"]
-        
-        # 2. 收集文件
         charts_files = []
         for d in chart_dirs:
             if d.exists():
@@ -503,8 +502,10 @@ async def maintenance_task():
         if not charts_files:
             logger.warning("数据同步结束：未找到任何谱面文件")
             return
+        logger.success(f"数据同步-步骤 1/5：已找到 {len(charts_files)} 个谱面文件")
 
         # 3. 处理本地 maidata 并存储到数据库
+        logger.info(f"数据同步-步骤 2/5：开始处理本地谱面，共 {len(charts_files)} 个 zip 文件")
         maidata_list = await process_chart_files(charts_files)
         get_session = PluginRegistry.get_session
         async with get_session() as session:
@@ -521,8 +522,10 @@ async def maintenance_task():
             
             # 最后统一 commit 剩余部分
             await session.commit()
+        logger.success(f"数据同步-步骤 2/5：本地谱面同步完成，共写入 {len(maidata_list)} 条")
 
         # 4. 获取水鱼数据并逐条同步国服版本与定数
+        logger.info("数据同步-步骤 3/5：开始同步水鱼国服版本与定数")
         if sy_music_data := await network.sy_music_data_from_file(PluginRegistry.get_cache_dir() / "sy_music_data.json"):
             total = len(sy_music_data)
             sync_data: list[tuple[int, int, list[float | int]]] = []
@@ -543,10 +546,12 @@ async def maintenance_task():
             logger.info(
                 f"水鱼数据批量同步完成: 输入 {len(sync_data)} 条, 命中 {hit_song_count} 首, 更新谱面 {changed_chart_count} 条"
             )
+            logger.success("数据同步-步骤 3/5：水鱼国服版本与定数同步完成")
         else:
             logger.warning("数据同步-水鱼数据：music_data 加载失败，无法同步国服版本号")
 
-        # 5. 同步拟合难度
+        # 4. 同步拟合难度
+        logger.info("数据同步-步骤 4/5：开始同步拟合难度")
         sy_lvnh = []
         if sy_chart_stats := await network.sy_chart_stats():
             for shortid, sy_stats in sy_chart_stats.get("charts", {}).items():
@@ -556,10 +561,12 @@ async def maintenance_task():
                     sy_lvnh.append((shortid, diff, fit_diff))
             if sy_lvnh:
                 await services.set_lv_synh_batch(sy_lvnh)
+            logger.success(f"数据同步-步骤 4/5：拟合难度同步完成，共 {len(sy_lvnh)} 条")
         else:
             logger.warning("数据同步-水鱼数据：chart_stats 加载失败，无法同步拟合难度")
 
-        # 6. 独立获取别名数据
+        # 5. 独立获取别名数据
+        logger.info("数据同步-步骤 5/5：开始同步别名数据")
         from time import time
         
         now = int(time())
@@ -572,6 +579,7 @@ async def maintenance_task():
                 aliases_set.update((song_id, alias) for alias in aliases)
             # 存储别名数据
             await services.add_aliases(list(aliases_set), source_id=-101, add_time=now)
+            logger.success(f"数据同步-步骤 5/5：Yuzuchan 别名同步完成，共 {len(aliases_set)} 条")
         # 处理 LXNS 别名
         if lxns_data := await network.lx_alias_list():
             aliases_set: set[tuple[int, str]] = set()
@@ -581,9 +589,9 @@ async def maintenance_task():
                 aliases_set.update((song_id, alias) for alias in aliases)
             # 存储别名数据
             await services.add_aliases(list(aliases_set), source_id=-102, add_time=now)
+            logger.success(f"数据同步-步骤 5/5：LXNS 别名同步完成，共 {len(aliases_set)} 条")
 
         logger.success("maib 数据重整理完成！")
         
     except Exception as e:
         logger.error(f"数据重整理失败: {e}")
-
