@@ -16,7 +16,7 @@ from .constants import *
 # ========================================
 
 # 模块版本
-MODEL_VERSION: str = "260330"
+MODEL_VERSION: str = "260403"
 
 # 字体常量
 class FontManager:
