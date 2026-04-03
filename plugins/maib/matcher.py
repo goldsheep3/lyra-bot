@@ -273,7 +273,7 @@ async def _(matcher: Matcher, groups: tuple = RegexGroup()):
     ra = chart.get_dxrating()
 
     msg = f"小梨算出来咯！\n定数{level}*{achievement:.4f}% -> Rating: {ra}"
-    if achievement > 100.5:
+    if achievement >= 100.5:
         msg += "\n该 ra 不考虑 AP 的额外分数哦！"
     await matcher.finish(msg)
 

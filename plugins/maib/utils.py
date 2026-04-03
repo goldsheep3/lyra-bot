@@ -163,7 +163,8 @@ class MaiChart:
         if not ach or ach.achievement < 0:
             return 0
         factor = next((f for threshold, f in RATE_FACTOR_TABLE if ach.achievement >= threshold), 0.0)
-        ra = int(self.lv * ach.achievement * factor)
+        achievement = 100.5 if ach.achievement >= 100.5 else ach.achievement  # SSS+ 即为最高分数
+        ra = int(self.lv * achievement * factor)
         if ach.combo >= 3:
             ra += ap_bonus
         return ra
