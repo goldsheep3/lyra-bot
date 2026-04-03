@@ -1,4 +1,4 @@
-import io, re, orjson, aiofiles
+import io, re, orjson, aiofiles, time
 from pathlib import Path
 from typing import Optional, List
 
@@ -299,10 +299,16 @@ async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
     avatar = await network.request_image(f"http://q2.qlogo.cn/headimg_dl?dst_uin={user_id}&spec=100")
     server = server or 'ALL'
     
+    # 记录查询开始时间
+    query_start_time = time.time()
     
     # 当前：解析水鱼读取 b50
     # TODO: 修改为同步到数据库并可选查询
     sy_b50_data = await network.sy_query_player(qq=user_id)
+    
+    # 计算查询耗时
+    query_time = time.time() - query_start_time
+    logger.info(f"B50 查询耗时: {query_time:.2f}秒 (QQ: {user_id})")
     if not sy_b50_data:
         await matcher.finish("没有找到你的水鱼数据哦qwq")
         return
@@ -328,6 +334,10 @@ async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
         await matcher.finish("没有找到可用于绘制的谱面记录哦qwq")
         return
     await matcher.send("小梨绘制中……")
+    
+    # 记录生成开始时间
+    generate_start_time = time.time()
+    
     manager = MaiB50Manager(current_version=get_current_versions()[1], server='CN',
                             user_name=sy_b50_data.get('nickname', 'maimai'), user_avatar=avatar)
     manager.add_entries(maidata_list)
@@ -335,7 +345,17 @@ async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
     output = io.BytesIO()
     img.save(output, format="jpeg")
     img_bytes = output.getvalue()
-    await matcher.finish(MessageSegment.image(img_bytes))
+    
+    # 计算生成耗时
+    generate_time = time.time() - generate_start_time
+    total_time = query_time + generate_time
+    logger.info(f"B50 生成耗时: {generate_time:.2f}秒 | 总耗时: {total_time:.2f}秒")
+    
+    await matcher.finish(Message([
+        MessageSegment.at(event.get_user_id()),
+        MessageSegment.text(f" \n查询时间: {query_time:.2f}秒 | 生成时间: {generate_time:.2f}秒\n"),
+        MessageSegment.image(img_bytes),
+    ]))
     
 
 
