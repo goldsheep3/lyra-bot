@@ -316,6 +316,10 @@ class MS:
             return NotImplemented
         return MS(self.multiple * other)
 
+    def __hash__(self):
+        # 仅根据 multiple 计算哈希值，忽略缓存
+        return hash(self.multiple)
+
 
 _MS_DEFAULT = MS(8)  # 默认倍率
 
@@ -425,38 +429,22 @@ class DrawUnit:
                                     outline=outline, width=self.ms.x(width))
 
     def cut_line(self, x: float, y: float, w: float, h: float, radius: float, line_y: float, line_h: float, fill: str):
-        box_size = self.ms.size(x, y, w, h)
-
-        # 主图“截取”
-        temp_layer = self.img.crop(box_size).convert("RGBA")
-        temp_draw = ImageDraw.Draw(temp_layer)
-
-        rel_line_y = self.ms.x(line_y - y)
-        rel_line_h = self.ms.x(line_h)
-        # temp_layer.width 获取的是像素宽度
-        temp_draw.rectangle([0, rel_line_y, temp_layer.width, rel_line_y + rel_line_h], fill=fill)
-
-        # 创建圆角遮罩 (L 模式)
-        mask = Image.new('L', temp_layer.size, 0)
-        mask_draw = ImageDraw.Draw(mask)
-        mask_draw.rounded_rectangle([0, 0, temp_layer.width, temp_layer.height],
-                                    radius=self.ms.x(radius), fill=255)
-
-        self.img.paste(temp_layer, (int(box_size[0]), int(box_size[1])), mask=mask)
-
-    def difficulty(self, x: float, y: float, diff: Diff, text: Optional[str] = None, limit_width: float = -1):
-        f = FONT.font('MIS_HE', self.ms.x(4.8))
-        if all((not text, self.cn_level == 2)):
-            fs = FONT.font('MIS_HE', self.ms.x(3.3))
-            _x1, _y1, x2, y2 = f.getbbox(diff.text_title, anchor='lm', stroke_width=self.ms.x(0.8))
-            mx2, my2 = self.ms.rev(x2), self.ms.rev(y2)
-            self.text(x+mx2+0.5, y+my2, diff.text_title_cn, diff.text, 'ld',
-                      fs, shadow=(0.8, diff.deep), shadow2=(0.8, diff.frame, 0.7))
-        elif text and limit_width > -1:
-            # 此处处理文字宽度限制
-            text = self.limit_text(text, f, limit_width)
-        text = text if text else diff.text_title
-        self.text(x, y, text, diff.text, 'lm', f, shadow=(0.8, diff.deep), shadow2=(0.8, diff.frame, 0.7))
+        box = self.ms.size(x, y, w, h)
+        px_x0, px_y0 = int(box[0]), int(box[1])
+        px_w, _px_h = int(box[2] - px_x0), int(box[3] - px_y0)
+        
+        mask = IMU.get_mask(w, h, radius=radius, ms=self.ms)
+        
+        # 计算线段在局部坐标系中的范围
+        rel_ly0 = int(self.ms.x(line_y - y))
+        rel_lh = int(self.ms.x(line_h))
+        rel_ly1 = rel_ly0 + rel_lh
+        # 裁切 Mask
+        line_mask_section = mask.crop((0, rel_ly0, px_w, rel_ly1))
+        
+        # 纯色线段粘贴
+        line_layer = Image.new("RGBA", (px_w, rel_lh), fill)
+        self.img.paste(line_layer, (px_x0, px_y0 + rel_ly0), mask=line_mask_section)
 
     def level(self, x: float, y: float, diff: Diff, level: float, plus: bool = False,
               ignore_decimal: bool = False):
@@ -548,10 +536,6 @@ class DrawUnit:
         self.text(x + 20, y + 1.8, text=star_text, fill=star_color, anchor='mm',
                   font=FONT.font('NSS_RG', size=self.ms.x(2.2)))
 
-    def evaluate(self, x: float, y: float, text: str, color: EvaluateColor, offset: float = 0):
-        self.text(x, y, text=text, fill=color.fill, anchor='lm', font=FONT.font('MIS_HE', size=self.ms.x(3 + offset)),
-                  stroke=(0.65, color.shadow), shadow=(0.5, color.shadow))
-
     def infos(self, x: float, y: float, lines: list[str], font: ImageFont.FreeTypeFont, fill='#FFF',
               line_height: float = 3.4, limit_width: float = -1):
         lines_new = [self.limit_text(line, font, limit_width) for line in lines] if limit_width > -1 else lines
@@ -608,7 +592,7 @@ class ImageUnit:
     # 难度文本
     @lru_cache(maxsize=10)
     def difficulty(self, diff: Diff, ms: MS = _MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
-        return self.diff_text(diff=diff, text=None, limit_width=-1, ms=ms, cn_level=2)
+        return self.diff_text(diff=diff, text=None, limit_width=-1, ms=ms, cn_level=cn_level)
 
     # FC / FS 评定文本
     @lru_cache(maxsize=18)
@@ -692,8 +676,8 @@ class ImageUnit:
         final_size = max(base_size * ratio, 1.2)
         
         font = FONT.font('MIS_DB', size=ms.x(final_size))
-        # 预留上下各 20% 的空间，防止文字过于贴边
-        bar_height = round(max((raw_height * ratio) * 1.4, ms.x(6)))
+        # 预留上下各 25% 的空间，防止文字过于贴边
+        bar_height = round(max((raw_height * ratio) * 1.5, ms.x(6)))
 
         # 实际渲染
         img = Image.new('RGBA', (ms.x(width), bar_height), '#313d7c')
@@ -755,8 +739,8 @@ class ImageUnit:
 
         return img
 
-    def chart_box_lite(self, chart: MaiChart, cabinet_dx: bool, server: SERVER_TAG, plus_level: int = 6, 
-                       is_utage: bool = False, ms: MS = _MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+    def chart_box_lite(self, chart: MaiChart, cabinet_dx: bool, server: SERVER_TAG, plus_level: int = 6, is_utage: bool = False,
+                       ms: MS = _MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
         """组件：谱面信息框 Lite"""
         w, h, ow = 108, 25, 1  # w, h, outline_width
         width, height = w + ow * 2, h + ow * 2
@@ -789,247 +773,70 @@ class ImageUnit:
         img.paste(fs, ms.xy(ow + 3, ow + 17 - 3), fs)
         return img
 
+    def mini_box(self, data: MaiData | None, diff_number: int, server: SERVER_TAG,
+                 ms: MS = _MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image | tuple[int, int]:
+        w, h, ow = 97, 36, 1  # w, h, outline_width
+        width, height = w + ow * 2, h + ow * 2
+        diff = Difficulty.get(diff_number)
+
+        img = Image.new('RGBA', ms.xy(width, height), '#FFFFFF00')
+        du = DrawUnit(img, multiple=ms, cn_level=cn_level)
+
+        chart = data.get_chart(diff_number) if data else None
+        if not chart or data is None:
+            return width, height  # 视为占位，返回尺寸供布局使用
+        ach = chart.get_ach(server=server)
+
+        du.rounded_rect(ow, ow, w, h, diff.bg, radius=2.5, outline=diff.frame)
+        du.cut_line(ow, ow, w, h, radius=0, line_y=ow + 2, line_h=5, fill=diff.title_bg)
+        du.rounded_rect(ow, ow, w, h, None, radius=2.5, outline=diff.title_bg, width=1)
+        # 标题栏文字
+        shortid_img = IMU.diff_text(diff=diff, text=f'#{data.shortid}', ms=ms, cn_level=cn_level)
+        img.paste(shortid_img, ms.xy(ow + 35, ow + 4.2 - ms.rev(shortid_img.size[1] / 2)), shortid_img)
+        badge = IMU.draw_badge(is_cabinet_dx=data.is_cabinet_dx, ms=ms, cn_level=cn_level)
+        img.paste(badge, ms.xy(ow + 75, ow + 2), badge)
+        # 曲绘
+        if data.image:
+            mask = IMU.get_mask(w=32, h=32, radius=1.5, ms=ms)
+            cover_img = data.image.resize(ms.xy(32, 32), Image.Resampling.LANCZOS)
+            img.paste(cover_img, ms.xy(ow + 2, ow + 2), mask)
+        # 达成率
+        du.ach(ow + 35, ow + 9, diff, ach_percent=ach.achievement)
+        dxs, dxs_max, dxs_star = ach.dxscore_tuple
+        du.dxscore_lite(ow + 53, ow + 31, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
+        # 评价图标
+        fc = IMU.evaluate(Combo.get(ach.combo), mini=True, ms=ms, cn_level=cn_level)
+        img.paste(fc, ms.xy(ow + 36, ow + 24), fc)
+        fs = IMU.evaluate(Sync.get(ach.sync), mini=True, ms=ms, cn_level=cn_level)
+        img.paste(fs, ms.xy(ow + 36, ow + 29), fs)
+        # INFO: 留空 (x=53, y=25, w=42, h=5) 可供自定义
+        return img
+
+    def b50_box(self, data: MaiData, diff_number: int, server: SERVER_TAG,
+                current_version: int, index: int, is_b15: Optional[bool] = None,
+                ms: MS = _MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image | None:
+        chart = data.get_chart(diff_number)
+        if not chart:
+            return None
+        img = self.mini_box(data=data, diff_number=diff_number, server=server, ms=ms, cn_level=cn_level)
+        if isinstance(img, tuple):
+            return None
+        du = DrawUnit(img, multiple=ms, cn_level=cn_level)
+        du.rounded_rect(53, 25, 42, 5, fill=bcm(Difficulty.get(diff_number).bg, '#0009'), radius=2)
+        du.rounded_rect(53, 25, 16, 5, fill='#006', radius=2)
+        b_type = '15' if is_b15 else '35'
+        du.text(61, 27.5, f"b{b_type} #{index}", fill='#FFF', anchor='mm', font=FONT.font('MIS_DB', size=ms.x(3)))
+        du.text(72, 27.5, f"{chart.lv:.1f} > {data.get_chart_dxrating(diff_number, server, current_version)}", fill='#FFF', anchor='lm', font=FONT.font('MIS_DB', size=ms.x(3)))
+        return img
+
 IMU = ImageUnit()  # 全局图像元件实例
 
 # ========================================
-# 组装工厂
+# 组装函数
 # ========================================
 
 
-class DrawFactory:
-
-    def __init__(self, width: int, height: int, ms_multiple: int | MS = 10, cn_level: Literal[0, 1, 2] = 0):
-        ms = ms_multiple if isinstance(ms_multiple, MS) else MS(ms_multiple)
-        self.ms = ms  # 缩放倍率
-
-        # 背景图片
-        # TODO: 后续修改为分块和遮罩渐变合成的方式，减少内存占用和提高性能
-        self.img: Image.Image = ASSETS.background(ms.xy(width, height)) or Image.new('RGBA', ms.xy(width, height), COLOR_THEME)
-        self.img.convert('RGBA')
-
-        # 绘图单元
-        self.cn_level: Literal[0, 1, 2] = cn_level
-        self.du = DrawUnit(self.img, multiple=ms, cn_level=cn_level)
-
-    def get_image(self) -> Image.Image:
-        """获取绘制完成的图像"""
-        return self.img
-
-    def chart_box(self, x, y, chart: MaiChart, cabinet_dx: bool, server: SERVER_TAG, plus_level: int = 6,
-                  is_utage: bool = False) -> Tuple[int, int]:
-        """组件：谱面信息框"""
-        du = self.du
-        diff = Difficulty.get(chart.difficulty)
-
-        width, height = 108, 36
-        # noinspection DuplicatedCode
-        du.rounded_rect(x, y, width, height, radius=4, fill=diff.bg)
-        du.cut_line(x, y, width, height, radius=4, line_y=y + 2, line_h=5, fill=diff.title_bg)
-        du.rounded_rect(x, y, width, height, radius=4, fill=None, outline=diff.frame, width=1)
-        # 难度、DX
-        du.difficulty(x + 2.5, y + 4.3, diff)
-        badge = IMU.draw_badge(is_cabinet_dx=cabinet_dx, ms=self.ms, cn_level=self.cn_level)
-        self.img.paste(badge, self.ms.xy(x + 85, y + 2), badge)
-        # 等级 LV
-        plus = round(chart.lv % 1 * 10) >= plus_level
-        du.level(x + 64, y + 7.4, diff, chart.lv, plus=plus, ignore_decimal=is_utage)
-        # 达成率
-        ach = chart.get_ach(server=server)
-        du.ach(x + 2, y + 9, diff, ach.achievement)
-        dxs, dxs_max, dxs_star = ach.dxscore_tuple
-        du.dxscore(x + 38, y + 25, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
-        c, t, _tl, tc = Combo.get(ach.combo)
-        du.evaluate(x + 3, y + 27, text=tc if self.du.cn_level == 2 else t, color=c)
-        c, t, _tl, tc = Sync.get(ach.sync)
-        du.evaluate(x + 3, y + 32, text=tc if self.du.cn_level == 2 else t, color=c)
-
-        info_line5 = [
-            f"谱师: {chart.des}",
-            f"拟合定数: {chart.lv_synh:.4f}" if chart.lv_synh else '',
-        ]
-
-        du.rounded_rect(x + 64, y + 9, 42, 25, fill=bcm(diff.bg, '#0009'), radius=1.5)
-        du.infos(x + 65.5, y + 21.65, lines=(info_line5 + [''] * 5)[:5], line_height=4.5, limit_width=-1,
-                 font=FONT.font('MIS_DB', size=self.ms.x(3.2)))
-
-        return width, height
-
-    def chart_box_lite(self, x, y, chart: MaiChart, cabinet_dx: bool, server: SERVER_TAG, plus_level: int = 6,
-                       is_utage: bool = False) -> Tuple[int, int]:
-        """组件：谱面信息框 Lite"""
-        du = self.du
-        diff = Difficulty.get(chart.difficulty)
-
-        width, height = 108, 25
-        # noinspection DuplicatedCode
-        du.rounded_rect(x, y, width, height, radius=4, fill=diff.bg)
-        du.cut_line(x, y, width, height, radius=4, line_y=y + 2, line_h=5, fill=diff.title_bg)
-        du.rounded_rect(x, y, width, height, radius=4, fill=None, outline=diff.frame, width=1)
-        # 难度、DX
-        du.difficulty(x + 2.5, y + 4.3, diff)
-        badge = IMU.draw_badge(is_cabinet_dx=cabinet_dx, ms=self.ms, cn_level=self.cn_level)
-        self.img.paste(badge, self.ms.xy(x + 85, y + 2), badge)
-        # 等级 LV
-        plus = round(chart.lv % 1 * 10) >= plus_level
-        du.level(x + 64, y + 7.4, diff, chart.lv, plus=plus, ignore_decimal=is_utage)
-        # 达成率
-        ach = chart.get_ach(server=server)
-        du.ach(x + 46, y + 9, diff, ach.achievement)
-        dxs, dxs_max, dxs_star = ach.dxscore_tuple
-        du.dxscore_lite(x + 2, y + 20, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
-        c, t, _tl, tc = Combo.get(ach.combo)
-        du.evaluate(x + 3, y + 12, text=tc if self.du.cn_level == 2 else t, color=c)
-        c, t, _tl, tc = Sync.get(ach.sync)
-        du.evaluate(x + 3, y + 17, text=tc if self.du.cn_level == 2 else t, color=c)
-
-        return width, height
-
-    def chart_box_mini(self, x, y, chart: MaiChart, cabinet_dx: bool, plus_level: int = 6,
-                       is_utage: bool = False, server: SERVER_TAG = "JP") -> Tuple[int, int]:
-        """组件：谱面信息框 Mini (更紧凑的布局，适用于多行并列或背景填充)"""
-        du = self.du
-        diff = Difficulty.get(chart.difficulty)
-        ach = chart.get_ach(server=server)
-
-        # 定义 Mini 尺寸：宽度略窄，高度大幅度压缩 (从 25 降至 16)
-        width, height = 86, 16 
-
-        # 1. 绘制底色与装饰感边框
-        # 背景填充
-        du.rounded_rect(x, y, width, height, radius=2.5, fill=diff.bg)
-        # 顶部切线装饰（保留 Lite 风格的视觉逻辑，但缩减高度）
-        du.cut_line(x, y, width, height, radius=2.5, line_y=y + 1, line_h=3.5, fill=diff.title_bg)
-        # 外边框（最后压一层确保清晰）
-        du.rounded_rect(x, y, width, height, radius=2.5, fill=None, outline=diff.frame, width=1)
-
-        # 2. 难度文本与 DX 标识 (左侧区域)
-        du.difficulty(x + 2, y + 3.5, diff)
-        badge = IMU.draw_badge(is_cabinet_dx=cabinet_dx, ms=self.ms, cn_level=self.cn_level)
-        self.img.paste(badge, self.ms.xy(x + 72, y + 1.5), badge)
-
-        # 3. 等级 LV (紧跟在难度后面)
-        plus = round(chart.lv % 1 * 10) >= plus_level
-        # 坐标微调，使等级和难度文字在同一水平线附近
-        du.level(x + 52, y + 6.5, diff, chart.lv, plus=plus, ignore_decimal=is_utage)
-
-        # 4. 达成率 (居中偏右布局)
-        du.ach(x + 36, y + 8, diff, ach.achievement)
-
-        # 5. 状态 (FC/Sync) - 采用水平并列或极窄间距
-        # 在 Mini 模式下，如果空间有限，FC 和 Sync 通常并排显示或缩小字体
-        c_combo, t_combo, _tl, tc_combo = Combo.get(ach.combo)
-        c_sync, t_sync, _tl, tc_sync = Sync.get(ach.sync)
-
-        # 使用 self.du.cn 判定语言，2 为全中文
-        text_combo = tc_combo if du.cn_level == 2 else t_combo
-        text_sync = tc_sync if du.cn_level == 2 else t_sync
-
-        # 绘制：水平排列在底部
-        du.evaluate(x + 2, y + 11.5, text=text_combo, color=c_combo)
-        du.evaluate(x + 22, y + 11.5, text=text_sync, color=c_sync)
-
-        # 6. DX 分数
-        dxs, dxs_max, dxs_star = ach.dxscore_tuple
-        du.dxscore_lite(x + 48, y + 11.5, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
-
-        return width, height
-
-    def mini_box(self, x: int, y: int, data: MaiData, diff_number: int, server: SERVER_TAG) -> Tuple[int, int]:
-        """组件：Mini 成绩框"""
-        du = self.du
-        ms = self.ms
-        diff = Difficulty.get(diff_number)
-        chart = data.get_chart(diff_number)
-        if not chart:
-            return 0, 0  # 未绘制
-        ach = chart.get_ach(server=server)
-        
-        width, height = 97, 36
-
-        # 外框背景
-        du.draw.rounded_rectangle(
-            ms.size(x, y, width, height), 
-            radius=ms.x(2.5), 
-            fill=diff.bg, 
-            outline=diff.frame,
-            width=3, 
-            corners=(True, True, True, True)
-        )
-
-        # 标题栏
-        du.draw.rectangle(ms.size(x, y + 2, width, 5), fill=diff.title_bg)
-
-        # 标题栏文字
-        limit_t = FONT.font('MIS_HE', size=ms.x(4.6)).getlength('I' * 62)
-        du.difficulty(x + 36, y + 4.2, diff, text=f'#{data.shortid}', limit_width=limit_t)
-
-        # 曲绘
-        if data.image:
-            mask = IMU.get_mask(w=32, h=32, radius=1.5, ms=self.ms)
-            cover_img = data.image.resize(self.ms.xy(32, 32), Image.Resampling.LANCZOS)
-            self.img.paste(cover_img, self.ms.xy(x + 2, y + 2), mask)
-            
-            
-
-        # 谱面类型 (SD/DX)
-        badge = IMU.draw_badge(is_cabinet_dx=data.is_cabinet_dx, ms=self.ms, cn_level=self.cn_level)
-        self.img.paste(badge, self.ms.xy(x + 75, y + 2), badge)
-
-        # 达成率
-        du.ach(x + 35, y + 9, diff, ach_percent=ach.achievement)
-
-        offset = 1 if self.cn_level == 2 else 0
-        # FC/FC+/AP/AP+
-        if ach.combo:
-            c, _t, tl, tc = Combo.get(ach.combo)
-            du.evaluate(x + 36, y + 27, text=tc if self.cn_level == 2 else tl, color=c)
-            
-        # SYNC/FS/FS+/FDX/FDX+
-        if ach.sync:
-            c, _t, tl, tc = Sync.get(ach.sync)
-            du.evaluate(x + 36, y + 32, text=tc if self.cn_level == 2 else tl, color=c, offset=offset)
-
-        # INFO
-        # 留空 (x+53, y+25, w=42, h=5) 可供自定义
-
-        # DXSCORE
-        dxs, dxs_max, dxs_star = ach.dxscore_tuple
-        du.dxscore_lite(x + 53, y + 31, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
-
-        # 外框边框
-        du.draw.rounded_rectangle(
-            ms.size(x, y, width, height), 
-            radius=ms.x(2.5), 
-            fill=None, 
-            outline=diff.frame,
-            width=3, 
-            corners=(True, True, True, True)
-        )
-
-        return width, height
-
-    def b50_box(self, x: int, y: int, data: MaiData, diff_number: int, server: SERVER_TAG, current_version: int,
-                index: int, is_b15: Optional[bool] = None) -> tuple[int, int]:
-        """组件：B50 成绩框"""
-        du = self.du
-        ms = self.ms
-        diff = Difficulty.get(diff_number)
-        chart = data.get_chart(diff_number)
-        if not chart:
-            return 0, 0  # 未绘制
-
-        w, h = self.mini_box(x, y, data, diff_number, server=server)
-
-        du.rounded_rect(x + 53, y + 25, 42, 5, fill=bcm(diff.bg, '#0009'), radius=2)
-        du.rounded_rect(x + 53, y + 25, 16, 5, fill='#006', radius=2)
-        b_type = '15' if is_b15 else '35'
-        du.text(x+61, y+27.5, f"b{b_type} #{index}", fill='#FFF', anchor='mm', font=FONT.font('MIS_DB', size=ms.x(3)))
-        du.text(x+70, y+27.5, f"{chart.lv:.1f} > {data.get_chart_dxrating(diff_number, server, current_version)}", fill='#FFF', anchor='lm', font=FONT.font('MIS_DB', size=ms.x(3)))
-
-        return w, h
-
-
-def draw_info_box(maidata: MaiData, server: SERVER_TAG, user_info: dict | None = None,
+def draw_info_box(maidata: MaiData, server: SERVER_TAG, b50manager_jp: MaiB50Manager | None = None, b50manager_cn: MaiB50Manager | None = None,
                   ms: MS = _MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
     width, fw = 220, 10  # width, frame_width
     all_width = width + fw * 2
@@ -1086,13 +893,13 @@ def draw_info_box(maidata: MaiData, server: SERVER_TAG, user_info: dict | None =
                 stroke=(0.8, '#FFF'))
         du1.text(cnv_x+17, im_y1_5, text="\n国服无此乐曲", fill='#FFF', anchor='mm', font=FONT.font('MIS_DB', size=ms.x(4)))
     # 游玩记录信息
-    if user_info:
-        # TODO 获取实际数据
+    if b50manager_jp or b50manager_cn:
+        nickname = b50manager_cn.user_name if b50manager_cn else (b50manager_jp.user_name if b50manager_jp else "maimai")
         record_info = '\n'.join([
-            f"{get_full_width_text(user_info.get('nickname', 'maimai'))} (Ra {user_info.get('rating', '---')})",
+            f"{get_full_width_text(nickname)})",
             "Updated:",
-            f"  [CN] {user_info.get('updated_cn', 'Now (from diving-fish)')}",
-            f"  [JP] {user_info.get('updated_jp', 'Not Updated')}",
+            f"  [CN({b50manager_cn.dxrating})] {b50manager_cn.update_time}" if b50manager_cn else "  [CN] Not Updated",
+            f"  [JP({b50manager_jp.dxrating})] {b50manager_jp.update_time}" if b50manager_jp else "  [JP] Not Updated",
         ])
         du1.text(dv_x, dy, text="游玩数据", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=ms.x(4)))
         du1.text(dv_x, im_y1_5, text=record_info, fill='#FFF', anchor='lm', font=FONT.font('MIS_DB', size=ms.x(2.8)))
@@ -1186,192 +993,240 @@ def draw_info_box(maidata: MaiData, server: SERVER_TAG, user_info: dict | None =
     result_img.paste(board_last, (0, footer_y), board_last)
     return result_img
 
-    # self.img: Image.Image = ASSETS.background(ms.xy(width, height)) or Image.new('RGBA', ms.xy(width, height), COLOR_THEME)
-    # self.img.convert('RGBA')
+
+def draw_b50_4line(b50manager: MaiB50Manager,
+             ms: MS = _MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+    fw, margin = 10, 5
     
+    # --- 尺寸预计算 ---
+    # 获取示例图以确定原始尺寸 (box_w, box_h 为未经过 ms 缩放的原始数值)
+    temp_box = IMU.mini_box(None, 0, 'JP', ms=ms, cn_level=cn_level)
+    if isinstance(temp_box, tuple):
+        box_w, box_h = temp_box
+    else:
+        w, h = temp_box.size
+        box_w, box_h = ms.rev(w), ms.rev(h)
+        temp_box.close()
 
+    # 根据 4 列布局计算总宽
+    # 宽度 = 左右外边距(fw*2) + 4个框宽 + 3个框间距
+    width = fw * 2 + box_w * 4 + margin * 3
+    inner_width = width - fw * 2
+    inner_width_msed = ms.x(inner_width)
+    box_w_msed, box_h_msed = ms.x(box_w), ms.x(box_h)
+    gap_msed = ms.x(margin)
 
+    # --- Board 1: User Info Header (用户信息板块) ---
+    # 我们将头像和 Rating 放在左上角的“空位”区域，或者保持原有的 Header 结构
+    header_h = 32
+    board_title = Image.new('RGBA', ms.xy(width - fw * 2, header_h), NO_COLOR)
+    du1 = DrawUnit(board_title, multiple=ms, cn_level=cn_level)
+    
+    # 头像处理
+    avatar_size = 32
+    user_avatar = b50manager.user_avatar if b50manager.user_avatar else Image.new('RGB', (10, 10), color='#CCC')
+    if user_avatar.size != ms.xy(avatar_size, avatar_size):
+        user_avatar = user_avatar.resize(ms.xy(avatar_size, avatar_size), Image.Resampling.LANCZOS)
+    mask = IMU.get_mask(w=avatar_size, h=avatar_size, radius=5, ms=ms)
+    board_title.paste(user_avatar, (0, 0), mask)
+    du1.rounded_rect(0, 0, avatar_size, avatar_size, radius=5, fill=None, outline='#FFF', width=1)
+    
+    # DX Rating 框与数字
+    dx_ra_x, dx_ra_y = 36, 0
+    if dxra_frame := ASSETS.dxrating_image(b50manager.dxrating_filename, size=ms.xy(70, 14)):
+        board_title.paste(dxra_frame, ms.xy(dx_ra_x, dx_ra_y), dxra_frame)
+    
+    ra_font = FONT.font('MIS_DB', size=ms.x(8))
+    for i, digit in enumerate(str(b50manager.dxrating)[::-1]):
+        dx = 57.5 - 5.5 * i
+        du1.text(dx_ra_x + dx, dx_ra_y + 7.1, text=digit, fill='#FCC916', anchor='mm', 
+                 font=ra_font, stroke=(0.35, '#333'))
+                 
+    # 用户名条
+    du1.rounded_rect(36, 15, 100, 17, fill='#333', radius=2)
+    du1.text(36, 23.5, text=' ' + get_full_width_text(b50manager.user_name), fill='#FFF', anchor='lm',
+             font=FONT.font('MIS_DB', size=ms.x(10)))
 
-class DrawInfo(DrawFactory):
-    """实现 `info11951` 图像的绘制"""
+    # 游玩记录信息
+    record_info = f"Updated: [{b50manager.server}] {b50manager.update_time if b50manager.update_time else 'Not Updated'}"
+    du1.text(inner_width-2, 2, text=record_info, fill='#FFF', anchor='ra', font=FONT.font('MIS_DB', size=ms.x(5)))
 
-    def __init__(self, maidata: MaiData, server: SERVER_TAG, multiple: float = 1, cn_level: Literal[0, 1, 2] = 0):
-        super().__init__(width=240, height=240, ms_multiple=int(10 * multiple), cn_level=cn_level)
-        self._info(maidata, server)
+    del du1
 
-    def _info(self, maidata: MaiData, server: SERVER_TAG):
-        """实现 `info11951` 图像的绘制"""
-        x, y = 10, 10
-        width = 220
-        margin = 5
-        du = self.du
-
-        # ========== Module.1 曲绘和基本信息 ==========
-        # 曲绘
-        cover_size = 54
-        img = maidata.image if maidata.image else Image.new('RGB', (10, 10), color='#999')
-        # du.image(x, y, cover_size, cover_size, radius=5, outline='#FFF', outline_width=1, png=img)
+    # --- 内部函数: 构建 B35/B15 板块 ---
+    def create_list_board(data_list: list, is_b15: bool) -> Image.Image | None:
+        if not data_list:
+            return None
+            
+        cols = 4
+        total_count = len(data_list) + 1  # 加 1 是为了空出左上角
+        rows = (total_count + cols - 1) // cols
+        board_h_msed = rows * box_h_msed + (rows - 1) * gap_msed
         
-        mask = IMU.get_mask(w=cover_size, h=cover_size, radius=5, ms=self.ms)
-        cover_img = img.resize(self.ms.xy(cover_size, cover_size), Image.Resampling.LANCZOS)
-        self.img.paste(cover_img, self.ms.xy(x + 2, y + 2), mask)
-        du.rounded_rect(x+2, y+2, cover_size, cover_size, radius=5, fill=None, outline='#FFF', width=1)
+        board = Image.new('RGBA', (inner_width_msed, round(board_h_msed)), NO_COLOR)
         
-        t = cover_size + margin
-        # 标题
-        du.text(x + t, y, text=maidata.title, fill='#FFF', anchor='la',
-                font=FONT.font('MIS_HE', size=self.ms.x(11)))
-        # 艺术家
-        du.text(x + t, y + 14, text=maidata.artist, fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=self.ms.x(5)))
-        # ShortID, BPM
-        du.text(x + t, y + 23, text=f"ID {maidata.shortid}", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=self.ms.x(6)))
-        du.text(x + t + 30, y + 23, text=f"BPM {maidata.bpm}", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=self.ms.x(6)))
-        du.text(x + t + 60, y + 23, text=f"数据来源: {maidata.converter}", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=self.ms.x(6)))
-        # Genre, Version
-        gvv_title = y + 34
-        gvv_la = gvv_title + 5
-        gvv_mm = gvv_la + 9
+        for i, (maidata, diff) in enumerate(data_list, start=1):
+            # i=0 的位置被跳过，i=1 是第一行第二列
+            tx = (i % cols) * (box_w_msed + gap_msed)
+            ty = (i // cols) * (box_h_msed + gap_msed)
+            
+            box_img = IMU.b50_box(maidata, diff, b50manager.server, 
+                                  b50manager.current_version, i, is_b15, ms, cn_level)
+            if box_img:
+                board.paste(box_img, (round(tx), round(ty)), box_img)
+                box_img.close()
+        return board
 
-        p = 34 + margin
-        du.text(x+t, gvv_title, text="流派", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=self.ms.x(4)))
-        du.text(x+t+p, gvv_title, text="JP", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=self.ms.x(4)))
-        du.text(x+t+p*2, gvv_title, text="CN", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=self.ms.x(4)))
+    board_b35 = create_list_board(b50manager.get_lists()[0], is_b15=False)
+    board_b15 = create_list_board(b50manager.get_lists()[1], is_b15=True)
 
-        # Genre
-        genre_text, genre_fill = get_genre(maidata.genre, cn_level=self.cn_level)
-        genre_text = genre_text.replace('\\n', '\n')
-        du.text(x+t+17, gvv_mm, text=genre_text, fill='#FFF', anchor='mm', font=FONT.font('MIS_DB', size=self.ms.x(5)),
-                shadow=(1.5, '#FFF'))
-        du.text(x+t+17, gvv_mm, text=genre_text, fill=genre_fill, anchor='mm', font=FONT.font('MIS_DB', size=self.ms.x(5)),
-                shadow=(1, '#FFF'))
-        # JP
-        if ver_jp := ASSETS.version_image(maidata.version, size=self.ms.xy(34, 16)):
-            self.img.paste(ver_jp, self.ms.xy(x+t+p, gvv_la), ver_jp)
-        else:
-            text = VERSIONS_DATA.get(maidata.version, str(maidata.version))
-            text = text.replace(' ', '\n')
-            du.text(x+t+p+17, gvv_mm, text=text,
-                    fill='#FFF', anchor='mm', font=FONT.font('MIS_DB', size=self.ms.x(5)))
-        # CN: 需要考虑不存在
-        if maidata.version_cn:
-            if ver_cn := ASSETS.version_image(maidata.version_cn, size=self.ms.xy(34, 16)):
-                self.img.paste(ver_cn, self.ms.xy(x+t+p*2, gvv_la), ver_cn)
-            else:
-                text = VERSIONS_DATA.get(maidata.version_cn, str(maidata.version_cn))
-                text = text.replace(' ', '\n')
-                du.text(x+t+p*2+17, gvv_mm, text=text,
-                        fill='#FFF', anchor='mm', font=FONT.font('MIS_DB', size=self.ms.x(5)))
-        else:
-            du.text(x+t+p*2+17, gvv_mm, text="X\n", fill='#F00', anchor='mm', font=FONT.font('MIS_DB', size=self.ms.x(4)),
-                    stroke=(0.8, '#FFF'))
-            du.text(x+t+p*2+17, gvv_mm, text="\n国服无此乐曲", fill='#FFF', anchor='mm', font=FONT.font('MIS_DB', size=self.ms.x(4)))
+    # --- Board 4: Footer ---
+    board_last = IMU.copyright_bar(width=width, ms=ms, cn_level=cn_level)
 
-        y += cover_size + margin
-
-        # ========== Module.2 乐曲别名数据 ==========
-        if maidata.aliases:
-            line_height = 7
-            padding = 5
-
-            # 绘制标题
-            du.text(x, y, text="这首歌的别名包括：", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=self.ms.x(5)))
-            y += line_height
-            current_x_offset = 0
-
-            for alias in maidata.aliases:
-                alias_width = self.ms.rev(FONT.font('MIS_DB', size=self.ms.x(5)).getlength(alias.alias))
-                if current_x_offset + alias_width > width:
-                    y += line_height
-                    current_x_offset = 0
-
-                # TODO: 增加下划线分辨别名
-                du.text(x + current_x_offset, y, text=alias.alias, fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=self.ms.x(5)))
-                current_x_offset += alias_width + padding
-
-            y += line_height + margin
-
-        # ========== Module.3 详细谱面数据 ==========
-        now_x = x
-        for i, chart in enumerate(maidata.charts.values()):
-            if chart.difficulty >= 4:
-                cb = IMU.chart_box(chart, cabinet_dx=maidata.is_cabinet_dx, server=server, ms=self.ms, cn_level=self.cn_level)
-                self.img.paste(cb, self.ms.xy(now_x, y), cb)
-                _w, ht = cb.size
-                h = self.ms.rev(ht)
-                # _w, h = self.chart_box(now_x, y, chart, cabinet_dx=maidata.is_cabinet_dx, server=server)
-            else:
-                _w, h = self.chart_box_lite(now_x, y, chart, cabinet_dx=maidata.is_cabinet_dx, server=server)
-            if (i + 1) % 2 == 1:
-                now_x = 123
-                if len(maidata.charts) - i == 1:
-                    y += h + margin  # 向下传递
-            else:
-                now_x = 10
-                y += h + margin
-
-        # ========== Module.4 版权信息 ==========
-        cb = IMU.copyright_bar(240, ms=self.ms, cn_level=self.cn_level)
-        self.img.paste(cb, (0, self.ms.x(y)), cb)
-        _w, h = cb.size
-        # 切割
-        self.img = self.img.crop((0, 0, self.ms.x(240), self.ms.x(y + h)))
-        self.img = self.img.convert('RGB')
+    # --- 最终组装 ---
+    boards = [b for b in [board_title, board_b35, board_b15] if b is not None]
+    spacing = ms.x(fw)
+    
+    all_height_msed = (ms.x(fw) * 2 + 
+                       sum(b.height for b in boards) + 
+                       spacing * (len(boards) - 1) + 
+                       board_last.height)
+    
+    result_img = Image.new('RGBA', (ms.x(width), all_height_msed), COLOR_THEME)
+    
+    # 粘贴背景
+    if bg_img := ASSETS.background(result_img.size):
+        result_img.paste(bg_img, (0, 0))
+    
+    # 纵向布局
+    curr_y = ms.x(fw)
+    for b in boards:
+        result_img.paste(b, (ms.x(fw), curr_y), b)
+        curr_y += b.height + spacing
+        b.close()
+    
+    # 粘贴页脚
+    result_img.paste(board_last, (0, all_height_msed - board_last.height), board_last)
+    
+    return result_img.convert('RGB')
 
 
-class DrawB50Boxex(DrawFactory):
-    """实现 `b50` 图像的绘制"""
+def draw_b50_5line(b50manager: MaiB50Manager,
+                   ms: MS = _MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+    fw, margin = 10, 5
+    
+    # --- 尺寸预计算 ---
+    temp_box = IMU.mini_box(None, 0, 'JP', ms=ms, cn_level=cn_level)
+    if isinstance(temp_box, tuple):
+        box_w, box_h = temp_box
+    else:
+        w, h = temp_box.size
+        box_w, box_h = ms.rev(w), ms.rev(h)
+        temp_box.close()
 
-    def __init__(self, b50manager: MaiB50Manager, user_name: str, user_avatar: Optional[Image.Image] = None,
-                 multiple: float = 1, cn_level: Literal[0, 1, 2] = 0):
-        super().__init__(width=411, height=580, ms_multiple=int(10 * multiple), cn_level=cn_level)
-        self._b50(b50manager, user_name, user_avatar)
+    # --- 修改点 1: 重新计算总宽度 ---
+    # 5 列布局：宽度 = 左右外边距(fw*2) + 5个框宽 + 4个框间距
+    width = fw * 2 + box_w * 5 + margin * 4 
+    inner_width = width - fw * 2
+    inner_width_msed = ms.x(inner_width)
+    box_w_msed, box_h_msed = ms.x(box_w), ms.x(box_h)
+    gap_msed = ms.x(margin)
 
-    def _b50(self, b50manager: MaiB50Manager, user_name: str, user_avatar: Optional[Image.Image]):
-        """实现 `b50` 图像的绘制"""
-        x, y = 7, 7
-        margin = 3
-        du = self.du
+    # --- Board 1: User Info Header ---
+    header_h = 32
+    board_title = Image.new('RGBA', ms.xy(width - fw * 2, header_h), NO_COLOR)
+    du1 = DrawUnit(board_title, multiple=ms, cn_level=cn_level)
+    
+    avatar_size = 32
+    user_avatar = b50manager.user_avatar if b50manager.user_avatar else Image.new('RGB', (10, 10), color='#CCC')
+    if user_avatar.size != ms.xy(avatar_size, avatar_size):
+        user_avatar = user_avatar.resize(ms.xy(avatar_size, avatar_size), Image.Resampling.LANCZOS)
+    mask = IMU.get_mask(w=avatar_size, h=avatar_size, radius=5, ms=ms)
+    board_title.paste(user_avatar, (0, 0), mask)
+    du1.rounded_rect(0, 0, avatar_size, avatar_size, radius=5, fill=None, outline='#FFF', width=1)
+    
+    dx_ra_x, dx_ra_y = 36, 0
+    if dxra_frame := ASSETS.dxrating_image(b50manager.dxrating_filename, size=ms.xy(70, 14)):
+        board_title.paste(dxra_frame, ms.xy(dx_ra_x, dx_ra_y), dxra_frame)
+    
+    ra_font = FONT.font('MIS_DB', size=ms.x(8))
+    for i, digit in enumerate(str(b50manager.dxrating)[::-1]):
+        dx = 57.5 - 5.5 * i
+        du1.text(dx_ra_x + dx, dx_ra_y + 7.1, text=digit, fill='#FCC916', anchor='mm', 
+                 font=ra_font, stroke=(0.35, '#333'))
+                 
+    du1.rounded_rect(36, 15, 100, 17, fill='#333', radius=2)
+    du1.text(36, 23.5, text=' ' + get_full_width_text(b50manager.user_name), fill='#FFF', anchor='lm',
+             font=FONT.font('MIS_DB', size=ms.x(10)))
 
-        # 头像
-        user_avatar = user_avatar if user_avatar else Image.new('RGB', (10, 10), color='#CCC')
-        # i, m = IMU.radius_image(image=user_avatar, w=32, h=32, radius=5, outline=(1, '#FFF'), ms=self.ms)
-        # self.img.paste(i, self.ms.xy(x, y), m)
-        # Username
-        du.rounded_rect(x+36, y+15, 100, 17, fill='#333', radius=2)
-        du.text(x+36, y+23.5, text=' ' + get_full_width_text(user_name), fill='#FFF', anchor='lm',
-                font=FONT.font('MIS_DB', size=self.ms.x(10)))
-        # DX Rating
-        if dxra_frame := ASSETS.dxrating_image(b50manager.dxrating_filename, size=self.ms.xy(70, 14)):
-            self.img.paste(dxra_frame, self.ms.xy(x+36, y), dxra_frame)
-        # Rating Number
-        font = FONT.font('MIS_DB', size=self.ms.x(8))
-        for i, digit in enumerate(str(b50manager.dxrating)[::-1]):
-            dx = 57.5 - 5.5 * i
-            du.text(x+36+dx, y+7.1, text=digit, fill='#FCC916', anchor='mm', font=font,
-                    stroke=(0.35, '#333'))
+    record_info = f"Updated: [{b50manager.server}] {b50manager.update_time if b50manager.update_time else 'Not Updated'}"
+    du1.text(inner_width-2, 2, text=record_info, fill='#FFF', anchor='ra', font=FONT.font('MIS_DB', size=ms.x(5)))
 
-        y += 32 + margin * 2
+    del du1
 
-        b35, b15 = b50manager.get_lists()
+    # --- 内部函数: 构建 B35/B15 板块 ---
+    def create_list_board(data_list: list, is_b15: bool) -> Image.Image | None:
+        if not data_list:
+            return None
+            
+        # --- 修改点 2: 修改列数 ---
+        cols = 5 
+        total_count = len(data_list)
+        rows = (total_count + cols - 1) // cols
+        board_h_msed = rows * box_h_msed + (rows - 1) * gap_msed
+        
+        board = Image.new('RGBA', (inner_width_msed, round(board_h_msed)), NO_COLOR)
+        
+        for i, (maidata, diff) in enumerate(data_list, start=0):
+            # 计算 5 列下的坐标
+            tx = (i % cols) * (box_w_msed + gap_msed)
+            ty = (i // cols) * (box_h_msed + gap_msed)
+            
+            box_img = IMU.b50_box(maidata, diff, b50manager.server, 
+                                  b50manager.current_version, i, is_b15, ms, cn_level)
+            if box_img:
+                board.paste(box_img, (round(tx), round(ty)), box_img)
+                box_img.close()
+        return board
 
-        for i, (maidata, diff) in enumerate(b35, start=1):
-            tx = x + i % 4 * (97 + 3)
-            ty = y + i // 4 * (36 + 3)
-            _w, _h = self.b50_box(tx, ty, maidata, diff_number=diff, server=b50manager.server, current_version=b50manager.current_version, index=i, is_b15=False)
-        y += (len(b35) + 3) // 4 * (36 + 3) + margin
+    board_b35 = create_list_board(b50manager.get_lists()[0], is_b15=False)
+    board_b15 = create_list_board(b50manager.get_lists()[1], is_b15=True)
 
-        for i, (maidata, diff) in enumerate(b15, start=1):
-            tx = x + i % 4 * (97 + 3)
-            ty = y + i // 4 * (36 + 3)
-            _w, _h = self.b50_box(tx, ty, maidata, diff_number=diff, server=b50manager.server, current_version=b50manager.current_version, index=i, is_b15=True)
-        y += (len(b15) + 3) // 4 * (36 + 3)
+    # --- Board 4: Footer ---
+    board_last = IMU.copyright_bar(width=width, ms=ms, cn_level=cn_level)
 
-        cb = IMU.copyright_bar(411, ms=self.ms, cn_level=self.cn_level)
-        self.img.paste(cb, (0, self.ms.x(y)), cb)
-        _w, h = cb.size
-        # 切割
-        self.img = self.img.crop((0, 0, self.ms.x(411), self.ms.x(y + h)))
-        self.img = self.img.convert('RGB')
+    # --- 最终组装 ---
+    boards = [b for b in [board_title, board_b35, board_b15] if b is not None]
+    spacing = ms.x(fw)
+    
+    all_height_msed = (ms.x(fw) * 2 + 
+                        sum(b.height for b in boards) + 
+                        spacing * (len(boards) - 1) + 
+                        board_last.height)
+    
+    result_img = Image.new('RGBA', (ms.x(width), all_height_msed), COLOR_THEME)
+    
+    if bg_img := ASSETS.background(result_img.size):
+        result_img.paste(bg_img, (0, 0))
+    
+    curr_y = ms.x(fw)
+    for b in boards:
+        result_img.paste(b, (ms.x(fw), curr_y), b)
+        curr_y += b.height + spacing
+        b.close()
+    
+    result_img.paste(board_last, (0, all_height_msed - board_last.height), board_last)
+    
+    return result_img.convert('RGB')
+
+
+def draw_b50(b50manager: MaiB50Manager, line: Literal[4, 5] = 5,
+             ms: MS = _MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+    if line == 4:
+        return draw_b50_4line(b50manager, ms, cn_level)
+    elif line == 5:
+        return draw_b50_5line(b50manager, ms, cn_level)
+    return Image.new('RGB', (1, 1), color='#F00')  # 错误占位图
 
 
 def simple_list(maidata_list: List[MaiData]) -> Image.Image:
@@ -1394,15 +1249,20 @@ if __name__ == "__main__":
     aliases = ["transcend lights","超越光","九月的雨","超超光光","美瞳广告","小女孩们的茶话会","超越之光","bright主题曲","别急19","音击的武士","tl","萝莉的雨","音击妹妹","114514","音击的雨"]
     maidata = MaiData(11451, "Transcend Lights", 70, "曲：小高光太郎／歌：オンゲキシューターズ", 5, 'DX', 18, 2023, 'debug', Path(r"E:\Projects\PythonProjects\lyra-bot\temp\debug_cover.png"), None,
                       aliases=[MaiAlias(11451, a, 0, -1) for a in aliases])
+    maidata2 = MaiData(11451, "Transcend Lights", 70, "曲：小高光太郎／歌：オンゲキシューターズ", 5, 'DX', 25, 2023, 'debug', Path(r"E:\Projects\PythonProjects\lyra-bot\temp\debug_cover.png"), None,
+                       aliases=[MaiAlias(11451, a, 0, -1) for a in aliases])
     for i in range(2, 7):
         chart = MaiChart(11451, i, 1+i*3)
         chart.set_ach(MaiChartAch(11451, i, 'JP', 97.6+i*0.5, combo=3, sync=2))
         maidata.set_chart(chart)
-    
-    # target = DrawInfo(maidata, server='JP').get_image()
-    target = draw_info_box(maidata, server='JP', cn_level=2)
+        maidata2.set_chart(chart)
 
-    #     target = DrawB50Boxex([(maidata, randint(2, 6)) for _ in range(35)], [(maidata, randint(2, 6)) for _ in range(15)], multiple=1, cn_level=1, user_name="NameWCNM", user_avatar=None,
-    #                       current_version=25, ra=15254).get_image()
+    manager = MaiB50Manager(user_name="TestUser", server='JP', current_version=25)
+    from random import randint
+    manager.add_entries([(maidata, randint(2, 6)) for _ in range(35)])
+    manager.add_entries([(maidata2, randint(2, 6)) for _ in range(15)])
 
-    target.save(r"E:\UserFile\Desktop\debug2.png")
+    # target = draw_b50(manager, line=5, ms=MS(5), cn_level=1)
+    target = draw_info_box(maidata, server='JP', ms=MS(5), cn_level=1)
+
+    target.show()

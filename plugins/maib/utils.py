@@ -362,9 +362,13 @@ class MaiData:
 
 
 class MaiB50Manager:
-    def __init__(self, current_version: int, server: SERVER_TAG):
+    def __init__(self, current_version: int, server: SERVER_TAG,
+                 user_name: str, user_avatar: Image.Image | None = None, update_time: int | None = None):
         self.current_version = current_version
         self.server: SERVER_TAG = server
+        self.user_name = user_name
+        self.user_avatar = user_avatar
+        self.update_time = update_time
         # 存储格式: (rating, maidata, diff)
         self._b35: List[Tuple[int, 'MaiData', int]] = []
         self._b15: List[Tuple[int, 'MaiData', int]] = []
@@ -382,6 +386,7 @@ class MaiB50Manager:
         
         # 1. 确定使用的边界和前缀
         is_cirp = 26 <= ver < 2000
+        is_cirp = True  # 强制使用新版框体背景图
         bounds = BOUNDARIES_DX_RATING_NEW if is_cirp else BOUNDARIES_DX_RATING
         
         # 定位索引
