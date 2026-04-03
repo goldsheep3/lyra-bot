@@ -5,7 +5,7 @@ from typing import Optional, Tuple, Literal, List, Iterator, Any
 from dataclasses import dataclass
 from functools import lru_cache
 
-from PIL import Image, ImageDraw, ImageFont, ImageChops
+from PIL import Image, ImageDraw, ImageFont
 
 from .utils import MaiData, MaiChart, MaiChartAch, MaiAlias, MaiB50Manager
 from .constants import *
@@ -25,7 +25,7 @@ class FontManager:
         'JBM_BD': "JetBrainsMono-Bold.ttf",
         'JBM_EB': "JetBrainsMono-ExtraBold.ttf",
         'NCE_RG': 'NotoColorEmoji-Regular.ttf',
-        'NSS_RG': "NotoSansSymbols2-Regular.ttf"
+        'NSS_RG': "NotoSansSymbols2-Regular.ttf",
     }
 
     def __init__(self, font_path: Path):
@@ -42,6 +42,12 @@ class FontManager:
 
         font_name = self._font_dict.get(font_code, f"{font_code}.ttf")
         font_file = self._font_path / font_name
+        if not font_file.exists():
+            # 尝试直接使用 font_code 作为文件名
+            font_file = self._font_path / f"{font_code}.ttf"
+        if not font_file.exists():
+            # 尝试直接读取 font_code 作为路径
+            font_file = Path(font_code)
 
         try:
             return self._get_font(font_file, istool_size)
@@ -88,9 +94,10 @@ COLOR_DXSCORE_GN = '#0A5'
 COLOR_DXSCORE_OR = '#C72'
 COLOR_DXSCORE_GD = '#ED4'
 COLOR_THEME = '#64d2ce'
+NO_COLOR = '#FFFFFF00'  # 完全透明
 
 # 难度
-@dataclass(frozen=True)  # 使用 frozen 保证成员不可变
+@dataclass(frozen=True)
 class Diff:
     code: int
     text_title: str
@@ -246,7 +253,6 @@ def get_image_from_path_or_weburl(path_or_url: str | Path) -> Optional[Image.Ima
             return None
     return None
 
-
 def get_range_index_left_closed(boundaries, value):
     """
     根据左闭右开区间 [b[i], b[i+1]) 返回索引 i
@@ -398,7 +404,6 @@ class DrawUnit:
             # 标准阴影层
             self._text(x, y, text=text, fill=shadow[1], anchor=anchor, font=font,
                        stroke_fill=shadow[1], stroke_width=shadow[0])
-        # 主文字层
         self._text(x, y, text=text, fill=fill, anchor=anchor, font=font, stroke_fill=stroke[1], stroke_width=stroke[0])
 
     def double_text(self, x: float, y: float, text: str, fill: Optional[str], anchor: str, font: ImageFont.FreeTypeFont,
@@ -733,6 +738,7 @@ class ImageUnit:
         du.ach(ow + 2, ow + 9, diff, ach.achievement)
         dxs, dxs_max, dxs_star = ach.dxscore_tuple
         du.dxscore(ow + 38, ow + 25, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
+        # 评价图标
         fc = IMU.evaluate(Combo.get(ach.combo), ms=ms, cn_level=cn_level)
         img.paste(fc, ms.xy(ow + 3, ow + 27-3), fc)
         fs = IMU.evaluate(Sync.get(ach.sync), ms=ms, cn_level=cn_level)
@@ -747,6 +753,40 @@ class ImageUnit:
         du.infos(ow + 65.5, ow + 21.65, lines=(info_line5 + [''] * 5)[:5], line_height=4.5, limit_width=-1,
                  font=FONT.font('MIS_DB', size=ms.x(3.2)))
 
+        return img
+
+    def chart_box_lite(self, chart: MaiChart, cabinet_dx: bool, server: SERVER_TAG, plus_level: int = 6, 
+                       is_utage: bool = False, ms: MS = _MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+        """组件：谱面信息框 Lite"""
+        w, h, ow = 108, 25, 1  # w, h, outline_width
+        width, height = w + ow * 2, h + ow * 2
+        diff = Difficulty.get(chart.difficulty)
+
+        img = Image.new('RGBA', ms.xy(width, height), '#FFFFFF00')
+        du = DrawUnit(img, multiple=ms, cn_level=cn_level)
+
+        du.rounded_rect(ow, ow, w, h, radius=4, fill=diff.bg)
+        du.cut_line(ow, ow, w, h, radius=4, line_y=ow + 2, line_h=5, fill=diff.title_bg)
+        du.rounded_rect(ow, ow, w, h, radius=4, fill=None, outline=diff.frame, width=1)
+        # 难度、DX
+        difficulty = IMU.difficulty(diff=diff, ms=ms, cn_level=cn_level)
+        diff_height = ms.rev(difficulty.size[1])
+        img.paste(difficulty, ms.xy(ow + 2.5, ow + 4.3 - diff_height / 2), difficulty)
+        badge = IMU.draw_badge(is_cabinet_dx=cabinet_dx, ms=ms, cn_level=cn_level)
+        img.paste(badge, ms.xy(ow + 85, ow + 2), badge)
+        # 等级 LV
+        plus = round(chart.lv % 1 * 10) >= plus_level
+        du.level(ow + 64, ow + 7.4, diff, chart.lv, plus=plus, ignore_decimal=is_utage)
+        # 达成率
+        ach = chart.get_ach(server=server)
+        du.ach(ow + 46, ow + 9, diff, ach.achievement)
+        dxs, dxs_max, dxs_star = ach.dxscore_tuple
+        du.dxscore_lite(ow + 2, ow + 20, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
+        # 评价图标
+        fc = IMU.evaluate(Combo.get(ach.combo), ms=ms, cn_level=cn_level)
+        img.paste(fc, ms.xy(ow + 3, ow + 12 - 3), fc)
+        fs = IMU.evaluate(Sync.get(ach.sync), ms=ms, cn_level=cn_level)
+        img.paste(fs, ms.xy(ow + 3, ow + 17 - 3), fs)
         return img
 
 IMU = ImageUnit()  # 全局图像元件实例
@@ -989,18 +1029,22 @@ class DrawFactory:
         return w, h
 
 
-def draw_info_box(maidata: MaiData, server: SERVER_TAG, ms: MS = _MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
-    width, fw = 200, 20  # width, frame_width
+def draw_info_box(maidata: MaiData, server: SERVER_TAG, user_info: dict | None = None,
+                  ms: MS = _MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+    width, fw = 220, 10  # width, frame_width
     all_width = width + fw * 2
 
     # Board 1: 曲绘和基本信息
     cover_width = 54
-    board1 = Image.new('RGBA', (width, cover_width + 2), '#FFFFFF00')
+    board1 = Image.new('RGBA', ms.xy(width, cover_width + 2), NO_COLOR)
     du1 = DrawUnit(board1, multiple=ms, cn_level=cn_level)
     # 曲绘
-    img = maidata.image if maidata.image else Image.new('RGB', (10, 10), color='#999')
+    img = maidata.image if maidata.image else Image.new('RGB', ms.xy(cover_width, cover_width), color='#999')
     mask = IMU.get_mask(w=cover_width, h=cover_width, radius=5, ms=ms)
-    cover_img = img.resize(ms.xy(cover_width, cover_width), Image.Resampling.LANCZOS)
+    if img.size != (cover_width, cover_width):
+        cover_img = img.resize(ms.xy(cover_width, cover_width), Image.Resampling.LANCZOS)
+    else:
+        cover_img = img  # 避免不必要的复制
     board1.paste(cover_img, ms.xy(1, 1), mask)
     du1.rounded_rect(1, 1, cover_width, cover_width, radius=5, fill=None, outline='#FFF', width=1)
     # 标题、艺术家、ID、BPM、来源
@@ -1010,25 +1054,27 @@ def draw_info_box(maidata: MaiData, server: SERVER_TAG, ms: MS = _MS_DEFAULT, cn
     du1.text(dx, 23, text=f"ID {maidata.shortid}", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=ms.x(6)))
     du1.text(dx+30, 23, text=f"BPM {maidata.bpm}", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=ms.x(6)))
     du1.text(dx+60, 23, text=f"谱面来源: {maidata.converter}", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=ms.x(6)))
-    # 流派、JP/CN 版本、游玩记录版本
+    # 流派、JP/CN 版本
     margin = 5
-    dy = 34
-    im_y1, im_y1_5 = dy+5, dy+14  # 标题高 5，图片高 18：5 + 18/2 = 14
-    genre_x, jpv_x, cnv_x = dx, dx+34+margin, dx+68+margin*2
+    dy = 32
+    im_y1, im_y1_5 = dy+3, dy+12  # (标题高 5，图片高 18：5 + 18/2 = 14) 再整体向上 y-2 和上方文本微调
+    genre_x, jpv_x, cnv_x, dv_x = dx, dx+34+margin, dx+68+margin*2, dx+102+margin*3
     du1.text(genre_x, dy, text="流派", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=ms.x(4)))
-    du1.text(jpv_x, dy, text="JP", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=ms.x(4)))
-    du1.text(cnv_x, dy, text="CN", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=ms.x(4)))
     if maidata.genre:
         genre_text, genre_fill = get_genre(maidata.genre, cn_level=cn_level)
         genre_text = genre_text.replace('\\n', '\n')
         du1.text(genre_x+17, im_y1_5, text=genre_text, fill=genre_fill, anchor='mm', font=FONT.font('MIS_DB', size=ms.x(5)),
                 shadow=(1.2, '#FFF'))
+
+    du1.text(jpv_x, dy, text="JP", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=ms.x(4)))
     if maidata.version:
         if ver_jp := ASSETS.version_image(maidata.version, size=ms.xy(34, 16)):
             board1.paste(ver_jp, ms.xy(jpv_x, im_y1), ver_jp)
         else:
             text = VERSIONS_DATA.get(maidata.version, str(maidata.version)).replace(' ', '\n')
             du1.text(jpv_x+17, im_y1_5, text=text, fill='#FFF', anchor='mm', font=FONT.font('MIS_DB', size=ms.x(5)))
+     
+    du1.text(cnv_x, dy, text="CN", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=ms.x(4)))
     if maidata.version_cn:
         if ver_cn := ASSETS.version_image(maidata.version_cn, size=ms.xy(34, 16)):
             board1.paste(ver_cn, ms.xy(cnv_x, im_y1), ver_cn)
@@ -1039,24 +1085,105 @@ def draw_info_box(maidata: MaiData, server: SERVER_TAG, ms: MS = _MS_DEFAULT, cn
         du1.text(cnv_x+17, im_y1_5, text="X\n", fill='#F00', anchor='mm', font=FONT.font('MIS_DB', size=ms.x(4)),
                 stroke=(0.8, '#FFF'))
         du1.text(cnv_x+17, im_y1_5, text="\n国服无此乐曲", fill='#FFF', anchor='mm', font=FONT.font('MIS_DB', size=ms.x(4)))
+    # 游玩记录信息
+    if user_info:
+        # TODO 获取实际数据
+        record_info = '\n'.join([
+            f"{get_full_width_text(user_info.get('nickname', 'maimai'))} (Ra {user_info.get('rating', '---')})",
+            "Updated:",
+            f"  [CN] {user_info.get('updated_cn', 'Now (from diving-fish)')}",
+            f"  [JP] {user_info.get('updated_jp', 'Not Updated')}",
+        ])
+        du1.text(dv_x, dy, text="游玩数据", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=ms.x(4)))
+        du1.text(dv_x, im_y1_5, text=record_info, fill='#FFF', anchor='lm', font=FONT.font('MIS_DB', size=ms.x(2.8)))
+    del du1  # 释放绘图单元资源
 
     # Board 2: 别名信息
     if maidata.aliases:
-        board2 = None
+        font_size = 4
+        font = FONT.font('MIS_DB', size=ms.x(font_size))
+        alias_width_list = [(alias.alias, font.getlength(alias.alias)) for alias in maidata.aliases]
+        # 划定别名每行的分割
+        alias_cut: list[tuple[list[str], float]] = [([], 0)]  # [(alias_list, total_width), ...]
+        for alias, alias_width in alias_width_list:
+            # TODO 将空格更换为 ms.x(1.2) 宽度
+            if alias_cut[-1][1] + alias_width + font.getlength(' ') > ms.x(width):
+                alias_cut.append(([alias], alias_width))
+            else:
+                alias_cut[-1][0].append(alias)
+                alias_cut[-1] = (alias_cut[-1][0], alias_cut[-1][1] + alias_width + font.getlength('  '))
+        aliases_height = (len(alias_cut) + 1) * font_size * 1.5  # 带上标题行的高度
+        board2 = Image.new('RGBA', ms.xy(width, aliases_height), NO_COLOR)
+        du2 = DrawUnit(board2, multiple=ms, cn_level=cn_level)
+        du2.text(0, 0, text="这首歌的别名包括：", fill='#FFF', anchor='la', font=font)
+        for i, (alias_list, _) in enumerate(alias_cut):
+            # TODO 后续修改为逐词绘制，并手动绘制下划线
+            du2.text(0, (i+1)*font_size*1.5, text='  '.join(alias_list), fill='#FFF', anchor='la', font=font)
+        del du2  # 释放绘图单元资源
     else:
         board2 = None
+
     # Board 3: 谱面数据
-    board3 = None  # TODO
+    chart_imgs = []
+    for diff, chart in maidata.charts.items():
+        # 对于难度较高的谱面使用完整版信息框，对于难度较低的谱面使用精简版信息框
+        func = IMU.chart_box if diff >= 4 else IMU.chart_box_lite
+        chart_img = func(chart=chart, cabinet_dx=maidata.is_cabinet_dx, server=server, ms=ms, cn_level=cn_level)
+        chart_imgs.append(chart_img)
+
+    # 计算谱面信息框的总高度
+    margin_msed = ms.x(2)
+    rows_data = [] # 存储 (chunk, y_offset)
+    current_y = 0
+
+    for i in range(0, len(chart_imgs), 2):
+        if i > 0:
+            current_y += margin_msed
+        chunk = chart_imgs[i:i+2]
+        row_height = max(img.size[1] for img in chunk)
+        rows_data.append((chunk, current_y))
+        current_y += row_height
+
+    board3 = Image.new('RGBA', (ms.x(width), current_y), NO_COLOR)
+    # 将谱面信息框 paste mark 到 board3 上，粘贴后释放资源
+    canvas_width = ms.x(width)
+    chart_w = chart_imgs[0].size[0] 
+    right_x = canvas_width - chart_w
+    for chunk, y_offset in rows_data:
+        # 粘贴左侧图片
+        board3.paste(chunk[0], (0, y_offset), chunk[0])
+        chunk[0].close()
+        # 可能存在的右侧图片
+        if len(chunk) > 1:
+            board3.paste(chunk[1], (right_x, y_offset), chunk[1])
+            chunk[1].close()
+    # 确保释放
+    chart_imgs.clear()
+    del chart_imgs
+
     # Board 4: 版权底条
-    board4 = IMU.copyright_bar(width=all_width, ms=ms, cn_level=cn_level)
+    board_last = IMU.copyright_bar(width=all_width, ms=ms, cn_level=cn_level)
+
     # BoardCraft
-    boards = [board for board in (board1, board2, board3, board4) if board is not None]
-    all_height_msed = sum(board.height for board in boards) + (len(boards) + 2) * ms.x(fw)
-    result_img = Image.new('RGBA', (ms.x(all_width), all_height_msed), '#FFFFFF00')
+    margin = ms.x(fw) // 3
+    boards = [board for board in (board1, board2, board3) if board is not None]
+    all_height_msed = sum((
+        sum(b.height for b in boards),  # 主要内容板块高度
+        board_last.height,  # 版权底条高度
+        ms.x(fw) * 2,  # 上下外边距
+        (len(boards) - 1) * margin  # 板块间距 (1/3 外边距的内距)
+    ))
+    all_width_msed = ms.x(all_width)
+    result_img = Image.new('RGBA', (all_width_msed, all_height_msed), COLOR_THEME)
+    bg_img = ASSETS.background((all_width_msed, round(all_width_msed)))
+    result_img.paste(bg_img, (0, 0)) if bg_img else None  # 直接粘贴，短会清除多余，长会保留底边
     current_y = ms.x(fw)
     for board in boards:
         result_img.paste(board, (ms.x(fw), current_y), board)
-        current_y += board.height + ms.x(fw)
+        current_y += board.height + margin
+    # 最后贴上版权底条
+    footer_y = all_height_msed - board_last.height
+    result_img.paste(board_last, (0, footer_y), board_last)
     return result_img
 
     # self.img: Image.Image = ASSETS.background(ms.xy(width, height)) or Image.new('RGBA', ms.xy(width, height), COLOR_THEME)
@@ -1272,9 +1399,10 @@ if __name__ == "__main__":
         chart.set_ach(MaiChartAch(11451, i, 'JP', 97.6+i*0.5, combo=3, sync=2))
         maidata.set_chart(chart)
     
-    target = DrawInfo(maidata, server='JP').get_image()
+    # target = DrawInfo(maidata, server='JP').get_image()
+    target = draw_info_box(maidata, server='JP', cn_level=2)
 
     #     target = DrawB50Boxex([(maidata, randint(2, 6)) for _ in range(35)], [(maidata, randint(2, 6)) for _ in range(15)], multiple=1, cn_level=1, user_name="NameWCNM", user_avatar=None,
     #                       current_version=25, ra=15254).get_image()
 
-    target.save(r"E:\UserFile\Desktop\debug.png")
+    target.save(r"E:\UserFile\Desktop\debug2.png")
