@@ -329,7 +329,7 @@ async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
         return
     await matcher.send("小梨绘制中……")
     manager = MaiB50Manager(current_version=get_current_versions()[1], server='CN',
-                            user_name=sy_b50_data.get('nickname', 'maimai'))
+                            user_name=sy_b50_data.get('nickname', 'maimai'), user_avatar=avatar)
     manager.add_entries(maidata_list)
     img = image_gen.draw_b50_5line(manager)
     output = io.BytesIO()
