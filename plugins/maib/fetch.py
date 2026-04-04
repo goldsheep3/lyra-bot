@@ -511,9 +511,9 @@ async def maintenance_task():
         get_session = PluginRegistry.get_session
         async with get_session() as session:
             try:
-                # 1. 尝试使用批量合并而非逐条 upsert
+                # 1. 逐条 upsert，确保 charts/aliases 关系被正确补齐
                 for maidata in maidata_list:
-                    await session.merge(models.MaiDataModel.mai_data(maidata))
+                    await upsert_maidata(session, maidata)
                 # 2. 一次性提交
                 await session.commit()
                 logger.success(f"同步完成")
@@ -524,7 +524,7 @@ async def maintenance_task():
 
         # 4. 获取水鱼数据并逐条同步国服版本与定数
         logger.info("数据同步-步骤 3/5：开始同步水鱼国服版本与定数")
-        if sy_music_data := await network.sy_music_data_from_file(PluginRegistry.get_cache_dir() / "sy_music_data.json"):
+        if sy_music_data := await network.sy_music_data_from_file(PluginRegistry.get_cache_dir() / "sy_music_data"):
             total = len(sy_music_data)
             sync_data: list[tuple[int, int, list[float | int]]] = []
             for idx, sy_data in enumerate(sy_music_data):

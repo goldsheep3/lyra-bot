@@ -36,8 +36,10 @@ mai_what_song = on_regex(r"^(\S+?)是什么歌([?？]?)$", priority=10, block=Tr
 alias_setting = on_regex(r'^(添加|删除)别名\s+(?:id)?(\d+)\s+([^\s]+)$', priority=5, block=True)
 # 列表查询（完成表/进度/列表）
 scorelist = on_regex(r'^(.*?)\s*(完成表|进度|列表)$', priority=5, block=True)
+# 同步水鱼数据
+sync_sy = on_regex(r'^sytb$', priority=5, block=True)
 # b50 查询
-b50 = on_regex(r'^([a-z0-9+]*?)(b50|kkb)\s*(.*)$', priority=1, block=True)
+b50 = on_regex(r'^(b50|kkb)\s*(.*)$', priority=1, block=True)
 # ra 计算
 ra_calc = on_regex(r"^ra\s+(\S+)?\s+(\S+)", priority=5, block=True)
 # 上传 JSON 配置数据
@@ -120,7 +122,7 @@ async def get_song_image(mdt: services.MaiData, user_id: str | int) -> bytes:
             maidata.parse_sy_player_record(record_list)  # 若水鱼有数据则进行填入
     # 构建回复图片
     output = io.BytesIO()
-    img = image_gen.draw_info_box(maidata, server=server)
+    img = image_gen.draw_info_box(maidata, server=server, cn_level=1 if maidata.version_cn is not None else 0)
     img.save(output, format="jpeg")
     return output.getvalue()
 
@@ -162,7 +164,7 @@ async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
     elif len(mdt_list) > 4:
         await matcher.send(f"找到了 {len(mdt_list)} 首相应的乐曲！请查看以下是否有你的目标！")
         # 未来 b50 提上日程后，希望可以以 b50_box 承载曲目信息
-        img = image_gen.simple_list([mdt.to_data() for mdt in mdt_list])
+        img = image_gen.simple_maidata_box([mdt.to_data() for mdt in mdt_list])
         output = io.BytesIO()
         img.save(output, format="jpeg")
         img_bytes = output.getvalue()
@@ -278,10 +280,22 @@ async def _(matcher: Matcher, groups: tuple = RegexGroup()):
     await matcher.finish(msg)
 
 
+@sync_sy.handle()
+async def _(event: Event, matcher: Matcher):
+    """处理命令: sytb"""
+    user_id = event.get_user_id()
+    # TODO 通过 network.sy_dev_player_records() 同步水鱼数据
+    # 并通过 services.upload_achievements_batch() 上传到数据库
+    # 具体逻辑放到 utils 模块
+    # 对于查询操作，若有差异则需要将差异部分返回给用户确认
+    # 可以通过 image_gen.simple_list() 生成一个简单的文本列表图，展示更新的成绩信息
+    # TODO 成绩更新图也到 utils 模块，提供一个接口来生成更新图
+
+
 @b50.handle()
 async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
     """处理命令: xxxb50/xxxkkb xxx"""
-    _keyword, _, extra = groups
+    _, extra = groups
     user_id, server = None, None
     extra: str = extra.strip()
     if extra:
@@ -291,6 +305,8 @@ async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
                 user_id = int(item)  # 其次解析纯数字 QQ 号
             if (not server) and item.lower() in ['jp', 'cn', 'all']:
                 server = item.upper()  # 解析服务器信息
+            if (not server) and item in ['日服']:
+                server = 'JP'
         for segment in event.get_message():
             if segment.type == "at":
                 user_id = int(segment.data["qq"])  # 优先解析 @ 的用户信息
@@ -301,6 +317,9 @@ async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
     
     # 记录查询开始时间
     query_start_time = time.time()
+
+    # 同步水鱼数据
+    # TODO 和 @sync_sy.handle() 的逻辑一致
     
     # 当前：解析水鱼读取 b50
     # TODO: 修改为同步到数据库并可选查询
@@ -367,7 +386,6 @@ async def _(bot: Bot, event: PrivateMessageEvent, matcher: Matcher):
     file_name = file_seg.data.get("file", "")
     
     if not file_name.endswith(".json"):
-        await matcher.finish("请发送 .json 格式的文件。")
         return
 
     # 获取文件下载/路径信息
@@ -402,16 +420,23 @@ async def _(bot: Bot, event: PrivateMessageEvent, matcher: Matcher):
         await matcher.finish("读取或解析文件失败，请重试。")
 
     # 2. 校验数据格式
-    if isinstance(data, list) and len(data) > 0 and "sheetId" not in data[0]:
+    if not all([
+        isinstance(data, list),  # 数据必须是列表
+        len(data) > 0,  # 列表不能为空
+        "sheetId" in data[0],  # 必须包含 sheetId 字段
+        '__dxra__' in data[0].get("sheetId")  # sheetId 中必须包含 __dxra__ 字样
+    ]):
+        # 格式不正确，静默失败（可能是其他插件识别的文件，不进行失败提醒）
         return
 
-    await matcher.send("检查到数据导出！正在识别曲目并记录成绩...")
+     # 3. 解析
+    await matcher.send("检查到 lyra-maimai 数据导出！正在识别曲目并记录成绩...")
 
+    # TODO 将该逻辑和 @sync_sy.handle() 的成绩解析逻辑进行合并，形成一个通用的成绩解析函数
     user_id = int(event.get_user_id())
     ach_list = []
     title_cache = {}  # 缓存标题查询结果
     
-    # 3. 解析并修正 SD/DX ID
     for record in data:
         try:
             title = record.get("title", "")
@@ -463,6 +488,7 @@ async def _(bot: Bot, event: PrivateMessageEvent, matcher: Matcher):
         except Exception as e:
             logger.error(f"数据库写入崩溃: {e}")
             await matcher.finish("同步到数据库时出错了……请联系监护人确认情况哦qwq")
+        # TODO 复用 sytb 的成绩更新图逻辑
         await matcher.finish(f"成功导入 {len(ach_list)} 条成绩！")
     else:
         import time

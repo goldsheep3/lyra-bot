@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 from typing import List, Literal, Optional
 
@@ -52,7 +53,7 @@ class MaiChartAch(Model):
     dxscore: Mapped[int] = mapped_column(default=0)  # DX 分数
     combo: Mapped[int] = mapped_column(default=0)  # 连击
     sync: Mapped[int] = mapped_column(default=0)  # 同步游玩
-    update_time: Mapped[int] = mapped_column()  # 更新时间戳
+    update_time: Mapped[int] = mapped_column(default=lambda: int(time.time()), onupdate=lambda: int(time.time()))  # 更新时间戳
     dxrating: Mapped[int] = mapped_column(default=0)  # DX Rating (Cache)
 
     user_id: Mapped[Optional[int]] = mapped_column()  # qq

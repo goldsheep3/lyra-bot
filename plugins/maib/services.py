@@ -2,7 +2,7 @@ import time
 from typing import List, Optional, Sequence
 from collections import defaultdict
 
-from sqlalchemy import select, or_, delete
+from sqlalchemy import select, or_, delete, func
 from sqlalchemy.orm import selectinload
 
 from . import utils
@@ -73,20 +73,19 @@ async def get_song_by_name_smart(keyword: str) -> Sequence[MaiData]:
 
 
 # --- 通过版本筛选查询谱面 ---
-async def get_song_by_version(version: int, cn: bool = False) -> Sequence[MaiData]:
-    """曲名/别名的精确搜索，返回所有匹配的乐曲数据"""
-    
+async def get_song_by_version(version: int) -> Sequence[MaiData]:
+    """按版本筛选乐曲：version>=2000 查 version_cn，否则查 version。"""
     async with get_session() as session:
-        statement = (
-            select(MaiData)
-            .outerjoin(MaiAlias)  # 使用外连接，防止没有别名的曲目被过滤掉
-            .where(
-                or_(
-                    (MaiData.version if not cn else MaiData.version_cn) == version,
-                )
-            )
-            .distinct()
-        )
+        version_field = MaiData.version_cn if version >= 2000 else MaiData.version
+        statement = select(MaiData).where(version_field == version)
+        result = await session.execute(statement)
+        return result.scalars().all()
+
+
+async def get_song_by_genre(genre: int) -> Sequence[MaiData]:
+    """按流派筛选乐曲。"""
+    async with get_session() as session:
+        statement = select(MaiData).where(MaiData.genre == genre)
         result = await session.execute(statement)
         return result.scalars().all()
 
@@ -388,7 +387,6 @@ async def upload_achievements_batch(user_id: int, ach_list: List[utils.MaiChartA
                         existing.dxrating = calculated_rating
                         existing.combo = updated_utils.combo
                         existing.sync = updated_utils.sync
-                        existing.update_time = int(time.time())
                     else:
                         # 新增记录
                         new_ach = MaiChartAch(
@@ -402,7 +400,6 @@ async def upload_achievements_batch(user_id: int, ach_list: List[utils.MaiChartA
                             dxrating=calculated_rating,
                             combo=updated_utils.combo,
                             sync=updated_utils.sync,
-                            update_time=int(time.time())
                         )
                         session.add(new_ach)
                         # 重要：为了防止下一个 shortid 循环时 select 触发 autoflush 导致冲突
@@ -414,3 +411,14 @@ async def upload_achievements_batch(user_id: int, ach_list: List[utils.MaiChartA
         except Exception as e:
             await session.rollback()
             raise e
+
+
+async def get_user_server_latest_update_time(user_id: int, server: SERVER_TAG) -> Optional[int]:
+    """获取指定用户在指定服务器上的成绩最后更新时间（update_time 最大值）。"""
+    async with get_session() as session:
+        stmt = select(func.max(MaiChartAch.update_time)).where(
+            MaiChartAch.user_id == user_id,
+            MaiChartAch.server == server,
+        )
+        result = await session.execute(stmt)
+        return result.scalar_one()
