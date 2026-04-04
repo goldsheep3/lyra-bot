@@ -977,7 +977,7 @@ def draw_info_box(maidata: MaiData, server: SERVER_TAG, b50manager_jp: MaiB50Man
     # 最后贴上版权底条
     footer_y = all_height_msed - board_last.height
     result_img.paste(board_last, (0, footer_y), board_last)
-    return result_img
+    return result_img.convert("RGB")
 
 
 def draw_b50_4line(b50manager: MaiB50Manager,
@@ -1227,7 +1227,7 @@ def simple_list(maidata_list: List[MaiData]) -> Image.Image:
     img_draw = ImageDraw.Draw(img)
     img_draw.text((2, 2), text, fill='#000', font=font)
 
-    return img
+    return img.convert("RGB")
 
 
 if __name__ == "__main__":

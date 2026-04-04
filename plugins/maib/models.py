@@ -197,8 +197,8 @@ class MaiDataModel:
             converter=maidata.converter,
             zip_path=str(maidata.zip_path) if maidata.zip_path else None,
             is_utage=maidata.is_utage,
-            utage_tag=maidata.utage_tag if maidata.is_utage else None,
-            buddy=maidata.buddy if maidata.is_utage else None
+            utage_tag=maidata.utage_tag,
+            buddy=maidata.buddy
         )
 
     @staticmethod

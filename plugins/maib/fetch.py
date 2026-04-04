@@ -273,10 +273,11 @@ def _normalize_cache_entry(raw_entry: object, fallback_shortid: int | None = Non
 
 
 def _merge_maidata_with_priority(existing: MaiData, new_data: MaiData) -> MaiData:
-    """同 shortid 去重：优先保留带 Re:MASTER 的谱面。"""
-    exist_remaster: bool = getattr(existing, '_chart6', None) is not None
-    new_remaster: bool = getattr(new_data, '_chart6', None) is not None
-    return existing if (exist_remaster and not new_remaster) else new_data
+    """同 shortid 去重"""
+    # 优先保留谱面数量更多的版本
+    exist_charts = len(existing.charts)
+    new_charts = len(new_data.charts)
+    return existing if (exist_charts >= new_charts) else new_data
 
 async def process_chart_files(chart_files: list[Path]) -> list[MaiData]:
     """按 shortid 增量处理 zip 文件，避免文件名与 shortid 绑定。"""
@@ -511,8 +512,8 @@ async def maintenance_task():
         async with get_session() as session:
             try:
                 # 1. 尝试使用批量合并而非逐条 upsert
-                for mai in maidata_list:
-                    await session.merge(mai)
+                for maidata in maidata_list:
+                    await session.merge(models.MaiDataModel.mai_data(maidata))
                 # 2. 一次性提交
                 await session.commit()
                 logger.success(f"同步完成")
