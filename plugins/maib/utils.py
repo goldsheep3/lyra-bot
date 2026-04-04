@@ -372,8 +372,8 @@ class MaiB50Manager:
         self.user_avatar = user_avatar
         self.update_time = update_time
         # 存储格式: (rating, maidata, diff)
-        self._b35: List[Tuple[int, 'MaiData', int]] = []
-        self._b15: List[Tuple[int, 'MaiData', int]] = []
+        self._b35: List[Tuple[int, MaiData, int]] = []
+        self._b15: List[Tuple[int, MaiData, int]] = []
 
     @property
     def user_avatar_image(self) -> Image.Image | None:
@@ -401,8 +401,7 @@ class MaiB50Manager:
         ver = self.current_version
         
         # 1. 确定使用的边界和前缀
-        is_cirp = 26 <= ver < 2000
-        is_cirp = True  # 强制使用新版框体背景图
+        is_cirp = True or 26 <= ver < 2000  # 强制使用新版框体背景图
         bounds = BOUNDARIES_DX_RATING_NEW if is_cirp else BOUNDARIES_DX_RATING
         
         # 定位索引
@@ -415,29 +414,29 @@ class MaiB50Manager:
             return f"JP_CIRP_{idx}.png"
         return f"JP_{idx}.png"
 
-    def get_b35_list(self) -> list[tuple['MaiData', int]]:
+    def get_b35_list(self) -> list[tuple[MaiData, int]]:
         """获取当前 B35 的曲目列表"""
         return [(item[1], item[2]) for item in self._b35]
 
-    def get_b15_list(self) -> list[tuple['MaiData', int]]:
+    def get_b15_list(self) -> list[tuple[MaiData, int]]:
         """获取当前 B15 的曲目列表"""
         return [(item[1], item[2]) for item in self._b15]
 
-    def get_lists(self) -> tuple[list[tuple['MaiData', int]], list[tuple['MaiData', int]]]:
+    def get_lists(self) -> tuple[list[tuple[MaiData, int]], list[tuple[MaiData, int]]]:
         """获取当前 B35 和 B15 的曲目列表"""
         return self.get_b35_list(), self.get_b15_list()
 
-    def get_b50_list(self) -> list[tuple['MaiData', int]]:
+    def get_b50_list(self) -> list[tuple[MaiData, int]]:
         """获取当前 B50 的曲目列表，格式为 (MaiData, diff)"""
         b50 = self._b35 + self._b15
         b50.sort(key=lambda x: x[0], reverse=True)  # 按照 DX Rating 从高到低排序
         return [(item[1], item[2]) for item in b50]
 
-    def _process_entry(self, maidata: 'MaiData', diff: int) -> Optional[Tuple[int, 'MaiData', int]]:
+    def _process_entry(self, maidata: MaiData, diff: int) -> Optional[Tuple[int, MaiData, int]]:
         ra = maidata.get_chart_dxrating(diff, server=self.server, current_version=self.current_version)
         return (ra, maidata, diff) if ra is not None else None
 
-    def add_entry(self, maidata: 'MaiData', diff: int):
+    def add_entry(self, maidata: MaiData, diff: int):
         """添加单个条目"""
         entry = self._process_entry(maidata, diff)
         if not entry:
@@ -457,7 +456,7 @@ class MaiB50Manager:
                 target[-1] = entry
                 target.sort(key=lambda x: x[0], reverse=True)
 
-    def add_entries(self, entries: List[Tuple['MaiData', int]]):
+    def add_entries(self, entries: List[Tuple[MaiData, int]]):
         """添加多个条目"""
         new_entries = []
         old_entries = []
@@ -474,6 +473,10 @@ class MaiB50Manager:
         self._b15 = sorted(self._b15 + new_entries, key=lambda x: x[0], reverse=True)[:15]
         self._b35 = sorted(self._b35 + old_entries, key=lambda x: x[0], reverse=True)[:35]
 
+
+class MaiB50ManagerALL(MaiB50Manager):
+    # server = 'ALL', 需要对所有条目加入的计算中分别计算所有服务器的 DX Rating，并取最高的一个作为该条目的 DX Rating
+    ...
 
 class SimaiNoteCount:
     """
@@ -582,3 +585,39 @@ class SimaiNoteCount:
             stats.get("TOUCH", 0),
             stats.get("BREAK", 0),
         )
+
+def get_sy_records(records: list[dict]) -> list[MaiChartAch]:
+    """解析水鱼用户成绩数据为 MaiChartAch 列表"""
+    achs = []
+    for record in records:
+        shortid = record.get('song_id')
+        if not shortid:
+            continue  # 如果没有 song_id 则无法匹配曲目，跳过该记录
+        
+        level_idx = record.get("level_index")
+        if level_idx is None:
+            continue
+        diff = level_idx + 2  
+        
+        # 2. 提取各项分数
+        achievement = record.get("achievements", 0.0)
+        dx_score = record.get("dxScore", 0)
+        
+        # 3. 解析状态码 (FC/FS)
+        combo = DF_FC_MAP.get(record.get("fc", "").lower(), 0)
+        sync = DF_FS_MAP.get(record.get("fs", "").lower(), 0)
+        
+        # 4. 创建成就对象
+        ach = MaiChartAch(
+            shortid=shortid,
+            difficulty=diff,
+            server="CN",
+            achievement=achievement,
+            dxscore=dx_score,
+            combo=combo,
+            sync=sync,
+            update_time=int(time.time())
+        )
+        achs.append(ach)
+
+    return achs

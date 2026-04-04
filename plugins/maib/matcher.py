@@ -1,9 +1,9 @@
 import io, re, orjson, aiofiles, time
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, cast
 
-from . import services, image_gen, network, bot_services
-from .utils import MaiData, MaiChart, MaiChartAch, parse_status, MaiB50Manager, get_current_versions
+from . import utils, services, image_gen, network, bot_services
+from .utils import MaiData, MaiChart, MaiChartAch, MaiB50Manager  # 常用类独立导出
 from .constants import *
 
 from nonebot import logger, on_regex, on_message
@@ -228,9 +228,13 @@ async def _(matcher: Matcher, groups: tuple = RegexGroup()):
     # 2. 判断定数是否越界，越界则解析为纯数字 id
     if level > 20:
         level = 0  # 大于 20 则一定不为定数，驳回上述解析
-        shortid = int(level)
-        mai = await services.get_song_by_id(shortid)
-        level = mai.charts[-1].lv if mai else 0  # 取最高难度的定数
+        try:
+            shortid = int(info)
+            mai = await services.get_song_by_id(shortid)
+        except (ValueError, TypeError):
+            mai = None
+        if mai and mai.charts:
+            level = mai.charts[-1].lv  # 取最高难度的定数
 
     # 3. 尝试以 id11451/info11451/id114514紫 形式解析
     if level == 0:
@@ -250,8 +254,8 @@ async def _(matcher: Matcher, groups: tuple = RegexGroup()):
                 mai = None
             if mai:
                 charts = mai.charts
-                s = diff_info.group(1) if diff_info else''
-                diff = parse_status(s, DIFFS_MAP)
+                s = diff_info.group(0) if diff_info else ''
+                diff = utils.parse_status(s, DIFFS_MAP)
                 if diff:
                     # 指定了难度颜色，尝试匹配
                     for c in charts:
@@ -280,102 +284,141 @@ async def _(matcher: Matcher, groups: tuple = RegexGroup()):
     await matcher.finish(msg)
 
 
+async def get_sy_and_upload(user_id: int) -> image_gen.Image.Image | None:
+    # 获取水鱼数据
+    data = await network.sy_dev_player_records(qq=user_id)
+    records = data.get('records', []) if data else []
+    achs = utils.get_sy_records(records) if data else None
+    # 批量上传到数据库
+    if not achs:
+        return None
+    data_diffs = await services.upload_achievements_batch(user_id, achs)
+    if not data_diffs:
+        return None
+    
+    diff_update, diff_insert = [], []
+    for data_diff in data_diffs:
+        if data_diff.get('change_type') == 'update':
+            diff_update.append(data_diff)
+        elif data_diff.get('change_type') == 'insert':
+            diff_insert.append(data_diff)
+
+    def get_diff_infos(data_diffs_):
+        data_diff = []
+        for d in data_diffs_:
+            DEFAULT = {
+                "achievement": 0.0,
+                "dxscore": 0,
+                "dxrating": 0,
+                "combo": 0,
+                "sync": 0
+            }
+            old = d.get('old') or DEFAULT
+            new = d.get('new') or DEFAULT
+
+            data_diff.append('   '.join([
+                f"{d['shortid']}. {d['song_name']}({DIFFS_DICT.get(d['difficulty'], '')})",
+                f"Achievement: {old['achievement']:.2f}% -> {new['achievement']:.2f}%",
+                f"DX Score: {old['dxscore']} -> {new['dxscore']}",
+                f"Combo: {DF_FC_DICT.get(old['combo'], None)} -> {DF_FC_DICT.get(new['combo'], None)}",
+                f"Sync: {DF_FS_DICT.get(old['sync'], None)} -> {DF_FS_DICT.get(new['sync'], None)}",
+            ]))
+        return data_diff
+
+    data_diff_text = '\n'.join([
+        '发现成绩更新！\n',
+        '新增成绩数据：',
+        *get_diff_infos(diff_insert),
+        '\n更新了已有成绩：',
+        *get_diff_infos(diff_update)
+        ])
+    diff_img = image_gen.simple_list(data_diff_text)
+    return diff_img
+
+
 @sync_sy.handle()
 async def _(event: Event, matcher: Matcher):
     """处理命令: sytb"""
-    user_id = event.get_user_id()
-    # TODO 通过 network.sy_dev_player_records() 同步水鱼数据
-    # 并通过 services.upload_achievements_batch() 上传到数据库
-    # 具体逻辑放到 utils 模块
-    # 对于查询操作，若有差异则需要将差异部分返回给用户确认
-    # 可以通过 image_gen.simple_list() 生成一个简单的文本列表图，展示更新的成绩信息
-    # TODO 成绩更新图也到 utils 模块，提供一个接口来生成更新图
+    user_id = int(event.get_user_id())
+    diff_img = await get_sy_and_upload(user_id)
+    if diff_img:
+        output = io.BytesIO()
+        diff_img.save(output, format="jpeg")
+        img_bytes = output.getvalue()
+        await matcher.finish(MessageSegment.image(img_bytes))
+    else:
+        await matcher.finish("已完成水鱼同步，似乎没有数据更新~")
 
 
 @b50.handle()
-async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
+async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
     """处理命令: xxxb50/xxxkkb xxx"""
     _, extra = groups
-    user_id, server = None, None
+    user_id, group_id = int(event.get_user_id()), getattr(event, "group_id", None)
+    target_user_id, target_server = None, None
     extra: str = extra.strip()
     if extra:
         extra_list = extra.split(' ')
         for item in extra_list:
-            if (not user_id) and item.isdigit():
-                user_id = int(item)  # 其次解析纯数字 QQ 号
-            if (not server) and item.lower() in ['jp', 'cn', 'all']:
-                server = item.upper()  # 解析服务器信息
-            if (not server) and item in ['日服']:
-                server = 'JP'
+            if (not target_user_id) and item.isdigit():
+                target_user_id = int(item)  # 其次解析纯数字 QQ 号
+            if (not target_server) and item.lower() in ['jp', 'cn', 'all']:
+                target_server = item.upper()  # 解析服务器信息
+            if (not target_server) and item in ['日服']:
+                target_server = 'JP'
         for segment in event.get_message():
             if segment.type == "at":
-                user_id = int(segment.data["qq"])  # 优先解析 @ 的用户信息
+                target_user_id = int(segment.data["qq"])  # 优先解析 @ 的用户信息
                 break
-    user_id = user_id or int(event.get_user_id())  # 最后默认使用发送者的 QQ 号
-    avatar = await network.request_image(f"http://q2.qlogo.cn/headimg_dl?dst_uin={user_id}&spec=100")
-    server = server or 'ALL'
+    target_user_id = target_user_id or user_id  # 最后默认使用发送者的 QQ 号
+    if group_id:
+        user_info = await bot.get_group_member_info(group_id=group_id, user_id=target_user_id)
+        target_name = user_info.get("card") or user_info.get("nickname") or str(target_user_id)
+    else:
+        target_name = str(target_user_id)
+    avatar = await network.request_image(f"http://q2.qlogo.cn/headimg_dl?dst_uin={target_user_id}&spec=100")
+    server: SERVER_TAG | Literal['ALL'] = cast(SERVER_TAG | Literal['ALL'], target_server or 'ALL')
     
-    # 记录查询开始时间
-    query_start_time = time.time()
-
     # 同步水鱼数据
-    # TODO 和 @sync_sy.handle() 的逻辑一致
-    
-    # 当前：解析水鱼读取 b50
-    # TODO: 修改为同步到数据库并可选查询
-    sy_b50_data = await network.sy_query_player(qq=user_id)
-    
-    # 计算查询耗时
-    query_time = time.time() - query_start_time
-    logger.info(f"B50 查询耗时: {query_time:.2f}秒 (QQ: {user_id})")
-    if not sy_b50_data:
-        await matcher.finish("没有找到你的水鱼数据哦qwq")
-        return
-    sy_b50_records = sy_b50_data.get('records', [])
-    sy_b50_records = sy_b50_records or sum(sy_b50_data.get('charts', {'': []}).values(), [])
-    music_dict = dict()
-    maidata_list = []
-    for record in sy_b50_records:
-        if shortid := record.get('song_id'):
-            l = music_dict.get(shortid, [])
-            l.append(record)
-            music_dict[shortid] = l
-    for shortid, records in music_dict.items():
-        mdt = await services.get_song_by_id(shortid)
-        if mdt:
-            maidata = mdt.to_data()
-            maidata.parse_sy_player_record(records)  # 填入水鱼数据
-            for record in records:
-                # 构造数据-难度元组
-                diff = record.get('level_index', 3) + 2
-                maidata_list.append((maidata, diff))
-    if not maidata_list:
-        await matcher.finish("没有找到可用于绘制的谱面记录哦qwq")
-        return
-    await matcher.send("小梨绘制中……")
-    
+    if server in ['CN', 'ALL']:
+        diff_img = await get_sy_and_upload(target_user_id)
+        if diff_img:
+            if target_user_id == user_id:
+                # 如果查询目标是自己，同步数据给予提示
+                output = io.BytesIO()
+                diff_img.save(output, format="jpeg")
+                img_bytes = output.getvalue()
+                await matcher.send(MessageSegment.image(img_bytes))
+            else:
+                # 如果查询目标是他人，不直接展示差异图，改为提示已同步
+                await matcher.send(f"已同步水鱼数据，正在查询 {target_name} 的 B50 数据……")
+
+    ver_jp, ver_cn = utils.get_current_versions()
+    if server == 'ALL':
+        await matcher.finish("暂时还不支持全服查询qwq")
+    current_version = ver_cn if server == 'CN' else ver_jp
+    manager = MaiB50Manager(current_version=current_version, server=server,
+                            user_name=target_name, user_avatar=avatar,
+                            update_time=await services.get_user_server_latest_update_time(target_user_id, server))
+
+    maidata_list = await services.get_b50_entries_for_user(target_user_id, server)
+    manager.add_entries(maidata_list)
+
     # 记录生成开始时间
     generate_start_time = time.time()
-    
-    manager = MaiB50Manager(current_version=get_current_versions()[1], server='CN',
-                            user_name=sy_b50_data.get('nickname', 'maimai'), user_avatar=avatar)
-    manager.add_entries(maidata_list)
     img = image_gen.draw_b50_5line(manager)
     output = io.BytesIO()
     img.save(output, format="jpeg")
     img_bytes = output.getvalue()
-    
     # 计算生成耗时
     generate_time = time.time() - generate_start_time
-    total_time = query_time + generate_time
-    logger.info(f"B50 生成耗时: {generate_time:.2f}秒 | 总耗时: {total_time:.2f}秒")
+    logger.info(f"B50 生成耗时: {generate_time:.2f}秒")
     
     await matcher.finish(Message([
         MessageSegment.at(event.get_user_id()),
-        MessageSegment.text(f" \n查询时间: {query_time:.2f}秒 | 生成时间: {generate_time:.2f}秒\n"),
+        MessageSegment.text(f" \nB50 生成时间: {generate_time:.2f}秒\n"),
         MessageSegment.image(img_bytes),
     ]))
-    
 
 
 @file_receiver.handle()
@@ -432,7 +475,6 @@ async def _(bot: Bot, event: PrivateMessageEvent, matcher: Matcher):
      # 3. 解析
     await matcher.send("检查到 lyra-maimai 数据导出！正在识别曲目并记录成绩...")
 
-    # TODO 将该逻辑和 @sync_sy.handle() 的成绩解析逻辑进行合并，形成一个通用的成绩解析函数
     user_id = int(event.get_user_id())
     ach_list = []
     title_cache = {}  # 缓存标题查询结果
@@ -488,7 +530,6 @@ async def _(bot: Bot, event: PrivateMessageEvent, matcher: Matcher):
         except Exception as e:
             logger.error(f"数据库写入崩溃: {e}")
             await matcher.finish("同步到数据库时出错了……请联系监护人确认情况哦qwq")
-        # TODO 复用 sytb 的成绩更新图逻辑
         await matcher.finish(f"成功导入 {len(ach_list)} 条成绩！")
     else:
         import time

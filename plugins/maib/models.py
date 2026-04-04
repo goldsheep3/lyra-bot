@@ -151,7 +151,7 @@ class MaiData(Model):
         self.charts.sort(key=lambda c: c.difficulty)
         return self.charts
 
-    def to_data(self) -> utils.MaiData:
+    def to_data(self, clear_chart_achs: bool = False) -> utils.MaiData:
         """转换为 utils.MaiData 对象"""
         maidata = utils.MaiData(
             shortid=self.shortid,
@@ -173,6 +173,16 @@ class MaiData(Model):
         # 添加谱面数据
         for chart in self.charts:
             maidata.set_chart(chart.to_data())
+        if clear_chart_achs:
+            # 可选：清空所有服务器成绩，避免把数据库中的其他用户成绩带入展示层
+            for chart_data in maidata.charts.values():
+                for ach_server in ("JP", "INTL", "CN"):
+                    chart_data.set_ach(utils.MaiChartAch(
+                        shortid=maidata.shortid,
+                        difficulty=chart_data.difficulty,
+                        server=ach_server,
+                        achievement=-100,
+                    ))
         # 添加别名数据
         maidata.add_aliases([a.to_data() for a in self.aliases])
         return maidata

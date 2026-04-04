@@ -323,6 +323,7 @@ async def sync_cn_data_by_shortid(shortid: int, version_cn: int, ds: list[float 
 async def upload_achievements_batch(user_id: int, ach_list: List[utils.MaiChartAch]):
     """批量上传接口"""
     jp_ver, cn_ver = utils.get_current_versions()
+    changes_log = []  # 追踪所有变更
 
     # --- 1. 预处理：对输入数据进行内部去重，防止 ach_list 自身包含重复 key ---
     # 唯一键定义为 (shortid, difficulty, server)
@@ -374,7 +375,6 @@ async def upload_achievements_batch(user_id: int, ach_list: List[utils.MaiChartA
                 updated_utils = maichart.update_ach(incoming)
                 
                 # 4. 判断更新或新增
-                # 如果是新成绩，或者成就率/DX分数等有提升
                 if not existing or updated_utils.achievement > old_achievement or \
                    (existing.dxscore < updated_utils.dxscore):
                     
@@ -382,6 +382,14 @@ async def upload_achievements_batch(user_id: int, ach_list: List[utils.MaiChartA
                     
                     if existing:
                         # 更新已有记录
+                        change_type = "update"
+                        old_data = {
+                            "achievement": existing.achievement,
+                            "dxscore": existing.dxscore,
+                            "dxrating": existing.dxrating,
+                            "combo": existing.combo,
+                            "sync": existing.sync,
+                        }
                         existing.achievement = updated_utils.achievement
                         existing.dxscore = updated_utils.dxscore
                         existing.dxrating = calculated_rating
@@ -389,6 +397,8 @@ async def upload_achievements_batch(user_id: int, ach_list: List[utils.MaiChartA
                         existing.sync = updated_utils.sync
                     else:
                         # 新增记录
+                        change_type = "insert"
+                        old_data = None
                         new_ach = MaiChartAch(
                             user_id=user_id,
                             shortid=shortid,
@@ -402,8 +412,26 @@ async def upload_achievements_batch(user_id: int, ach_list: List[utils.MaiChartA
                             sync=updated_utils.sync,
                         )
                         session.add(new_ach)
-                        # 重要：为了防止下一个 shortid 循环时 select 触发 autoflush 导致冲突
-                        # 我们可以选择手动 flush 或者在去重逻辑做严以后通过最终 commit 解决
+                    
+                    # 记录变更
+                    new_data = {
+                            "achievement": updated_utils.achievement,
+                            "dxscore": updated_utils.dxscore,
+                            "dxrating": calculated_rating,
+                            "combo": updated_utils.combo,
+                            "sync": updated_utils.sync,
+                        }
+                    if old_data != new_data:
+                        # 仅当数据实际发生变化时才记录，避免无意义的更新日志
+                        changes_log.append({
+                            "type": change_type,
+                            "shortid": shortid,
+                            "song_name": mct.maidata.title if mct.maidata else "Unknown",
+                            "difficulty": incoming.difficulty,
+                            "server": incoming.server,
+                            "old": old_data,
+                            "new": new_data
+                        })
 
         # 5. 提交
         try:
@@ -411,6 +439,53 @@ async def upload_achievements_batch(user_id: int, ach_list: List[utils.MaiChartA
         except Exception as e:
             await session.rollback()
             raise e
+    
+    return changes_log
+
+
+async def get_user_achievements_with_charts(user_id: int, server: Optional[str] = None) -> list[MaiChartAch]:
+    """获取指定用户的成绩，并预加载对应谱面与曲目数据。"""
+    async with get_session() as session:
+        stmt = select(MaiChartAch).options(
+            selectinload(MaiChartAch.chart).selectinload(MaiChart.maidata)
+        ).where(MaiChartAch.user_id == user_id)
+        if server:
+            stmt = stmt.where(MaiChartAch.server == server)
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
+
+
+async def get_b50_entries_for_user(user_id: int, server: SERVER_TAG) -> list[tuple[utils.MaiData, int]]:
+    """构建 B50 所需条目列表，格式为 (maidata, diff)。"""
+    user_achs = await get_user_achievements_with_charts(user_id, server=server)
+    maidata_map: dict[int, utils.MaiData] = {}
+    entries: list[tuple[utils.MaiData, int]] = []
+
+    for ach in user_achs:
+        if ach.difficulty < 1 or ach.difficulty > 7:
+            continue
+        if not ach.chart or not ach.chart.maidata:
+            continue
+
+        shortid = ach.shortid
+        if shortid not in maidata_map:
+            maidata_map[shortid] = ach.chart.maidata.to_data(clear_chart_achs=True)
+
+        user_ach = utils.MaiChartAch(
+            shortid=ach.shortid,
+            difficulty=ach.difficulty,
+            server=ach.server,
+            achievement=ach.achievement,
+            dxscore=ach.dxscore,
+            combo=ach.combo,
+            sync=ach.sync,
+            update_time=ach.update_time,
+            user_id=user_id,
+        )
+        maidata_map[shortid].set_chart_ach(ach.difficulty, user_ach)
+        entries.append((maidata_map[shortid], ach.difficulty))
+
+    return entries
 
 
 async def get_user_server_latest_update_time(user_id: int, server: SERVER_TAG) -> Optional[int]:
