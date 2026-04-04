@@ -509,19 +509,16 @@ async def maintenance_task():
         maidata_list = await process_chart_files(charts_files)
         get_session = PluginRegistry.get_session
         async with get_session() as session:
-            total = len(maidata_list)
-            for idx, mai in enumerate(maidata_list):
-                try:
-                    await upsert_maidata(session, mai)
-                    if (idx + 1) % 50 == 0:
-                        await session.commit()
-                        logger.info(f"数据同步进度: [{idx+1}/{total}]")
-                except Exception as e:
-                    logger.error(f"处理 {mai.shortid} ({mai.title}) 失败: {e}")
-                    await session.rollback()
-            
-            # 最后统一 commit 剩余部分
-            await session.commit()
+            try:
+                # 1. 尝试使用批量合并而非逐条 upsert
+                for mai in maidata_list:
+                    await session.merge(mai)
+                # 2. 一次性提交
+                await session.commit()
+                logger.success(f"同步完成")
+            except Exception as e:
+                await session.rollback()
+                logger.error(f"同步失败，已回滚: {e}")
         logger.success(f"数据同步-步骤 2/5：本地谱面同步完成，共写入 {len(maidata_list)} 条")
 
         # 4. 获取水鱼数据并逐条同步国服版本与定数
