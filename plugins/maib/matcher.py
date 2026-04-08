@@ -44,6 +44,8 @@ b50 = on_regex(r'^(b50|kkb)\s*(.*)$', priority=1, block=True)
 ra_calc = on_regex(r"^ra\s+(\S+)?\s+(\S+)", priority=5, block=True)
 # 上传 JSON 配置数据
 file_receiver = on_message(priority=25, rule=is_private_file())
+# 获取 code
+get_code = on_regex(r"^获取code$", priority=5, block=True, rule=is_private_file())
 
 
 # =================================
@@ -420,6 +422,9 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
                             update_time=await services.get_user_server_latest_update_time(target_user_id, server))
 
     maidata_list = await services.get_b50_entries_for_user(target_user_id, server)
+    if server in 'JP' and not maidata_list:
+        # 提醒通过 lyra-sync 上传 JP 数据
+        await matcher.send("你还没有日服数据！可以通过 lyra-sync 上传成绩后再试哦！")
     manager.add_entries(maidata_list)
 
     # 记录生成开始时间
@@ -548,7 +553,13 @@ async def _(bot: Bot, event: PrivateMessageEvent, matcher: Matcher):
         except Exception as e:
             logger.error(f"数据库写入崩溃: {e}")
             await matcher.finish("同步到数据库时出错了……请联系监护人确认情况哦qwq")
-        await matcher.finish(f"成功导入 {len(ach_list)} 条成绩！")
+        await matcher.finish(f"成功导入 {len(ach_list)} 条成绩！\nlyra-sync 下次更新，将会可以直接从脚本上传数据！")
     else:
         import time
         await matcher.finish(f"已解析，但似乎没有有效的成绩诶qwq\n当前的时间为：{time.strftime('%Y-%m-%d %H:%M:%S')}，请截图发送给监护人确认情况。\n果咩纳塞qwq")
+
+
+@get_code.handle()
+async def _(matcher: Matcher):
+    await matcher.finish("暂时无法获取 code，请等待 lyra-sync 更新！")
+

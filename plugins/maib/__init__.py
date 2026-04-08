@@ -29,5 +29,5 @@ else:
         # 用于 DEBUG 调试，节约启动时间
         from . import fetch 
 
-    from . import matcher, models, utils
+    from . import matcher, models, utils, plugin_help
     matcher.DEVELOPER_TOKEN = get_plugin_config(Config).DIVING_FISH_DEVELOPER_TOKEN
