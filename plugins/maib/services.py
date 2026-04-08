@@ -17,10 +17,14 @@ get_session = PluginRegistry.get_session
 async def get_song_by_id(shortid: int) -> Optional[MaiData]:
     """通过 shortid 获取乐曲，同时加载其所有谱面和别名"""
     async with get_session() as session:
-        # 使用 selectinload 预加载关联表，避免异步环境下的惰性加载错误
+        # 只加载曲目/谱面/别名，不加载任意用户成绩，避免展示层串用历史成绩
         statement = (
             select(MaiData)
             .where(MaiData.shortid == shortid)
+            .options(
+                selectinload(MaiData.charts).noload(MaiChart.achs),
+                selectinload(MaiData.aliases),
+            )
         )
         result = await session.execute(statement)
         return result.scalar_one_or_none()
@@ -40,6 +44,10 @@ async def get_song_by_name(keyword: str) -> Sequence[MaiData]:
                 )
             )
             .distinct()
+            .options(
+                selectinload(MaiData.charts).noload(MaiChart.achs),
+                selectinload(MaiData.aliases),
+            )
         )
         result = await session.execute(statement)
         return result.scalars().all()
@@ -59,6 +67,10 @@ async def get_song_by_name_blur(keyword: str) -> Sequence[MaiData]:
                 )
             )
             .distinct()
+            .options(
+                selectinload(MaiData.charts).noload(MaiChart.achs),
+                selectinload(MaiData.aliases),
+            )
         )
         result = await session.execute(statement)
         return result.scalars().all()
@@ -447,12 +459,45 @@ async def get_user_achievements_with_charts(user_id: int, server: Optional[str] 
     """获取指定用户的成绩，并预加载对应谱面与曲目数据。"""
     async with get_session() as session:
         stmt = select(MaiChartAch).options(
-            selectinload(MaiChartAch.chart).selectinload(MaiChart.maidata)
+            selectinload(MaiChartAch.chart)
+            .selectinload(MaiChart.maidata)
+            .selectinload(MaiData.charts),
+            selectinload(MaiChartAch.chart)
+            .selectinload(MaiChart.maidata)
+            .selectinload(MaiData.aliases),
         ).where(MaiChartAch.user_id == user_id)
         if server:
             stmt = stmt.where(MaiChartAch.server == server)
         result = await session.execute(stmt)
         return list(result.scalars().all())
+
+
+async def get_user_song_achievements(user_id: int, shortid: int, server: Optional[SERVER_TAG] = None) -> list[utils.MaiChartAch]:
+    """获取指定用户在指定曲目的成绩（可按服务器过滤），返回 utils.MaiChartAch 列表。"""
+    async with get_session() as session:
+        stmt = select(MaiChartAch).where(
+            MaiChartAch.user_id == user_id,
+            MaiChartAch.shortid == shortid,
+        )
+        if server:
+            stmt = stmt.where(MaiChartAch.server == server)
+        result = await session.execute(stmt)
+        rows = result.scalars().all()
+
+    return [
+        utils.MaiChartAch(
+            shortid=row.shortid,
+            difficulty=row.difficulty,
+            server=row.server,
+            achievement=row.achievement,
+            dxscore=row.dxscore,
+            combo=row.combo,
+            sync=row.sync,
+            update_time=row.update_time,
+            user_id=user_id,
+        )
+        for row in rows
+    ]
 
 
 async def get_b50_entries_for_user(user_id: int, server: SERVER_TAG) -> list[tuple[utils.MaiData, int]]:

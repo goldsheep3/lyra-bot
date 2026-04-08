@@ -370,10 +370,17 @@ class MaiB50Manager:
         self.server: SERVER_TAG = server
         self.user_name = user_name
         self.user_avatar = user_avatar
-        self.update_time = update_time
+        self._update_time = update_time
         # 存储格式: (rating, maidata, diff)
         self._b35: List[Tuple[int, MaiData, int]] = []
         self._b15: List[Tuple[int, MaiData, int]] = []
+
+    @property
+    def update_time_formated(self) -> str:
+        """获取格式化的更新时间字符串"""
+        if not self._update_time:
+            return "N/A"
+        return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self._update_time))
 
     @property
     def user_avatar_image(self) -> Image.Image | None:

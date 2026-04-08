@@ -3,7 +3,7 @@ import orjson
 import zipfile
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from thefuzz import process
@@ -483,6 +483,72 @@ async def upsert_maidata(session: AsyncSession, data: MaiData):
         await services.refresh_dxrating_cache(shortid, diff, server)
 
 
+async def process_upsert_all(session: AsyncSession, maidata_list: list[MaiData]):
+    """
+    全量内存比对处理：
+    1. 一次性查出库中所有数据（含关联表）
+    2. 在内存中完成 1804 条数据的 Diff
+    3. 最后统一 commit
+    """
+    # --- 步骤 1: 预加载全量数据到内存 ---
+    logger.info("正在预加载数据库全量数据以进行内存比对...")
+    stmt = (
+        select(models.MaiData)
+        .options(
+            selectinload(models.MaiData.charts),
+            selectinload(models.MaiData.aliases)
+        )
+    )
+    result = await session.execute(stmt)
+    # 建立 shortid -> ORM 对象的映射
+    db_cache: dict[int, models.MaiData] = {m.shortid: m for m in result.scalars().all()}
+    
+    changed_tasks: list[tuple[int, int, SERVER_TAG]] = []
+
+    # --- 步骤 2: 内存比对循环 ---
+    for data in maidata_list:
+        existing = db_cache.get(data.shortid)
+        
+        if existing:
+            # 更新基础信息 (已经在内存里的对象，修改属性会被 SQLAlchemy 追踪)
+            for attr in ['title', 'bpm', 'artist', 'genre', 'cabinet', 'version', 
+                         'version_cn', 'converter', 'is_utage', 'utage_tag', 'buddy']:
+                setattr(existing, attr, getattr(data, attr))
+            existing.zip_path = str(data.zip_path)
+            
+            # 处理谱面数据 (内存比对)
+            existing_charts = {chart.difficulty: chart for chart in existing.charts}
+            for chart in data.charts.values():
+                if chart.difficulty in existing_charts:
+                    ec = existing_charts[chart.difficulty]
+                    # 记录需要刷新缓存的任务
+                    if ec.lv != chart.lv: changed_tasks.append((data.shortid, chart.difficulty, "JP"))
+                    if ec.lv_cn != chart.lv_cn: changed_tasks.append((data.shortid, chart.difficulty, "CN"))
+                    
+                    # 更新字段
+                    ec.lv, ec.lv_cn, ec.lv_synh = chart.lv, chart.lv_cn, chart.lv_synh
+                    ec.des, ec.inote = chart.des, chart.inote
+                    (ec.note_count_tap, ec.note_count_hold, ec.note_count_slide, 
+                     ec.note_count_touch, ec.note_count_break) = chart.notes
+                else:
+                    # 库里没有这个难度，新增
+                    new_chart = models.MaiDataModel.mai_chart(chart, data.shortid)
+                    existing.charts.append(new_chart)
+
+            # 处理别名数据 (内存比)
+            existing_alias_names = {a.alias for a in existing.aliases}
+            for alias_obj in data.aliases:
+                if alias_obj.alias not in existing_alias_names:
+                    existing.aliases.append(models.MaiDataModel.mai_alias(alias_obj))
+        
+        else:
+            # 库里完全没有这首歌，新增
+            new_mai = models.MaiDataModel.mai_data(data)
+            session.add(new_mai)
+
+    return changed_tasks
+
+
 @post_db_init
 async def maintenance_task():
     """每日重启后自动运行的数据重整理"""
@@ -505,22 +571,31 @@ async def maintenance_task():
             return
         logger.success(f"数据同步-步骤 1/5：已找到 {len(charts_files)} 个谱面文件")
 
-        # 3. 处理本地 maidata 并存储到数据库
+        # 2. 处理本地 maidata 并存储到数据库
         logger.info(f"数据同步-步骤 2/5：开始处理本地谱面，共 {len(charts_files)} 个 zip 文件")
         maidata_list = await process_chart_files(charts_files)
         get_session = PluginRegistry.get_session
         async with get_session() as session:
             try:
-                # 1. 逐条 upsert，确保 charts/aliases 关系被正确补齐
-                for maidata in maidata_list:
-                    await upsert_maidata(session, maidata)
-                # 2. 一次性提交
+                # 开启 WAL 模式提高并发稳定性
+                await session.execute(text("PRAGMA journal_mode=WAL;"))
+                
+                # 执行全量内存比对
+                changed_tasks = await process_upsert_all(session, maidata_list)
+                
+                # 一次性提交：此处才会产生真正的写入锁
                 await session.commit()
-                logger.success(f"同步完成")
+                logger.success("本地谱面数据一次性原子提交成功")
+                
+                # 提交成功后再刷新 rating 缓存
+                for shortid, diff, server in changed_tasks:
+                    await services.refresh_dxrating_cache(shortid, diff, server)
+                    
             except Exception as e:
                 await session.rollback()
-                logger.error(f"同步失败，已回滚: {e}")
-        logger.success(f"数据同步-步骤 2/5：本地谱面同步完成，共写入 {len(maidata_list)} 条")
+                logger.error(f"数据同步-步骤 2/5：同步失败，已全量回滚: {e}")
+            else:
+                logger.success(f"数据同步-步骤 2/5：本地谱面同步完成，共写入 {len(maidata_list)} 条")
 
         # 4. 获取水鱼数据并逐条同步国服版本与定数
         logger.info("数据同步-步骤 3/5：开始同步水鱼国服版本与定数")

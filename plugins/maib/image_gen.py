@@ -16,7 +16,7 @@ from .constants import *
 # ========================================
 
 # 模块版本
-MODEL_VERSION: str = "260403"
+MODEL_VERSION: str = "260407"
 
 # 字体常量
 class FontManager:
@@ -307,7 +307,7 @@ class MS:
         return hash(self.multiple)
 
 
-_MS_DEFAULT = MS(8)  # 默认倍率
+_MS_DEFAULT = MS(5)  # 默认倍率
 
 
 def get_full_width_text(text: str) -> str:
@@ -808,11 +808,12 @@ class ImageUnit:
         if isinstance(img, tuple):
             return None
         du = DrawUnit(img, multiple=ms, cn_level=cn_level)
-        du.rounded_rect(53, 25, 42, 5, fill=bcm(Difficulty.get(diff_number).bg, '#0009'), radius=2)
-        du.rounded_rect(53, 25, 16, 5, fill='#006', radius=2)
+        # x=53 + 1 (获取到的图片坐标需要考虑 outline_width)
+        du.rounded_rect(54, 25, 42, 5, fill=bcm(Difficulty.get(diff_number).bg, '#0009'), radius=4)
+        du.rounded_rect(54, 25, 16, 5, fill='#006', radius=4)
         b_type = '15' if is_b15 else '35'
-        du.text(61, 27.5, f"b{b_type} #{index}", fill='#FFF', anchor='mm', font=FONT.font('MIS_DB', size=ms.x(3)))
-        du.text(72, 27.5, f"{chart.lv:.1f} > {data.get_chart_dxrating(diff_number, server, current_version)}", fill='#FFF', anchor='lm', font=FONT.font('MIS_DB', size=ms.x(3)))
+        du.text(62, 27.5, f"b{b_type} #{index}", fill='#FFF', anchor='mm', font=FONT.font('MIS_DB', size=ms.x(3)))
+        du.text(74, 27.5, f"{chart.lv:.1f} > {data.get_chart_dxrating(diff_number, server, current_version)}", fill='#FFF', anchor='lm', font=FONT.font('MIS_DB', size=ms.x(3)))
         return img
 
 IMU = ImageUnit()  # 全局图像元件实例
@@ -884,8 +885,8 @@ def draw_info_box(maidata: MaiData, server: SERVER_TAG, b50manager_jp: MaiB50Man
         record_info = '\n'.join([
             f"{get_full_width_text(nickname)})",
             "Updated:",
-            f"  [CN({b50manager_cn.dxrating})] {b50manager_cn.update_time}" if b50manager_cn else "  [CN] Not Updated",
-            f"  [JP({b50manager_jp.dxrating})] {b50manager_jp.update_time}" if b50manager_jp else "  [JP] Not Updated",
+            f"  [CN({b50manager_cn.dxrating})] {b50manager_cn.update_time_formated}" if b50manager_cn else "  [CN] Not Updated",
+            f"  [JP({b50manager_jp.dxrating})] {b50manager_jp.update_time_formated}" if b50manager_jp else "  [JP] Not Updated",
         ])
         du1.text(dv_x, dy, text="游玩数据", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=ms.x(4)))
         du1.text(dv_x, im_y1_5, text=record_info, fill='#FFF', anchor='lm', font=FONT.font('MIS_DB', size=ms.x(2.8)))
@@ -1034,7 +1035,7 @@ def draw_b50_4line(b50manager: MaiB50Manager,
              font=FONT.font('MIS_DB', size=ms.x(10)))
 
     # 游玩记录信息
-    record_info = f"Updated: [{b50manager.server}] {b50manager.update_time if b50manager.update_time else 'Not Updated'}"
+    record_info = f"Updated: [{b50manager.server}] {b50manager.update_time_formated}"
     du1.text(inner_width-2, 2, text=record_info, fill='#FFF', anchor='ra', font=FONT.font('MIS_DB', size=ms.x(5)))
 
     del du1
@@ -1145,7 +1146,7 @@ def draw_b50_5line(b50manager: MaiB50Manager,
     du1.text(36, 23.5, text=' ' + get_full_width_text(b50manager.user_name), fill='#FFF', anchor='lm',
              font=FONT.font('MIS_DB', size=ms.x(10)))
 
-    record_info = f"Updated: [{b50manager.server}] {b50manager.update_time if b50manager.update_time else 'Not Updated'}"
+    record_info = f"Updated: [{b50manager.server}] {b50manager.update_time_formated}"
     du1.text(inner_width-2, 2, text=record_info, fill='#FFF', anchor='ra', font=FONT.font('MIS_DB', size=ms.x(5)))
 
     del du1
@@ -1169,7 +1170,7 @@ def draw_b50_5line(b50manager: MaiB50Manager,
             ty = (i // cols) * (box_h_msed + gap_msed)
             
             box_img = IMU.b50_box(maidata, diff, b50manager.server, 
-                                  b50manager.current_version, i, is_b15, ms, cn_level)
+                                  b50manager.current_version, i+1, is_b15, ms, cn_level)
             if box_img:
                 board.paste(box_img, (round(tx), round(ty)), box_img)
                 box_img.close()

@@ -110,21 +110,31 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
         await matcher.finish(f"登登~请查收 {song_name} 谱面！")
 
 
-async def get_song_image(mdt: services.MaiData, user_id: str | int) -> bytes:
+async def get_song_image(mdt: services.MaiData, user_id: str | int) -> tuple[bytes, bytes | None]:
     """提取的共用查歌并生成图片的逻辑"""
-    user_id = str(user_id)
+    user_id = int(user_id)
     maidata: MaiData = mdt.to_data()
-    server = "CN" if maidata.version_cn else "JP"
-    if maidata.version_cn is not None:
-        # 通过 QQ 获取用户绑定的信息
-        record_list = await network.sy_dev_player_record(maidata.shortid, qq=user_id, developer_token=DEVELOPER_TOKEN)
-        if record_list:
-            maidata.parse_sy_player_record(record_list)  # 若水鱼有数据则进行填入
+    server: SERVER_TAG = "CN" if maidata.version_cn is not None else "JP"
+    # 过期检测
+    diff_img_bytes = None
+    current_time = time.time()
+    latest = await services.get_user_server_latest_update_time(user_id, server=server) or 0
+    if current_time - latest > 3 * 24 * 3600:  # 3天未更新，同步水鱼
+        diff_img = await get_sy_and_upload(user_id)
+        if diff_img:
+            output = io.BytesIO()
+            diff_img.save(output, format="jpeg")
+            diff_img_bytes = output.getvalue()
+    # 从数据库读取
+    user_achs = await services.get_user_song_achievements(user_id=user_id, shortid=maidata.shortid, server=server)
+    for ach in user_achs:
+        maidata.set_chart_ach(ach.difficulty, ach)
     # 构建回复图片
     output = io.BytesIO()
-    img = image_gen.draw_info_box(maidata, server=server, cn_level=1 if maidata.version_cn is not None else 0)
+    img = image_gen.draw_info_box(maidata, server=server,
+                                  cn_level=1 if maidata.version_cn is not None else 0)
     img.save(output, format="jpeg")
-    return output.getvalue()
+    return output.getvalue(), diff_img_bytes
 
 
 @mai_info.handle()
@@ -141,7 +151,9 @@ async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
     if not mdt:
         await matcher.finish(f"没有找到 id{short_id} 的乐曲数据qwq")
         return
-    img_bytes = await get_song_image(mdt, user_id)
+    img_bytes, diff_img = await get_song_image(mdt, user_id)
+    if diff_img:
+        await matcher.send(MessageSegment.image(diff_img))
     await matcher.finish(Message(f"{mdt.shortid}. {mdt.title}") + MessageSegment.image(img_bytes))
 
 
@@ -174,9 +186,12 @@ async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
         msg = Message(f"找到了 {len(mdt_list)} 首相应的乐曲！请查看以下乐曲！")
     
     imgs = []
+    diff_img = None
     for mdt in mdt_list:
-        img_bytes = await get_song_image(mdt, user_id)
+        img_bytes, diff_img = await get_song_image(mdt, user_id)
         imgs.append(MessageSegment.image(img_bytes))
+    if diff_img:
+        await matcher.send(MessageSegment.image(diff_img))
     await matcher.finish(msg + Message().join(imgs))
 
 
@@ -286,7 +301,7 @@ async def _(matcher: Matcher, groups: tuple = RegexGroup()):
 
 async def get_sy_and_upload(user_id: int) -> image_gen.Image.Image | None:
     # 获取水鱼数据
-    data = await network.sy_dev_player_records(qq=user_id)
+    data = await network.sy_dev_player_records(qq=user_id, developer_token=DEVELOPER_TOKEN)
     records = data.get('records', []) if data else []
     achs = utils.get_sy_records(records) if data else None
     # 批量上传到数据库
@@ -324,6 +339,9 @@ async def get_sy_and_upload(user_id: int) -> image_gen.Image.Image | None:
                 f"Sync: {DF_FS_DICT.get(old['sync'], None)} -> {DF_FS_DICT.get(new['sync'], None)}",
             ]))
         return data_diff
+
+    if (not diff_insert) and (not diff_update):
+        return None
 
     data_diff_text = '\n'.join([
         '发现成绩更新！\n',
@@ -377,7 +395,7 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
     else:
         target_name = str(target_user_id)
     avatar = await network.request_image(f"http://q2.qlogo.cn/headimg_dl?dst_uin={target_user_id}&spec=100")
-    server: SERVER_TAG | Literal['ALL'] = cast(SERVER_TAG | Literal['ALL'], target_server or 'ALL')
+    server: SERVER_TAG | Literal['ALL'] = cast(SERVER_TAG | Literal['ALL'], target_server or 'CN')
     
     # 同步水鱼数据
     if server in ['CN', 'ALL']:
@@ -467,7 +485,7 @@ async def _(bot: Bot, event: PrivateMessageEvent, matcher: Matcher):
         isinstance(data, list),  # 数据必须是列表
         len(data) > 0,  # 列表不能为空
         "sheetId" in data[0],  # 必须包含 sheetId 字段
-        '__dxra__' in data[0].get("sheetId")  # sheetId 中必须包含 __dxra__ 字样
+        '__dxrt__' in data[0].get("sheetId")  # sheetId 中必须包含 __dxrt__ 字样
     ]):
         # 格式不正确，静默失败（可能是其他插件识别的文件，不进行失败提醒）
         return

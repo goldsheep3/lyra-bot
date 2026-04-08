@@ -15,6 +15,7 @@ else:
     
     class Config(BaseModel):
         DIVING_FISH_DEVELOPER_TOKEN: str | None = None
+        LYRA_FETCH_SKIP: bool = False
 
     __plugin_meta__ = PluginMetadata(
         name="lyra-maib",
@@ -23,5 +24,10 @@ else:
         config=Config,
     )
 
-    from . import matcher, models, utils, fetch 
+    if get_plugin_config(Config).LYRA_FETCH_SKIP is False:
+        # 仅在未跳过 fetch 的情况下才导入 fetch 模块
+        # 用于 DEBUG 调试，节约启动时间
+        from . import fetch 
+
+    from . import matcher, models, utils
     matcher.DEVELOPER_TOKEN = get_plugin_config(Config).DIVING_FISH_DEVELOPER_TOKEN
