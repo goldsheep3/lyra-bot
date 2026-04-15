@@ -1,6 +1,7 @@
 import re
 import orjson
 import zipfile
+from time import time
 from pathlib import Path
 
 from sqlalchemy import select, text
@@ -9,13 +10,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from thefuzz import process
 from nonebot import logger, require
 require("nonebot_plugin_datastore")
-from nonebot_plugin_datastore.db import post_db_init
+from nonebot_plugin_datastore.db import post_db_init, get_engine
 
 from. import models, network, services
 from .bot_registry import PluginRegistry
 from .utils import MaiData, MaiChart, SimaiNoteCount
 from .constants import *
 
+
+def get_sql_name() -> str:
+    try:
+        return get_engine().name
+    except ValueError:
+        return "no_sql"
+    except Exception:
+        return "unknown"
+        
 
 def initialize_genres_data_rev():
     genres_config_rev = {}
@@ -28,6 +38,11 @@ def initialize_genres_data_rev():
     return genres_config_rev
 
 GENRES_DATA_REV = initialize_genres_data_rev()
+
+
+STAT_CACHE_META_KEY = "__meta__"
+LAST_FETCH_TS_KEY = "last_fetch_ts"
+FETCH_SKIP_WINDOW_SECONDS = 24 * 60 * 60
 
 
 def get_file_stat_identity(file_path: Path) -> str:
@@ -272,6 +287,135 @@ def _normalize_cache_entry(raw_entry: object, fallback_shortid: int | None = Non
     return None
 
 
+def _load_stat_cache(cache_path: Path) -> tuple[dict[str, dict[str, int | str]], dict[str, int]]:
+    """加载 stat 缓存，兼容旧版纯 entries 格式。"""
+    if not cache_path.exists():
+        return {}, {}
+
+    try:
+        raw = orjson.loads(cache_path.read_bytes())
+    except Exception as e:
+        logger.warning(f"数据同步-stat缓存读取失败，将视为空缓存: {e}")
+        return {}, {}
+
+    if not isinstance(raw, dict):
+        return {}, {}
+
+    raw_entries = raw.get("entries") if isinstance(raw.get("entries"), dict) else None
+    raw_meta = raw.get(STAT_CACHE_META_KEY) if isinstance(raw.get(STAT_CACHE_META_KEY), dict) else None
+
+    # 兼容旧格式：顶层就是 entries 映射。
+    if raw_entries is None:
+        raw_entries = {k: v for k, v in raw.items() if k != STAT_CACHE_META_KEY}
+
+    entries: dict[str, dict[str, int | str]] = {}
+    for k, v in raw_entries.items():
+        if not isinstance(k, str):
+            continue
+        normalized = _normalize_cache_entry(v)
+        if normalized is not None:
+            entries[k] = normalized
+
+    meta: dict[str, int] = {}
+    if raw_meta is not None:
+        ts = raw_meta.get(LAST_FETCH_TS_KEY)
+        if isinstance(ts, int):
+            meta[LAST_FETCH_TS_KEY] = ts
+        elif isinstance(ts, str):
+            try:
+                meta[LAST_FETCH_TS_KEY] = int(ts)
+            except ValueError:
+                pass
+
+    return entries, meta
+
+
+def _save_stat_cache(
+    cache_path: Path,
+    entries: dict[str, dict[str, int | str]],
+    meta: dict[str, int] | None = None,
+):
+    """写入 stat 缓存（entries + meta）。"""
+    payload: dict[str, object] = {"entries": entries}
+    if meta:
+        payload[STAT_CACHE_META_KEY] = meta
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_path.write_bytes(orjson.dumps(payload))
+
+
+def _classify_stat_change(
+    chart_files: list[Path],
+    stat_cache_entries: dict[str, dict[str, int | str]],
+) -> tuple[int, int, int]:
+    """基于 stat 缓存对文件做 A/B/C 分类，不开包。"""
+    count_a = 0
+    count_b = 0
+    count_c = 0
+
+    for chart_path in chart_files:
+        if not chart_path.exists():
+            continue
+
+        cache_key = _cache_key_for_path(chart_path)
+        chart_file_name = chart_path.stem
+        file_identity = get_file_stat_identity(chart_path)
+
+        legacy_entry = stat_cache_entries.get(chart_file_name)
+        cache_entry = _normalize_cache_entry(stat_cache_entries.get(cache_key))
+        if cache_entry is None and legacy_entry is not None:
+            cache_entry = _normalize_cache_entry(legacy_entry)
+
+        if cache_entry is None:
+            count_c += 1
+            continue
+
+        raw_shortid = cache_entry.get("shortid")
+        cached_shortid = raw_shortid if isinstance(raw_shortid, int) else None
+        identity_match = (
+            isinstance(cache_entry.get("identity"), str)
+            and cache_entry["identity"] == file_identity
+        )
+
+        if identity_match and cached_shortid is not None:
+            count_a += 1
+        else:
+            count_b += 1
+
+    return count_a, count_b, count_c
+
+
+def should_skip_fetch_by_stat(chart_files: list[Path]) -> bool:
+    """当 B/C 均为 0 且最近一次完整抓取在 24h 内时，跳过本次 fetch。"""
+    cache_path = PluginRegistry.get_cache_dir() / "stat_cache.json"
+    stat_cache_entries, stat_cache_meta = _load_stat_cache(cache_path)
+    count_a, count_b, count_c = _classify_stat_change(chart_files, stat_cache_entries)
+
+    logger.info(f"数据同步-stat预检查：A={count_a}, B={count_b}, C={count_c}")
+
+    if count_b != 0 or count_c != 0:
+        return False
+
+    last_fetch_ts = stat_cache_meta.get(LAST_FETCH_TS_KEY)
+    if last_fetch_ts is None:
+        return False
+
+    now_ts = int(time())
+    if now_ts - last_fetch_ts < FETCH_SKIP_WINDOW_SECONDS:
+        logger.info(
+            "数据同步-stat预检查命中：B/C 均为 0，且距上次完整抓取未超过 24 小时，跳过本次 fetch"
+        )
+        return True
+    return False
+
+
+def update_last_fetch_timestamp():
+    """更新最近一次完整 fetch 的时间戳。"""
+    cache_path = PluginRegistry.get_cache_dir() / "stat_cache.json"
+    entries, meta = _load_stat_cache(cache_path)
+    meta[LAST_FETCH_TS_KEY] = int(time())
+    _save_stat_cache(cache_path, entries, meta)
+
+
 def _merge_maidata_with_priority(existing: MaiData, new_data: MaiData) -> MaiData:
     """同 shortid 去重"""
     # 优先保留谱面数量更多的版本
@@ -283,12 +427,7 @@ async def process_chart_files(chart_files: list[Path]) -> list[MaiData]:
     """按 shortid 增量处理 zip 文件，避免文件名与 shortid 绑定。"""
     logger.info(f"数据同步-谱面处理开始：共 {len(chart_files)} 个 zip 文件")
     cache_path = PluginRegistry.get_cache_dir() / "stat_cache.json"
-    if cache_path.exists():
-        stat_cache_raw = orjson.loads(cache_path.read_bytes())
-        if not isinstance(stat_cache_raw, dict):
-            stat_cache_raw = {}
-    else:
-        stat_cache_raw = {}
+    stat_cache_raw, stat_cache_meta = _load_stat_cache(cache_path)
 
     # 缓存候选项：首轮扫描收集，末尾按“是否成功重理”决定是否提交。
     pending_stat_cache: dict[str, dict[str, int | str]] = {}
@@ -413,8 +552,7 @@ async def process_chart_files(chart_files: list[Path]) -> list[MaiData]:
             next_stat_cache[cache_key] = old_entry
 
     # 更新 stat 缓存
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    cache_path.write_bytes(orjson.dumps(next_stat_cache))
+    _save_stat_cache(cache_path, next_stat_cache, stat_cache_meta)
 
     logger.success(f"数据同步-谱面处理完成：合计处理到 {len(result)} 条谱面数据")
     return list(result.values())
@@ -571,14 +709,19 @@ async def maintenance_task():
             return
         logger.success(f"数据同步-步骤 1/5：已找到 {len(charts_files)} 个谱面文件")
 
+        if should_skip_fetch_by_stat(charts_files):
+            logger.success("数据同步-提前结束：命中 stat + 24h 规则，本次 fetch 全流程跳过")
+            return
+
         # 2. 处理本地 maidata 并存储到数据库
         logger.info(f"数据同步-步骤 2/5：开始处理本地谱面，共 {len(charts_files)} 个 zip 文件")
         maidata_list = await process_chart_files(charts_files)
         get_session = PluginRegistry.get_session
         async with get_session() as session:
             try:
-                # 开启 WAL 模式提高并发稳定性
-                await session.execute(text("PRAGMA journal_mode=WAL;"))
+                # 对于 SQLite，开启 WAL 模式提高并发稳定性
+                if get_sql_name() == "sqlite":
+                    await session.execute(text("PRAGMA journal_mode=WAL;"))
                 
                 # 执行全量内存比对
                 changed_tasks = await process_upsert_all(session, maidata_list)
@@ -640,8 +783,6 @@ async def maintenance_task():
 
         # 5. 独立获取别名数据
         logger.info("数据同步-步骤 5/5：开始同步别名数据")
-        from time import time
-        
         now = int(time())
         # 处理 Yuzuchan 别名
         if yuzuchan_data := await network.yuzuchan_alias_list():
@@ -665,6 +806,7 @@ async def maintenance_task():
             logger.success(f"数据同步-步骤 5/5：LXNS 别名同步完成，共 {len(aliases_set)} 条")
 
         logger.success("maib 数据重整理完成！")
+        update_last_fetch_timestamp()
         
     except Exception as e:
         logger.error(f"数据重整理失败: {e}")

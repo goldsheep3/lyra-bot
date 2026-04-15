@@ -14,6 +14,8 @@ else:
     from nonebot.plugin import PluginMetadata
     
     class Config(BaseModel):
+        LOW_MEMORY_MODE: bool = False  # 低内存模式，会阻止 B50 等大型图片合成
+        LOW_MEMORY_TIP: str | None = None
         DIVING_FISH_DEVELOPER_TOKEN: str | None = None
         LYRA_FETCH_SKIP: bool = False
 
@@ -30,4 +32,8 @@ else:
         from . import fetch 
 
     from . import matcher, models, utils, plugin_help
-    matcher.DEVELOPER_TOKEN = get_plugin_config(Config).DIVING_FISH_DEVELOPER_TOKEN
+    # 将配置项传递给 matcher 模块
+    cfg = get_plugin_config(Config)
+    matcher.LOW_MEMORY_MODE = cfg.LOW_MEMORY_MODE
+    matcher.LOW_MEMORY_TIP = cfg.LOW_MEMORY_TIP
+    matcher.DEVELOPER_TOKEN = cfg.DIVING_FISH_DEVELOPER_TOKEN

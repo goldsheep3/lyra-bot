@@ -13,6 +13,8 @@ from nonebot.internal.matcher import Matcher
 from nonebot.adapters.onebot.v11 import Bot, Event, Message, MessageSegment, MessageEvent, PrivateMessageEvent
 
 
+LOW_MEMORY_MODE: bool = False  # 低内存模式，会阻止 B50 等大型图片合成
+LOW_MEMORY_TIP: str | None = None
 DEVELOPER_TOKEN: Optional[str] = None
 
 # --- rule ---
@@ -373,6 +375,11 @@ async def _(event: Event, matcher: Matcher):
 @b50.handle()
 async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
     """处理命令: xxxb50/xxxkkb xxx"""
+    # Low Memory Block
+    if LOW_MEMORY_MODE:
+        if LOW_MEMORY_TIP:
+            await matcher.finish(LOW_MEMORY_TIP)
+        return
     _, extra = groups
     user_id, group_id = int(event.get_user_id()), getattr(event, "group_id", None)
     target_user_id, target_server = None, None

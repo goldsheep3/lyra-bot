@@ -185,7 +185,7 @@ class MaiDataModel:
     @staticmethod
     def mai_data(maidata: utils.MaiData):
         """根据 utils.MaiData 对象创建 MaiData 模型实例"""
-        return MaiData(
+        db_maidata = MaiData(
             shortid=maidata.shortid,
             title=maidata.title,
             bpm=maidata.bpm,
@@ -200,6 +200,16 @@ class MaiDataModel:
             utage_tag=maidata.utage_tag,
             buddy=maidata.buddy
         )
+
+        # 新增曲目时一并挂载谱面关系，确保能随主表一起持久化。
+        for chart in maidata.charts.values():
+            db_maidata.charts.append(MaiDataModel.mai_chart(chart, maidata.shortid))
+
+        # 兼容初始化时携带别名数据的场景。
+        for alias in maidata.aliases:
+            db_maidata.aliases.append(MaiDataModel.mai_alias(alias))
+
+        return db_maidata
 
     @staticmethod
     def mai_chart(chart: utils.MaiChart, shortid: int):
