@@ -3,6 +3,7 @@ import re
 import time
 import bisect
 import zipfile
+from thefuzz import process
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Optional, List, Tuple, Literal
@@ -24,6 +25,82 @@ def get_current_versions():
     jp_current = max(jp_versions) if jp_versions else 0
     cn_current = max(cn_versions) if cn_versions else 0
     return jp_current, cn_current
+
+def get_file_stat_identity(file_path: Path) -> str:
+    """获取文件的特征标识（修改时间 + 文件大小）"""
+    stat = file_path.stat()
+    # 使用 修改时间_文件大小 作为唯一标识
+    return f"{stat.st_mtime}_{stat.st_size}"
+
+
+async def parse_version(version_str: str) -> int:
+    """辅助函数：解析版本号"""
+    global VERSIONS_DATA
+
+    v_str = version_str.lower().strip()
+    if not v_str:
+        return -1
+    rd = {v.lower().strip(): k for k, v in VERSIONS_DATA.items()}
+    # 1. 直接匹配
+    v = rd.get(v_str, None)
+    # 2. 尝试去掉前缀 "maimai "
+    if not v:
+        if v_str[:7] == "maimai ":
+            v_str = v_str[7:].strip()
+            v = rd.get(v_str, None)
+    # 3. 尝试替换 DX -> でらっくす
+    if not v:
+        if 'dx' in v_str:
+            v_str = v_str.replace('dx', 'でらっくす')
+            v = rd.get(v_str, None)
+    # 4. 尝试去掉前缀 "でらっくす "
+    if not v:
+        if v_str[:6] == "でらっくす ":
+            v_str = v_str[6:].strip()
+            v = rd.get(v_str, None)
+    if v is None:
+        logger.warning(f"无法解析版本号: {version_str}")
+        return -1
+    return v
+
+
+async def parse_diving_fish_version(version_str: str) -> int:
+    """辅助函数：解析国服版本号"""
+    v_jp_result = await parse_version(version_str)
+    if v_jp_result <= 12:
+        # 旧框版本，一致
+        return v_jp_result
+    else:
+        # 新框版本，转化
+        # 版本号为 maib 自主定义，兼容水鱼版本号输出格式，不受官方版本号影响
+        v = (v_jp_result - 13) // 2 + 2020
+        return v
+
+
+async def parse_genre(genre_str: str, genre_dict_fixed: dict[str, int]) -> int:
+    """辅助函数：解析流派名"""
+    g_str = genre_str.lower().strip()
+    if not g_str:
+        return -1
+
+    # 1. 精确匹配
+    g = genre_dict_fixed.get(g_str, None)
+    
+    # 2. 模糊匹配 (容错几个字符)
+    if g is None:
+        try:
+            # 提取相似度最高的一个，阈值设为 80 (可以根据实际效果调整)
+            best_match = process.extractOne(g_str, list(genre_dict_fixed.keys()))
+            if best_match and best_match[1] >= 80:
+                g = genre_dict_fixed[best_match[0]]
+                logger.debug(f"流派模糊匹配成功: '{genre_str}' -> '{best_match[0]}' (相似度: {best_match[1]})")
+        except ImportError:
+            logger.warning("未安装 thefuzz 库，跳过模糊匹配")
+
+    if g is None:
+        logger.warning(f"无法解析流派名: {genre_str}")
+        return -1
+    return g
 
 @dataclass
 class MaiAlias:

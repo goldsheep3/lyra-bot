@@ -7,18 +7,18 @@ from pathlib import Path
 from sqlalchemy import select, text
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
-from thefuzz import process
 from nonebot import logger, require
 require("nonebot_plugin_datastore")
 from nonebot_plugin_datastore.db import post_db_init, get_engine
 
-from. import models, network, services
+from. import models, network, services, utils
 from .bot_registry import PluginRegistry
 from .utils import MaiData, MaiChart, SimaiNoteCount
 from .constants import *
 
 
 def get_sql_name() -> str:
+    """获取 SQL 类型"""
     try:
         return get_engine().name
     except ValueError:
@@ -27,7 +27,8 @@ def get_sql_name() -> str:
         return "unknown"
         
 
-def initialize_genres_data_rev():
+def _initialize_genres_data_rev():
+    """初始化 `GENRES_DATA` 的反向映射，支持多语言模糊匹配"""
     genres_config_rev = {}
     for k, v in GENRES_DATA.items():
         if isinstance(v, dict):
@@ -37,89 +38,13 @@ def initialize_genres_data_rev():
                     genres_config_rev[clean_key] = k
     return genres_config_rev
 
-GENRES_DATA_REV = initialize_genres_data_rev()
+GENRES_DATA_REV = _initialize_genres_data_rev()
 
 
 STAT_CACHE_META_KEY = "__meta__"
 LAST_FETCH_TS_KEY = "last_fetch_ts"
 FETCH_SKIP_WINDOW_SECONDS = 24 * 60 * 60
 
-
-def get_file_stat_identity(file_path: Path) -> str:
-    """获取文件的特征标识（修改时间 + 文件大小）"""
-    stat = file_path.stat()
-    # 使用 修改时间_文件大小 作为唯一标识
-    return f"{stat.st_mtime}_{stat.st_size}"
-
-
-async def parse_version(version_str: str) -> int:
-    """辅助函数：解析版本号"""
-    global VERSIONS_DATA
-
-    v_str = version_str.lower().strip()
-    if not v_str:
-        return -1
-    rd = {v.lower().strip(): k for k, v in VERSIONS_DATA.items()}
-    # 1. 直接匹配
-    v = rd.get(v_str, None)
-    # 2. 尝试去掉前缀 "maimai "
-    if not v:
-        if v_str[:7] == "maimai ":
-            v_str = v_str[7:].strip()
-            v = rd.get(v_str, None)
-    # 3. 尝试替换 DX -> でらっくす
-    if not v:
-        if 'dx' in v_str:
-            v_str = v_str.replace('dx', 'でらっくす')
-            v = rd.get(v_str, None)
-    # 4. 尝试去掉前缀 "でらっくす "
-    if not v:
-        if v_str[:6] == "でらっくす ":
-            v_str = v_str[6:].strip()
-            v = rd.get(v_str, None)
-    if v is None:
-        logger.warning(f"无法解析版本号: {version_str}")
-        return -1
-    return v
-
-
-async def parse_diving_fish_version(version_str: str) -> int:
-    """辅助函数：解析国服版本号"""
-    v_jp_result = await parse_version(version_str)
-    if v_jp_result <= 12:
-        # 旧框版本，一致
-        return v_jp_result
-    else:
-        # 新框版本，转化
-        # 版本号为 maib 自主定义，兼容水鱼版本号输出格式，不受官方版本号影响
-        v = (v_jp_result - 13) // 2 + 2020
-        return v
-
-
-async def parse_genre(genre_str: str, genre_dict_fixed: dict[str, int]) -> int:
-    """辅助函数：解析流派名"""
-    g_str = genre_str.lower().strip()
-    if not g_str:
-        return -1
-
-    # 1. 精确匹配
-    g = genre_dict_fixed.get(g_str, None)
-    
-    # 2. 模糊匹配 (容错几个字符)
-    if g is None:
-        try:
-            # 提取相似度最高的一个，阈值设为 80 (可以根据实际效果调整)
-            best_match = process.extractOne(g_str, list(genre_dict_fixed.keys()))
-            if best_match and best_match[1] >= 80:
-                g = genre_dict_fixed[best_match[0]]
-                logger.debug(f"流派模糊匹配成功: '{genre_str}' -> '{best_match[0]}' (相似度: {best_match[1]})")
-        except ImportError:
-            logger.warning("未安装 thefuzz 库，跳过模糊匹配")
-
-    if g is None:
-        logger.warning(f"无法解析流派名: {genre_str}")
-        return -1
-    return g
 
 async def get_chart(raw_metadata: dict, short_id: int, chart_num: int) -> MaiChart | None:
     """辅助函数：获取谱面信息"""
@@ -164,14 +89,14 @@ async def parse_maidata(raw_metadata: dict[str, str], zip_path: Path) -> MaiData
     title = raw_get(['title'], default="")
     bpm = raw_get(['wholebpm', 'bpm'], int, 0)
     artist = raw_get(['artist'], default="")
-    genre = await parse_genre(raw_get(['genre'], default=""), GENRES_DATA_REV)
+    genre = await utils.parse_genre(raw_get(['genre'], default=""), GENRES_DATA_REV)
     _cabinet = raw_get(['cabinet'], default=None)
     if _cabinet is None:
         cabinet = "SD" if shortid < 10000 else "DX"
     else:
         cabinet = "DX" if any(k in _cabinet.lower() for k in ["dx", "でらっくす", "deluxe"]) else "SD"
     version_str = raw_get(['version'], default="")
-    version = await parse_version(version_str)
+    version = await utils.parse_version(version_str)
     converter = raw_get(['ChartConverter'], default="")
 
     # title 处理：去掉`[XXXX]`
@@ -358,7 +283,7 @@ def _classify_stat_change(
 
         cache_key = _cache_key_for_path(chart_path)
         chart_file_name = chart_path.stem
-        file_identity = get_file_stat_identity(chart_path)
+        file_identity = utils.get_file_stat_identity(chart_path)
 
         legacy_entry = stat_cache_entries.get(chart_file_name)
         cache_entry = _normalize_cache_entry(stat_cache_entries.get(cache_key))
@@ -448,7 +373,7 @@ async def process_chart_files(chart_files: list[Path]) -> list[MaiData]:
 
         cache_key = _cache_key_for_path(chart_path)
         chart_file_name = chart_path.stem
-        file_identity = get_file_stat_identity(chart_path)
+        file_identity = utils.get_file_stat_identity(chart_path)
 
         legacy_entry = stat_cache_raw.get(chart_file_name)
         cache_entry = _normalize_cache_entry(stat_cache_raw.get(cache_key))
@@ -749,61 +674,82 @@ async def maintenance_task():
                 try:
                     shortid = int(sy_data.get("id", 0))
                     ds: list[float | int] = sy_data.get("ds", [])
-                    ver = await parse_diving_fish_version(sy_data.get("basic_info", {}).get("from", ""))
+                    ver = await utils.parse_diving_fish_version(sy_data.get("basic_info", {}).get("from", ""))
 
                     sync_data.append((shortid, ver, ds))
 
-                    if (idx + 1) % 200 == 0:
+                    if (idx + 1) % 100 == 0:
                         logger.info(f"水鱼数据解析进度: [{idx+1}/{total}]")
                 except Exception as e:
                     logger.warning(f"水鱼数据同步失败 shortid={sy_data.get('id', 0)}: {e}")
 
-            hit_song_count, changed_chart_count = await services.sync_cn_data_batch(sync_data, commit_every=200)
-            logger.info(
-                f"水鱼数据批量同步完成: 输入 {len(sync_data)} 条, 命中 {hit_song_count} 首, 更新谱面 {changed_chart_count} 条"
-            )
-            logger.success("数据同步-步骤 3/5：水鱼国服版本与定数同步完成")
+            logger.success(f"水鱼数据解析完成，共 {len(sync_data)} 条，开始批量同步至数据库...")
+            try:
+                hit_song_count, changed_chart_count = await services.sync_cn_data_batch(sync_data, commit_every=200)
+                logger.info(
+                    f"水鱼数据批量同步完成: 输入 {len(sync_data)} 条, 命中 {hit_song_count} 首, 更新谱面 {changed_chart_count} 条"
+                )
+                logger.success("数据同步-步骤 3/5：水鱼国服版本与定数同步完成")
+            except Exception as e:
+                logger.error(f"数据同步-步骤 3/5：水鱼数据批量同步失败: {e}")
         else:
             logger.warning("数据同步-水鱼数据：music_data 加载失败，无法同步国服版本号")
 
         # 4. 同步拟合难度
         logger.info("数据同步-步骤 4/5：开始同步拟合难度")
         sy_lvnh = []
-        if sy_chart_stats := await network.sy_chart_stats():
-            for shortid, sy_stats in sy_chart_stats.get("charts", {}).items():
-                shortid = int(shortid)
-                fit_diffs: list[float] = [s.get('fit_diff', 0) for s in sy_stats]
-                for diff, fit_diff in enumerate(fit_diffs, start=2):
-                    sy_lvnh.append((shortid, diff, fit_diff))
-            if sy_lvnh:
-                await services.set_lv_synh_batch(sy_lvnh)
-            logger.success(f"数据同步-步骤 4/5：拟合难度同步完成，共 {len(sy_lvnh)} 条")
-        else:
-            logger.warning("数据同步-水鱼数据：chart_stats 加载失败，无法同步拟合难度")
+        try:
+            if sy_chart_stats := await network.sy_chart_stats():
+                for shortid, sy_stats in sy_chart_stats.get("charts", {}).items():
+                    shortid = int(shortid)
+                    fit_diffs: list[float] = [s.get('fit_diff', 0) for s in sy_stats]
+                    for diff, fit_diff in enumerate(fit_diffs, start=2):
+                        sy_lvnh.append((shortid, diff, fit_diff))
+                if sy_lvnh:
+                    logger.info(f"拟合难度数据解析完成，共 {len(sy_lvnh)} 条，开始批量同步...")
+                    await services.set_lv_synh_batch(sy_lvnh)
+                    logger.success(f"数据同步-步骤 4/5：拟合难度同步完成，共 {len(sy_lvnh)} 条")
+                else:
+                    logger.warning("数据同步-水鱼数据：chart_stats 无有效数据")
+            else:
+                logger.warning("数据同步-水鱼数据：chart_stats 加载失败，无法同步拟合难度")
+        except Exception as e:
+            logger.error(f"数据同步-步骤 4/5：拟合难度同步失败: {e}")
 
         # 5. 独立获取别名数据
         logger.info("数据同步-步骤 5/5：开始同步别名数据")
         now = int(time())
         # 处理 Yuzuchan 别名
-        if yuzuchan_data := await network.yuzuchan_alias_list():
-            aliases_set: set[tuple[int, str]] = set()
-            for entry in yuzuchan_data.get("content", []):
-                song_id = int(entry.get('SongID', 0))
-                aliases: list[str] = entry.get('Alias', '')
-                aliases_set.update((song_id, alias) for alias in aliases)
-            # 存储别名数据
-            await services.add_aliases(list(aliases_set), source_id=-101, add_time=now)
-            logger.success(f"数据同步-步骤 5/5：Yuzuchan 别名同步完成，共 {len(aliases_set)} 条")
+        try:
+            if yuzuchan_data := await network.yuzuchan_alias_list():
+                aliases_set: set[tuple[int, str]] = set()
+                for entry in yuzuchan_data.get("content", []):
+                    song_id = int(entry.get('SongID', 0))
+                    aliases: list[str] = entry.get('Alias', '')
+                    aliases_set.update((song_id, alias) for alias in aliases)
+                if aliases_set:
+                    logger.info(f"Yuzuchan 别名数据解析完成，共 {len(aliases_set)} 条，开始同步...")
+                    # 存储别名数据
+                    await services.add_aliases(list(aliases_set), source_id=-101, add_time=now)
+                    logger.success(f"数据同步-步骤 5/5：Yuzuchan 别名同步完成，共 {len(aliases_set)} 条")
+        except Exception as e:
+            logger.warning(f"数据同步-Yuzuchan 别名同步失败: {e}")
+        
         # 处理 LXNS 别名
-        if lxns_data := await network.lx_alias_list():
-            aliases_set: set[tuple[int, str]] = set()
-            for entry in lxns_data.get("aliases", []):
-                song_id = int(entry.get('song_id', 0))
-                aliases: list[str] = entry.get('aliases', [])
-                aliases_set.update((song_id, alias) for alias in aliases)
-            # 存储别名数据
-            await services.add_aliases(list(aliases_set), source_id=-102, add_time=now)
-            logger.success(f"数据同步-步骤 5/5：LXNS 别名同步完成，共 {len(aliases_set)} 条")
+        try:
+            if lxns_data := await network.lx_alias_list():
+                aliases_set: set[tuple[int, str]] = set()
+                for entry in lxns_data.get("aliases", []):
+                    song_id = int(entry.get('song_id', 0))
+                    aliases: list[str] = entry.get('aliases', [])
+                    aliases_set.update((song_id, alias) for alias in aliases)
+                if aliases_set:
+                    logger.info(f"LXNS 别名数据解析完成，共 {len(aliases_set)} 条，开始同步...")
+                    # 存储别名数据
+                    await services.add_aliases(list(aliases_set), source_id=-102, add_time=now)
+                    logger.success(f"数据同步-步骤 5/5：LXNS 别名同步完成，共 {len(aliases_set)} 条")
+        except Exception as e:
+            logger.warning(f"数据同步-LXNS 别名同步失败: {e}")
 
         logger.success("maib 数据重整理完成！")
         update_last_fetch_timestamp()
