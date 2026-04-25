@@ -552,19 +552,16 @@ async def set_mct_level_batch(data: list[dict], server: SERVER_TAG | Literal['sy
         raise ValueError(f"Unsupported server: {server}")
 
     target_field = server_field_map[server]
-
-    # 2. 构建动态 update 语句
-    # 使用 bindparam("level") 对应 data 字典中的 "level" 键
+    
+    table = MaiChart.__table__
     statement = (
-        update(MaiChart)
-        .where(MaiChart.shortid == bindparam("shortid"))
-        .where(MaiChart.difficulty == bindparam("difficulty"))
+        update(table)  # type: ignore
+        .where(table.c.shortid == bindparam("shortid"))
+        .where(table.c.difficulty == bindparam("difficulty"))
         .values({target_field: bindparam("level")})
     )
 
-    # 3. 执行批量操作
-    await session.execute(statement, data,
-                          execution_options={"synchronize_session": None})
+    await session.execute(statement, data)
 
 # 设置 `MaiData` 的 `version` (通过 `shortid, server`)
 @with_session
