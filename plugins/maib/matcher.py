@@ -74,7 +74,7 @@ def get_args(args_text: str) -> tuple[int | None, SERVER_TAG | Literal['ALL'] | 
             if arg.isdigit() and not target_user_id:
                 # 解析纯数字 QQ 号
                 target_user_id = int(arg)
-            if arg.upper() in ['JP', 'INTL', 'CN', 'ALL'] and not target_server:
+            if arg.upper() in ['JP', 'CN', 'ALL'] and not target_server:
                 # 解析服务器字符串
                 target_server = cast(SERVER_TAG | Literal['ALL'], arg.upper())
             if arg in ['全服'] and not target_server:

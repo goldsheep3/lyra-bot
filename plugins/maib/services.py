@@ -506,7 +506,7 @@ async def set_mct_level(mct: MaiChart | tuple[int, int], server: SERVER_TAG | Li
     通过 `shortid, difficulty, server`
     Args:
       mct: MaiChart 实例或 (shortid, difficulty) 元组
-      server: 支持：'JP' / 'INTL' / 'CN' / 'synh'
+      server: 支持：'JP' / 'CN' / 'synh'
       level: 定数（可以是小数）
     """
 
@@ -573,7 +573,7 @@ async def set_mct_version(shortid: int, server: SERVER_TAG, version: int,
     通过 `shortid, server`
     Args:
       shortid: 曲目 ID
-      server: 支持：'JP' / 'INTL' / 'CN' / 'synh'
+      server: 支持：'JP' / 'CN' / 'synh'
       version: 版本号
     """
 
@@ -603,7 +603,6 @@ async def set_mdt_version_batch(data: list[tuple[int, int]],  server: SERVER_TAG
         return
 
     # 1. 映射服务器标签到数据库字段
-    # 注意：'synh' 和 'INTL' 在你的原始代码逻辑中是不处理 version 的
     server_field_map = {
         'CN': MaiData.version_cn,
         'JP': MaiData.version
@@ -713,7 +712,7 @@ async def set_mct_ach(server: SERVER_TAG, ach: utils.MaiChartAch,
     """
     设置 `MaiChart` 的成绩
     Args:
-      server: 支持：'JP' / 'INTL' / 'CN' / 'synh'
+      server: 支持：'JP' / 'CN' / 'synh'
       ach: 成绩数据
     """
 
@@ -836,7 +835,7 @@ def _normalize_server_for_user_cache(server: SERVER_TAG) -> Literal["JP", "CN"]:
 
 
 def _get_current_version_by_server(server: SERVER_TAG) -> int:
-    """获取对应服务器的当前版本号。INTL 归并到 JP 版本线。"""
+    """获取对应服务器的当前版本号"""
     jp_ver, cn_ver = utils.get_current_versions()
     return cn_ver if server == "CN" else jp_ver
 

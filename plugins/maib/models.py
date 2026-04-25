@@ -14,11 +14,11 @@ Model = PluginRegistry.get_model()
 
 class MaiAlias(Model):
     """MaiData 曲目别名数据"""
-    __tablename__ = "aliases"
+    __tablename__ = "maib_maialiases"
     __table_args__ = (UniqueConstraint("shortid", "alias"),)
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    shortid: Mapped[int] = mapped_column(ForeignKey("maidata.shortid", ondelete="RESTRICT"), index=True)
+    shortid: Mapped[int] = mapped_column(ForeignKey("maib_maidatas.shortid", ondelete="RESTRICT"), index=True)
     alias: Mapped[str] = mapped_column(index=True)
 
     create_time: Mapped[int] = mapped_column(default=lambda: int(time.time()))
@@ -41,15 +41,15 @@ class MaiAlias(Model):
 
 class MaiChartAch(Model):
     """MaiChartAch 成绩数据"""
-    __tablename__ = "chart_achs"
+    __tablename__ = "maib_maichartachs"
     __table_args__ = (UniqueConstraint("user_id", "shortid", "difficulty", "server"),)
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    shortid: Mapped[int] = mapped_column(ForeignKey("maidata.shortid", ondelete="RESTRICT"))
-    chart_id: Mapped[int] = mapped_column(ForeignKey("charts.id", ondelete="CASCADE"))
+    shortid: Mapped[int] = mapped_column(ForeignKey("maib_maidatas.shortid", ondelete="RESTRICT"))
+    chart_id: Mapped[int] = mapped_column(ForeignKey("maib_maicharts.id", ondelete="CASCADE"))
 
     difficulty: Mapped[int]
-    server: Mapped[Literal["JP", "INTL", "CN"]]  # 服务器标识
+    server: Mapped[Literal["JP", "CN"]]  # 服务器标识
     achievement: Mapped[float]  # 成就率
     dxscore: Mapped[int] = mapped_column(default=0)  # DX 分数
     combo: Mapped[int] = mapped_column(default=0)  # 连击
@@ -89,11 +89,11 @@ class MaiChartAch(Model):
 
 class MaiChart(Model):
     """MaiChart 谱面数据"""
-    __tablename__ = "charts"
+    __tablename__ = "maib_maicharts"
     __table_args__ = (UniqueConstraint("shortid", "difficulty"),)
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    shortid: Mapped[int] = mapped_column(ForeignKey("maidata.shortid", ondelete="CASCADE"))
+    shortid: Mapped[int] = mapped_column(ForeignKey("maib_maidatas.shortid", ondelete="CASCADE"))
     difficulty: Mapped[int]  # 通常为 2~7
     lv: Mapped[float] = mapped_column(index=True)
     lv_cn: Mapped[Optional[float]] = mapped_column(index=True)
@@ -135,7 +135,7 @@ class MaiChart(Model):
 
 class MaiData(Model):
     """MaiData 曲目数据"""
-    __tablename__ = "maidata"
+    __tablename__ = "maib_maidatas"
 
     shortid: Mapped[int] = mapped_column(primary_key=True)
     title: Mapped[str] = mapped_column(index=True)
@@ -193,7 +193,7 @@ class MaiData(Model):
 
 
 class MaiUser(Model):
-    __tablename__ = "maiuser"
+    __tablename__ = "maib_maiusers"
 
     user_id: Mapped[int] = mapped_column(primary_key=True)
     username: Mapped[str] = mapped_column(default='')

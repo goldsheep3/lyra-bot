@@ -94,7 +94,7 @@ DIFFS_DICT = dict(enumerate([
 DIFFS_MAP = _get_map(DIFFS_DICT)
 
 # 服务器标识类型
-SERVER_TAG = Literal["JP", "INTL", "CN"]
+SERVER_TAG = Literal["JP", "CN"]
 
 # 基础路径及 yml 数据
 PLUGIN_BASE_PATH = Path(__file__).parent

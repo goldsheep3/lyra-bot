@@ -195,12 +195,11 @@ class MaiChart:
     note_count_touch: int = -1
     note_count_break: int = -1
 
-    # 成就信息，键为服务器标识
-    _achs: dict[SERVER_TAG, MaiChartAch | None] = field(
+    # 成就信息，键为服务器标识和user_id
+    _achs: dict[SERVER_TAG, dict[int, MaiChartAch | None]] = field(
             default_factory=lambda: {
-                "JP": None,
-                "INTL": None,
-                "CN": None,
+                "JP": {},
+                "CN": {},
             }
         )
 
@@ -233,25 +232,25 @@ class MaiChart:
         frac_part = level - int_part
         return f"{int_part}+" if frac_part * 10 >= plus else f"{level}"
 
-    def get_ach(self, server: SERVER_TAG = "JP") -> MaiChartAch:
+    def get_ach(self, server: SERVER_TAG = "JP", user_id: int = 0) -> MaiChartAch:
         """获取谱面成绩"""
-        ach = self._achs.get(server, None)
+        ach = self._achs.get(server, {}).get(user_id, None)
         return ach if ach else MaiChartAch( shortid=self.shortid, difficulty=self.difficulty, server=server, achievement=-100)
 
     def set_ach(self, ach: MaiChartAch):
         """覆盖原有谱面成绩"""
         ach.dxscore_max = self.dxscore_max  # 同步 DX 分数上限
-        self._achs[ach.server] = ach
+        self._achs[ach.server][ach.user_id] = ach
 
     def update_ach(self, ach: MaiChartAch) -> MaiChartAch:
         """更新谱面成绩"""
-        new_ach = self.get_ach(ach.server)
+        new_ach = self.get_ach(ach.server, ach.user_id)
         new_ach.update_ach(ach)
         return new_ach
 
     def get_dxrating(self, server: SERVER_TAG = "JP", ap_bonus: int = 0) -> int:
         """获取谱面 DX Rating"""
-        ach = self.get_ach(server=server)
+        ach = self.get_ach(server=server, user_id=0)
         if not ach or ach.achievement < 0:
             return 0
         factor = next((f for threshold, f in RATE_FACTOR_TABLE if ach.achievement >= threshold), 0.0)
