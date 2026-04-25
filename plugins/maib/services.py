@@ -536,32 +536,40 @@ async def set_mct_level(mct: MaiChart | tuple[int, int], server: SERVER_TAG | Li
 @with_session
 async def set_mct_level_batch(data: list[dict], server: SERVER_TAG | Literal['synh'], 
                               *, session: AsyncSession):
-    """
-    [批量] 通过 `shortid, difficulty, server (支持 synh)` 设置 `MaiChart` 的 `level`
-    data 格式: [{"shortid": 123, "difficulty": 2, "level": 14.5}, ...]
-    """
-
-    # 1. 定义 server 与 数据库字段的映射
+    # 1. 字段映射
     server_field_map = {
         'JP': MaiChart.lv,
         'CN': MaiChart.lv_cn,
         'synh': MaiChart.lv_synh
     }
-
     if server not in server_field_map:
         raise ValueError(f"Unsupported server: {server}")
 
     target_field = server_field_map[server]
-    
     table = MaiChart.__table__
+
+    # 2. 构建动态 update 语句
+    # 使用 b_ 开头的名字，避开列名保留字
     statement = (
         update(table)  # type: ignore
-        .where(table.c.shortid == bindparam("shortid"))
-        .where(table.c.difficulty == bindparam("difficulty"))
-        .values({target_field: bindparam("level")})
+        .where(table.c.shortid == bindparam("b_shortid"))
+        .where(table.c.difficulty == bindparam("b_diff"))
+        .values({target_field: bindparam("b_level")})
     )
 
-    await session.execute(statement, data)
+    # 3. 转换 data 中的键名以匹配 bindparam
+    # 这一步是为了让 data 里的键和上面 bindparam 里的名字对应上
+    formatted_data = [
+        {
+            "b_shortid": d["shortid"],
+            "b_diff": d["difficulty"],
+            "b_level": d["level"]
+        }
+        for d in data
+    ]
+
+    # 4. 执行批量操作
+    await session.execute(statement, formatted_data)
 
 # 设置 `MaiData` 的 `version` (通过 `shortid, server`)
 @with_session
