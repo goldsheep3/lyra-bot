@@ -563,7 +563,8 @@ async def set_mct_level_batch(data: list[dict], server: SERVER_TAG | Literal['sy
     )
 
     # 3. 执行批量操作
-    await session.execute(statement, data)
+    await session.execute(statement, data,
+                          execution_options={"synchronize_session": None})
 
 # 设置 `MaiData` 的 `version` (通过 `shortid, server`)
 @with_session
