@@ -667,42 +667,54 @@ async def add_mdt_alias_batch(data: list[tuple[int, str]], create_qq: int,
     if not data:
         return
 
-    # 统一为每一条数据注入 create_qq，groupid 保持为 None
-    full_data = [
-        {"shortid": sid, "alias": alias, "create_qq": create_qq, "create_qq_group": None, "create_time": int(time.time())} 
-        for sid, alias in data
-    ]
-    
+    chunk_size = 4096
     sql_type = PluginRegistry.get_sql_name()
 
-    # 1. 尝试使用高性能方言 (SQLite / PostgreSQL)
-    if sql_type in ("sqlite", "postgresql"):
-        if sql_type == "sqlite":
-            from sqlalchemy.dialects.sqlite import insert as dialect_insert
-        else:
-            from sqlalchemy.dialects.postgresql import insert as dialect_insert
-            
-        # 使用补全后的 full_data
-        stmt = dialect_insert(MaiAlias).values(full_data)
-        stmt = stmt.on_conflict_do_nothing(index_elements=['shortid', 'alias'])
-        await session.execute(stmt)
-    
-    # 2. 通用降级逻辑 (MySQL 或其他)
-    else:
-        sids = {d['shortid'] for d in full_data}
-        result = await session.execute(
-            select(MaiAlias).where(MaiAlias.shortid.in_(sids))
-        )
-        existing_set = {(a.shortid, a.alias) for a in result.scalars().all()}
+    for i in range(0, len(data), chunk_size):
+        chunk = data[i:i + chunk_size]
 
-        new_objs = []
-        for d in full_data:
-            if (d['shortid'], d['alias']) not in existing_set:
-                new_objs.append(MaiAlias(**d))
-                existing_set.add((d['shortid'], d['alias'])) 
-        
-        if new_objs:
-            session.add_all(new_objs)
+        # 统一为每一条数据注入 create_qq，groupid 保持为 None
+        full_data = [
+            {
+                "shortid": sid,
+                "alias": alias,
+                "create_qq": create_qq,
+                "create_qq_group": None,
+                "create_time": int(time.time()),
+            }
+            for sid, alias in chunk
+        ]
+
+        # 1. 尝试使用高性能方言 (SQLite / PostgreSQL)
+        if sql_type in ("sqlite", "postgresql"):
+            if sql_type == "sqlite":
+                from sqlalchemy.dialects.sqlite import insert as dialect_insert
+            else:
+                from sqlalchemy.dialects.postgresql import insert as dialect_insert
+
+            stmt = dialect_insert(MaiAlias).values(full_data)
+            stmt = stmt.on_conflict_do_nothing(index_elements=["shortid", "alias"])
+            await session.execute(stmt)
+
+        # 2. 通用降级逻辑 (MySQL 或其他)
+        else:
+            sids = {d["shortid"] for d in full_data}
+            result = await session.execute(
+                select(MaiAlias).where(MaiAlias.shortid.in_(sids))
+            )
+            existing_set = {(a.shortid, a.alias) for a in result.scalars().all()}
+
+            new_objs = []
+            for d in full_data:
+                if (d["shortid"], d["alias"]) not in existing_set:
+                    new_objs.append(MaiAlias(**d))
+                    existing_set.add((d["shortid"], d["alias"]))
+
+            if new_objs:
+                session.add_all(new_objs)
+
+        # 每 4096 条提交一次
+        await session.commit()
 
 
 # 设置 `MaiChart` 的成绩
