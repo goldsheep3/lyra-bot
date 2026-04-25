@@ -667,7 +667,7 @@ async def add_mdt_alias_batch(data: list[tuple[int, str]], create_qq: int,
     if not data:
         return
 
-    chunk_size = 4096
+    chunk_size = 512
     sql_type = PluginRegistry.get_sql_name()
 
     for i in range(0, len(data), chunk_size):
@@ -713,7 +713,6 @@ async def add_mdt_alias_batch(data: list[tuple[int, str]], create_qq: int,
             if new_objs:
                 session.add_all(new_objs)
 
-        # 每 4096 条提交一次
         await session.commit()
 
 
