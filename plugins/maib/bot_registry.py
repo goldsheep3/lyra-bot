@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Type, Optional, Callable
 from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, AsyncEngine
 from contextlib import suppress
 
 def get_nb2_driver():
@@ -18,6 +18,7 @@ class PluginRegistry:
     
     _Model: Optional[Type[DeclarativeBase]] = None
     _create_session_func: Optional[Callable[[], AsyncSession]] = None
+    _get_engine_func: Optional[Callable[[], AsyncEngine]] = None
 
     # --- Localstore 相关 ---
 
@@ -77,6 +78,8 @@ class PluginRegistry:
                 from nonebot_plugin_datastore import get_plugin_data, create_session
                 cls._Model = get_plugin_data().Model
                 cls._create_session_func = create_session  #type: ignore
+                from nonebot_plugin_datastore.db import get_engine
+                cls._get_engine_func = get_engine  #type: ignore
                 return
 
         # Fallback: 定义本地模型基类
@@ -94,8 +97,20 @@ class PluginRegistry:
     @classmethod
     def get_session(cls) -> AsyncSession:
         cls._ensure_datastore()
-        if cls._create_session_func:  #type: ignore
-            return cls._create_session_func()  #type: ignore
+        if cls._create_session_func:  # type: ignore
+            return cls._create_session_func()  # type: ignore
         
         # 抛出明确错误，而不是返回一个无法使用的空 Session
         raise RuntimeError("AsyncSession is only available when nonebot_plugin_datastore is loaded.")
+
+    @classmethod
+    def get_sql_name(cls) -> str:
+        """获取 SQL 类型"""
+        cls._ensure_datastore()
+        try:
+            engine = cls._get_engine_func()  # type: ignore
+            return engine.name
+        except ValueError:
+            return "no_sql"
+        except Exception:
+            return "unknown"

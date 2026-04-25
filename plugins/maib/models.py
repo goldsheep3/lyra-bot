@@ -1,11 +1,12 @@
 import time
 from pathlib import Path
-from typing import List, Literal, Optional
+from typing import Literal, Optional
 
 from sqlalchemy import ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from . import utils
+from .constants import SERVER_TAG
 from .bot_registry import PluginRegistry
 
 Model = PluginRegistry.get_model()
@@ -20,7 +21,7 @@ class MaiAlias(Model):
     shortid: Mapped[int] = mapped_column(ForeignKey("maidata.shortid", ondelete="RESTRICT"), index=True)
     alias: Mapped[str] = mapped_column(index=True)
 
-    create_time: Mapped[int] = mapped_column()
+    create_time: Mapped[int] = mapped_column(default=lambda: int(time.time()))
     create_qq: Mapped[int] = mapped_column()
     create_qq_group: Mapped[Optional[int]] = mapped_column()
 
@@ -60,6 +61,18 @@ class MaiChartAch(Model):
 
     chart: Mapped["MaiChart"] = relationship(back_populates="achs", lazy="selectin")
 
+    def update(self, other: 'MaiChartAch | utils.MaiChartAch'):
+        """更新成绩"""
+        if self.achievement < other.achievement:
+            self.achievement = other.achievement
+        if self.dxscore < other.dxscore:
+            self.dxscore = other.dxscore
+        if self.combo < other.combo:
+            self.combo = other.combo
+        if self.sync < other.sync:
+            self.sync = other.sync
+        self.update_time = int(time.time())
+
     def to_data(self) -> utils.MaiChartAch:
         """转换为 utils.MaiChartAch 对象"""
         return utils.MaiChartAch(
@@ -83,7 +96,7 @@ class MaiChart(Model):
     shortid: Mapped[int] = mapped_column(ForeignKey("maidata.shortid", ondelete="CASCADE"))
     difficulty: Mapped[int]  # 通常为 2~7
     lv: Mapped[float] = mapped_column(index=True)
-    lv_cn: Mapped[Optional[float]] = mapped_column(index=True)  # 重点重构
+    lv_cn: Mapped[Optional[float]] = mapped_column(index=True)
     lv_synh: Mapped[Optional[float]] = mapped_column(index=True)  # 水鱼拟合定数
     des: Mapped[str]
     inote: Mapped[str]
@@ -96,9 +109,9 @@ class MaiChart(Model):
     note_count_break: Mapped[int]
 
     maidata: Mapped["MaiData"] = relationship(back_populates="charts", lazy="selectin")
-    achs: Mapped[List["MaiChartAch"]] = relationship(back_populates="chart", cascade="all, delete-orphan", lazy="selectin")
+    achs: Mapped[list["MaiChartAch"]] = relationship(back_populates="chart", cascade="all, delete-orphan", lazy="selectin")
 
-    def to_data(self) -> utils.MaiChart:
+    def to_data(self, include_achs: bool = False) -> utils.MaiChart:
         """转换为 utils.MaiChart 对象"""
         maichart = utils.MaiChart(
             shortid=self.shortid,
@@ -114,6 +127,9 @@ class MaiChart(Model):
             note_count_touch=self.note_count_touch,
             note_count_break=self.note_count_break
         )
+        if include_achs:
+            for ach in self.achs:
+                maichart.set_ach(ach.to_data())
         return maichart
 
 
@@ -142,14 +158,14 @@ class MaiData(Model):
     buddy: Mapped[bool] = mapped_column(default=False)
 
     # 关系映射
-    charts: Mapped[List["MaiChart"]] = relationship(back_populates="maidata", cascade="all, delete-orphan", lazy="selectin")
-    aliases: Mapped[List["MaiAlias"]] = relationship(back_populates="maidata", lazy="selectin")
+    charts: Mapped[list["MaiChart"]] = relationship(back_populates="maidata", cascade="all, delete-orphan", lazy="selectin")
+    aliases: Mapped[list["MaiAlias"]] = relationship(back_populates="maidata", lazy="selectin")
 
     def get_charts(self):
         self.charts.sort(key=lambda c: c.difficulty)
         return self.charts
 
-    def to_data(self, clear_chart_achs: bool = False) -> utils.MaiData:
+    def to_data(self, include_achs: bool = False) -> utils.MaiData:
         """转换为 utils.MaiData 对象"""
         maidata = utils.MaiData(
             shortid=self.shortid,
@@ -170,11 +186,49 @@ class MaiData(Model):
         )
         # 添加谱面数据
         for chart in self.charts:
-            # 永远不主动携带成绩数据
-            maidata.set_chart(chart.to_data())
+            maidata.set_chart(chart.to_data(include_achs=include_achs))
         # 添加别名数据
         maidata.add_aliases([a.to_data() for a in self.aliases])
         return maidata
+
+
+class MaiUser(Model):
+    __tablename__ = "maiuser"
+
+    user_id: Mapped[int] = mapped_column(primary_key=True)
+    username: Mapped[str] = mapped_column(default='')
+    default_server: Mapped[SERVER_TAG] = mapped_column(default='CN')
+    plate_version: Mapped[int | None] = mapped_column(default=None)  # 牌子信息
+    plate_code: Mapped[int | None] = mapped_column(default=None)
+
+    jp_update_time: Mapped[int] = mapped_column(default=0)
+    jp_dxrating: Mapped[int] = mapped_column(default=0)
+    cn_update_time: Mapped[int] = mapped_column(default=0)
+    cn_dxrating: Mapped[int] = mapped_column(default=0)
+
+    # lyra-sync 字段: 在 sync_allow_time 有效期内，可以使用 sync-hash 验证身份并同步成绩
+    sync_hash: Mapped[Optional[str]] = mapped_column(default=None)
+    sync_allow_time: Mapped[Optional[int]] = mapped_column(default=None)
+
+    def plate(self) -> tuple[int, int] | None:
+        """返回牌子信息"""
+        if self.plate_version is not None and self.plate_code is not None:
+            return self.plate_version, self.plate_code
+        return None
+
+    def to_data(self):
+        """转换为 utils.MaiUser 对象"""
+        # lyra-sync 相关字段不包含在 utils.MaiUser
+        return utils.MaiUser(
+            user_id=self.user_id,
+            username=self.username,
+            default_server=self.default_server,
+            plate=self.plate(),
+            jp_update_time=self.jp_update_time,
+            jp_dxrating=self.jp_dxrating,
+            cn_update_time=self.cn_update_time,
+            cn_dxrating=self.cn_dxrating
+        )
 
 
 # ====== 工厂函数 ======
@@ -183,9 +237,9 @@ class MaiDataModel:
     """模型工厂类，提供获取模型的接口"""
 
     @staticmethod
-    def mai_data(maidata: utils.MaiData):
+    def mdt(maidata: utils.MaiData):
         """根据 utils.MaiData 对象创建 MaiData 模型实例"""
-        db_maidata = MaiData(
+        mdt = MaiData(
             shortid=maidata.shortid,
             title=maidata.title,
             bpm=maidata.bpm,
@@ -200,19 +254,16 @@ class MaiDataModel:
             utage_tag=maidata.utage_tag,
             buddy=maidata.buddy
         )
-
-        # 新增曲目时一并挂载谱面关系，确保能随主表一起持久化。
+        # 添加谱面数据
         for chart in maidata.charts.values():
-            db_maidata.charts.append(MaiDataModel.mai_chart(chart, maidata.shortid))
-
-        # 兼容初始化时携带别名数据的场景。
+            mdt.charts.append(MaiDataModel.mct(chart, maidata.shortid))
+        # 添加别名数据
         for alias in maidata.aliases:
-            db_maidata.aliases.append(MaiDataModel.mai_alias(alias))
-
-        return db_maidata
+            mdt.aliases.append(MaiDataModel.mal(alias))
+        return mdt
 
     @staticmethod
-    def mai_chart(chart: utils.MaiChart, shortid: int):
+    def mct(chart: utils.MaiChart, shortid: int):
         """根据 utils.MaiChart 对象创建 MaiChart 模型实例"""
         return MaiChart(
             shortid=shortid,
@@ -230,7 +281,21 @@ class MaiDataModel:
         )
 
     @staticmethod
-    def mai_alias(alias: utils.MaiAlias):
+    def mct_ach(ach: utils.MaiChartAch):
+        """根据 utils.MaiChartAch 对象创建 MaiChartAch 模型实例"""
+        return MaiChartAch(
+            shortid=ach.shortid,
+            difficulty=ach.difficulty,
+            server=ach.server,
+            achievement=ach.achievement,
+            dxscore=ach.dxscore,
+            combo=ach.combo,
+            sync=ach.sync,
+            update_time=ach.update_time
+        )
+
+    @staticmethod
+    def mal(alias: utils.MaiAlias):
         """根据 utils.MaiAlias 对象创建 MaiAlias 模型实例"""
         return MaiAlias(
             shortid=alias.shortid,
@@ -238,4 +303,19 @@ class MaiDataModel:
             create_qq=alias.create_qq,
             create_qq_group=alias.create_qq_group,
             create_time=alias.create_time
+        )
+
+    @staticmethod
+    def mu(user: utils.MaiUser):
+        """根据 utils.MaiUser 对象创建 MaiUser 模型实例"""
+        return MaiUser(
+            user_id=user.user_id,
+            username=user.username,
+            default_server=user.default_server,
+            plate_version=user.plate[0] if user.plate else None,
+            plate_code=user.plate[1] if user.plate else None,
+            jp_update_time=user.jp_update_time,
+            jp_dxrating=user.jp_dxrating,
+            cn_update_time=user.cn_update_time,
+            cn_dxrating=user.cn_dxrating
         )

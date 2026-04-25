@@ -122,7 +122,7 @@ class MaiChartAch:
     server: SERVER_TAG  # 服务器标识
     achievement: float  # 成就率
     dxscore: int = 0  # DX 分数
-    dxscore_max: int = -1  # DX 分数上限
+    dxscore_max: int = 0  # DX 分数上限
     combo: int = 0  # 连击
     sync: int = 0  # 同步游玩
     update_time: int = 0  # 更新时间戳
@@ -150,15 +150,31 @@ class MaiChartAch:
     def dxscore_tuple(self) -> tuple[int, int, int]:
         return self.dxscore, self.dxscore_max, self.dxscore_star_count
 
-    def update(self, new_ach: 'MaiChartAch'):
-        """
-        合并成绩逻辑：取各项指标的最大值
-        """
-        self.achievement = max(self.achievement, new_ach.achievement)
-        self.dxscore = max(self.dxscore, new_ach.dxscore)
-        self.combo = max(self.combo, new_ach.combo)
-        self.sync = max(self.sync, new_ach.sync)
+    def update_ach(self, maichart_ach: 'MaiChartAch'):
+        """更新成就信息"""
+        if (self.shortid != maichart_ach.shortid or self.difficulty != maichart_ach.difficulty or self.server != maichart_ach.server):
+            raise ValueError("只能更新相同谱面和服务器的成绩数据")
+        
+        self.achievement = max(self.achievement, maichart_ach.achievement)
+        self.dxscore = max(self.dxscore, maichart_ach.dxscore)
+        self.combo = max(self.combo, maichart_ach.combo)
+        self.sync = max(self.sync, maichart_ach.sync)
         self.update_time = int(time.time())
+
+    def __gt__(self, other: "MaiChartAch") -> bool:
+        """定义大于操作，用于比较成绩数据"""
+        if not isinstance(other, MaiChartAch):
+            return NotImplemented
+        if (self.shortid != other.shortid or self.difficulty != other.difficulty or self.server != other.server):
+            raise ValueError("只能比较相同谱面和服务器的成绩数据")
+        
+        # 任何一个指标更高都算作整体更高
+        return any([
+            self.achievement > other.achievement,
+            self.dxscore > other.dxscore,
+            self.combo > other.combo,
+            self.sync > other.sync
+        ])
 
 @dataclass
 class MaiChart:
@@ -229,10 +245,9 @@ class MaiChart:
 
     def update_ach(self, ach: MaiChartAch) -> MaiChartAch:
         """更新谱面成绩"""
-        old_ach = self.get_ach(ach.server)
-        old_ach.update(ach)
-        self.set_ach(old_ach)
-        return old_ach
+        new_ach = self.get_ach(ach.server)
+        new_ach.update_ach(ach)
+        return new_ach
 
     def get_dxrating(self, server: SERVER_TAG = "JP", ap_bonus: int = 0) -> int:
         """获取谱面 DX Rating"""
@@ -440,127 +455,68 @@ class MaiData:
                 existing_alias_names.add(alias.alias)
 
 
-class MaiB50Manager:
-    def __init__(self, current_version: int, server: SERVER_TAG,
-                 user_name: str, user_avatar: Image.Image | bytes | None = None, update_time: int | None = None):
-        self.current_version = current_version
-        self.server: SERVER_TAG = server
-        self.user_name = user_name
-        self.user_avatar = user_avatar
-        self._update_time = update_time
-        # 存储格式: (rating, maidata, diff)
-        self._b35: List[Tuple[int, MaiData, int]] = []
-        self._b15: List[Tuple[int, MaiData, int]] = []
+@dataclass
+class MaiUser:
+    user_id: int
+    username: str = ''
+    default_server: SERVER_TAG = 'CN'
+    # 牌子：元素1 和 JP 版本对应；元素2 的 1~4 分别表示 极 将 神 舞舞
+    # 对于 舞 系牌子，版本号匹配 -1 ，霸者匹配 元素2 为 0
+    plate: tuple[int, int] | None = None
 
-    @property
-    def update_time_formated(self) -> str:
-        """获取格式化的更新时间字符串"""
-        if not self._update_time:
-            return "N/A"
-        return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self._update_time))
+    jp_update_time: int = 0
+    jp_dxrating: int = 0
+    cn_update_time: int = 0
+    cn_dxrating: int = 0
 
-    @property
-    def user_avatar_image(self) -> Image.Image | None:
-        """获取用户头像的 PIL.Image 对象"""
-        if isinstance(self.user_avatar, Image.Image):
-            return self.user_avatar
-        elif isinstance(self.user_avatar, bytes):
-            try:
-                img = Image.open(io.BytesIO(self.user_avatar)).convert('RGB')
-                return img
-            except Exception as e:
-                logger.error(f"Failed to load avatar image: {e}")
-                return None
-        return None
+    # 缓存
+    jp_current_version: int = -1
+    cn_current_version: int = -1
 
     @property
     def dxrating(self) -> int:
-        """获取当前 B50 的总 Rating"""
-        return sum(item[0] for item in self._b35 + self._b15)
+        return {
+            'JP': self.jp_dxrating,
+            'CN': self.cn_dxrating
+        }.get(self.default_server, 0)
 
-    @property
-    def dxrating_filename(self) -> str:
-        """根据当前 DX Rating 获取对应的外框文件名"""
-        ra = self.dxrating
-        ver = self.current_version
-        
-        # 1. 确定使用的边界和前缀
-        is_cirp = True or 26 <= ver < 2000  # 强制使用新版框体背景图
-        bounds = BOUNDARIES_DX_RATING_NEW if is_cirp else BOUNDARIES_DX_RATING
-        
-        # 定位索引
-        idx = max(0, bisect.bisect_right(bounds, ra) - 1)
-        
-        if idx < 8:
-            # 金框之前不区分
-            return f"JP_{idx}.png"
-        if is_cirp:
-            return f"JP_CIRP_{idx}.png"
-        return f"JP_{idx}.png"
+    def get_update_time(self, server: SERVER_TAG | None = None) -> int:
+        server = server or self.default_server
+        return {
+            'JP': self.jp_update_time,
+            'CN': self.cn_update_time
+        }.get(server, 0)
 
-    def get_b35_list(self) -> list[tuple[MaiData, int]]:
-        """获取当前 B35 的曲目列表"""
-        return [(item[1], item[2]) for item in self._b35]
+    def get_formated_time(self, server: SERVER_TAG | None = None) -> str:
+        server = server or self.default_server
+        update_time = self.get_update_time(server=server)
+        if update_time <= 0:
+            return "Not Updated"
+        return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(update_time))
 
-    def get_b15_list(self) -> list[tuple[MaiData, int]]:
-        """获取当前 B15 的曲目列表"""
-        return [(item[1], item[2]) for item in self._b15]
+    def get_current_version(self, server: SERVER_TAG) -> int:
+        return {
+            'JP': self.jp_current_version,
+            'CN': self.cn_current_version
+        }.get(server, -1)
 
-    def get_lists(self) -> tuple[list[tuple[MaiData, int]], list[tuple[MaiData, int]]]:
-        """获取当前 B35 和 B15 的曲目列表"""
-        return self.get_b35_list(), self.get_b15_list()
+    def set_avatar(self, avatar: Image.Image | bytes):
+        if isinstance(avatar, Image.Image):
+            self.avatar = avatar
+        elif isinstance(avatar, bytes):
+            try:
+                img = Image.open(io.BytesIO(avatar)).convert('RGB')
+                self.avatar = img
+            except Exception as e:
+                logger.error(f"Failed to load avatar image: {e}")
+                self.avatar = None
 
-    def get_b50_list(self) -> list[tuple[MaiData, int]]:
-        """获取当前 B50 的曲目列表，格式为 (MaiData, diff)"""
-        b50 = self._b35 + self._b15
-        b50.sort(key=lambda x: x[0], reverse=True)  # 按照 DX Rating 从高到低排序
-        return [(item[1], item[2]) for item in b50]
+    def set_current_version(self, server: SERVER_TAG, version: int):
+        if server == 'JP':
+            self.jp_current_version = version
+        elif server == 'CN':
+            self.cn_current_version = version
 
-    def _process_entry(self, maidata: MaiData, diff: int) -> Optional[Tuple[int, MaiData, int]]:
-        ra = maidata.get_chart_dxrating(diff, server=self.server, current_version=self.current_version)
-        return (ra, maidata, diff) if ra is not None else None
-
-    def add_entry(self, maidata: MaiData, diff: int):
-        """添加单个条目"""
-        entry = self._process_entry(maidata, diff)
-        if not entry:
-            return
-
-        is_new = maidata.is_b15(self.current_version)
-        target = self._b15 if is_new else self._b35
-        max_len = 15 if is_new else 35
-
-        # 逻辑：如果没满直接加；如果满了且比最小值大，则替换最小值
-        if len(target) < max_len:
-            target.append(entry)
-            target.sort(key=lambda x: x[0], reverse=True)
-        else:
-            # target[-1] 是当前最小值（因为已排序）
-            if entry[0] > target[-1][0]:
-                target[-1] = entry
-                target.sort(key=lambda x: x[0], reverse=True)
-
-    def add_entries(self, entries: List[Tuple[MaiData, int]]):
-        """添加多个条目"""
-        new_entries = []
-        old_entries = []
-        
-        for md, diff in entries:
-            entry = self._process_entry(md, diff)
-            if not entry: continue
-            if md.is_b15(self.current_version):
-                new_entries.append(entry)
-            else:
-                old_entries.append(entry)
-
-        # 合并当前数据与新数据，排序并截取前 N 个
-        self._b15 = sorted(self._b15 + new_entries, key=lambda x: x[0], reverse=True)[:15]
-        self._b35 = sorted(self._b35 + old_entries, key=lambda x: x[0], reverse=True)[:35]
-
-
-class MaiB50ManagerALL(MaiB50Manager):
-    # server = 'ALL', 需要对所有条目加入的计算中分别计算所有服务器的 DX Rating，并取最高的一个作为该条目的 DX Rating
-    ...
 
 class SimaiNoteCount:
     """
@@ -669,6 +625,23 @@ class SimaiNoteCount:
             stats.get("TOUCH", 0),
             stats.get("BREAK", 0),
         )
+
+
+def parse_dxrating_filename(dxrating: int, cirp_frame: bool = True) -> str:
+        """根据当前 DX Rating 获取对应的外框文件名"""
+        # 1. 确定使用的边界和前缀
+        bounds = BOUNDARIES_DX_RATING_NEW if cirp_frame else BOUNDARIES_DX_RATING
+        
+        # 定位索引
+        idx = max(0, bisect.bisect_right(bounds, dxrating) - 1)
+        
+        if idx < 8:
+            # 金框之前不区分
+            return f"JP_{idx}.png"
+        if cirp_frame:
+            return f"JP_CIRP_{idx}.png"
+        return f"JP_{idx}.png"
+
 
 def get_sy_records(records: list[dict]) -> list[MaiChartAch]:
     """解析水鱼用户成绩数据为 MaiChartAch 列表"""
