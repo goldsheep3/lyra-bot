@@ -3,6 +3,7 @@ import time
 from typing import cast, Optional, Sequence, Any, Callable, Coroutine
 
 from sqlalchemy import select, or_, delete, func, update, bindparam, Select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -657,7 +658,7 @@ async def add_mdt_alias(shortid: int, alias_text: str, create_qq: int, create_qq
 # [批量] 通过 `shortid` 添加 `MaiData.aliases`，带鉴权属性
 @with_session
 async def add_mdt_alias_batch(data: list[tuple[int, str]], create_qq: int,
-                              *, session: AsyncSession):
+                              *, lxns_id_rule: bool = False, session: AsyncSession):
     """
     [批量] 通过 `shortid` 添加 `MaiData.aliases`，带鉴权属性
     Args:
@@ -667,11 +668,47 @@ async def add_mdt_alias_batch(data: list[tuple[int, str]], create_qq: int,
     if not data:
         return
 
+    def _map_lxns_shortid(shortid: int) -> int:
+        # lxns id 规则：大于 10000 取余；0~10000 加 10000
+        if shortid > 10000:
+            return shortid % 10000
+        if 0 <= shortid <= 10000:
+            return shortid + 10000
+        return shortid
+
+    def _is_shortid_fk_violation(error: IntegrityError) -> bool:
+        msg = str(error).lower()
+        return "foreign key" in msg and ("shortid" in msg or "maib_maidatas" in msg)
+
     chunk_size = 512
     sql_type = PluginRegistry.get_sql_name()
 
     for i in range(0, len(data), chunk_size):
         chunk = data[i:i + chunk_size]
+
+        # 按需启用 lxns id 规则：同一别名同时尝试原 shortid 与映射 shortid
+        chunk_candidates: list[tuple[int, str]] = []
+        for sid, alias in chunk:
+            chunk_candidates.append((sid, alias))
+            if lxns_id_rule:
+                mapped_sid = _map_lxns_shortid(sid)
+                if mapped_sid != sid:
+                    chunk_candidates.append((mapped_sid, alias))
+
+        # 先过滤掉不存在的 shortid，避免触发外键异常
+        candidate_shortids = sorted({sid for sid, _ in chunk_candidates})
+        existing_shortids = set(
+            (
+                await session.execute(
+                    select(MaiData.shortid).where(MaiData.shortid.in_(candidate_shortids))
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        if not existing_shortids:
+            continue
 
         # 统一为每一条数据注入 create_qq，groupid 保持为 None
         full_data = [
@@ -682,8 +719,12 @@ async def add_mdt_alias_batch(data: list[tuple[int, str]], create_qq: int,
                 "create_qq_group": None,
                 "create_time": int(time.time()),
             }
-            for sid, alias in chunk
+            for sid, alias in chunk_candidates
+            if sid in existing_shortids
         ]
+
+        if not full_data:
+            continue
 
         # 1. 尝试使用高性能方言 (SQLite / PostgreSQL)
         if sql_type in ("sqlite", "postgresql"):
@@ -694,7 +735,14 @@ async def add_mdt_alias_batch(data: list[tuple[int, str]], create_qq: int,
 
             stmt = dialect_insert(MaiAlias).values(full_data)
             stmt = stmt.on_conflict_do_nothing(index_elements=["shortid", "alias"])
-            await session.execute(stmt)
+            try:
+                await session.execute(stmt)
+            except IntegrityError as e:
+                # 并发场景下若主表记录在过滤后被删除，忽略 shortid 外键错误
+                if _is_shortid_fk_violation(e):
+                    await session.rollback()
+                    continue
+                raise
 
         # 2. 通用降级逻辑 (MySQL 或其他)
         else:

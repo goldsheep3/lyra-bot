@@ -313,7 +313,7 @@ async def maintenance_task():
     
     await services.add_mdt_alias_batch(await yuzuchan(), -101)
     logger.info("maib-fetch Step 5/5: 同步 yuzuchan 别名数据完成")
-    await services.add_mdt_alias_batch(await lxns(), -102)
+    await services.add_mdt_alias_batch(await lxns(), -102, lxns_id_rule=True)
     logger.info("maib-fetch Step 5/5: 同步 lxns 别名数据完成")
     
     
