@@ -1,8 +1,8 @@
 """empty message
 
-Revision ID: 46a7e975482a
+Revision ID: 0093ec4169e8
 Revises: 
-Create Date: 2026-04-25 19:54:59.456197
+Create Date: 2026-04-26 14:59:44.542184
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '46a7e975482a'
+revision = '0093ec4169e8'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -39,7 +39,7 @@ def upgrade() -> None:
         batch_op.create_index(batch_op.f('ix_maib_maidatas_title'), ['title'], unique=False)
 
     op.create_table('maib_maiusers',
-    sa.Column('user_id', sa.Integer(), nullable=False),
+    sa.Column('user_id', sa.BigInteger(), nullable=False),
     sa.Column('username', sa.String(), nullable=False),
     sa.Column('default_server', sa.Enum('JP', 'CN', native_enum=False), nullable=False),
     sa.Column('plate_version', sa.Integer(), nullable=True),
@@ -57,8 +57,8 @@ def upgrade() -> None:
     sa.Column('shortid', sa.Integer(), nullable=False),
     sa.Column('alias', sa.String(), nullable=False),
     sa.Column('create_time', sa.Integer(), nullable=False),
-    sa.Column('create_qq', sa.Integer(), nullable=False),
-    sa.Column('create_qq_group', sa.Integer(), nullable=True),
+    sa.Column('create_qq', sa.BigInteger(), nullable=False),
+    sa.Column('create_qq_group', sa.BigInteger(), nullable=True),
     sa.ForeignKeyConstraint(['shortid'], ['maib_maidatas.shortid'], name=op.f('fk_maib_maialiases_shortid_maib_maidatas'), ondelete='RESTRICT'),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_maib_maialiases')),
     sa.UniqueConstraint('shortid', 'alias', name=op.f('uq_maib_maialiases_shortid'))
@@ -102,7 +102,7 @@ def upgrade() -> None:
     sa.Column('sync', sa.Integer(), nullable=False),
     sa.Column('update_time', sa.Integer(), nullable=False),
     sa.Column('dxrating', sa.Integer(), nullable=False),
-    sa.Column('user_id', sa.Integer(), nullable=True),
+    sa.Column('user_id', sa.BigInteger(), nullable=True),
     sa.ForeignKeyConstraint(['chart_id'], ['maib_maicharts.id'], name=op.f('fk_maib_maichartachs_chart_id_maib_maicharts'), ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['shortid'], ['maib_maidatas.shortid'], name=op.f('fk_maib_maichartachs_shortid_maib_maidatas'), ondelete='RESTRICT'),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_maib_maichartachs')),
