@@ -71,7 +71,7 @@ class AssetsManager:
     @lru_cache(maxsize=64)
     def _get_image(path: Path, size: Tuple[int, int] | None = None) -> Image.Image | None:
         if not path.exists():
-            raise FileNotFoundError(f"图片文件缺失: {path}")
+            return None
         try:
             img = Image.open(path).convert('RGBA')
             if size is not None:
@@ -984,12 +984,11 @@ def draw_info_box(maidata: MaiData, server: SERVER_TAG, maiuser: MaiUser | None 
     # 游玩记录信息
     if maiuser:
         record_info = '\n'.join([
-            f"{get_full_width_text(maiuser.username or "maimai")})",
-            "Updated:",
-            f"  [CN ({maiuser.cn_dxrating}) ] {maiuser.get_formated_time('CN')}",
-            f"  [JP ({maiuser.jp_dxrating}) ] {maiuser.get_formated_time('JP')}",
+            f"{get_full_width_text(maiuser.username or "maimai")}",
+            f"[CN ({maiuser.cn_dxrating}) ] {maiuser.get_formated_time('CN')}",
+            f"[JP ({maiuser.jp_dxrating}) ] {maiuser.get_formated_time('JP')}",
         ])
-        du1.text(dv_x, dy, text="游玩数据", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=ms.x(4)))
+        du1.text(dv_x, dy, text="Record / 游玩记录", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=ms.x(4)))
         du1.text(dv_x, im_y1_5, text=record_info, fill='#FFF', anchor='lm', font=FONT.font('MIS_DB', size=ms.x(2.8)))
     del du1  # 释放绘图单元资源
 
@@ -1181,7 +1180,7 @@ def simple_list(text: str) -> Image.Image:
     return img.convert("RGB")
 
 
-def get_image_bytes(img: Image.Image, format: str = 'jpg') -> bytes:
+def get_image_bytes(img: Image.Image, format: str = 'jpeg') -> bytes:
     """将 PIL Image 对象转换为字节流"""
     with io.BytesIO() as output:
         img.save(output, format=format)

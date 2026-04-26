@@ -2,7 +2,7 @@ import time
 from pathlib import Path
 from typing import Literal, Optional
 
-from sqlalchemy import ForeignKey, UniqueConstraint
+from sqlalchemy import ForeignKey, UniqueConstraint, BigInteger
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from . import utils
@@ -22,8 +22,8 @@ class MaiAlias(Model):
     alias: Mapped[str] = mapped_column(index=True)
 
     create_time: Mapped[int] = mapped_column(default=lambda: int(time.time()))
-    create_qq: Mapped[int] = mapped_column()
-    create_qq_group: Mapped[Optional[int]] = mapped_column()
+    create_qq: Mapped[int] = mapped_column(BigInteger)
+    create_qq_group: Mapped[Optional[int]] = mapped_column(BigInteger)
 
     # 关系映射
     maidata: Mapped["MaiData"] = relationship(back_populates="aliases", lazy="selectin")  # 不进行级联删除以避免在重建时丢失别名数据
@@ -57,7 +57,7 @@ class MaiChartAch(Model):
     update_time: Mapped[int] = mapped_column(default=lambda: int(time.time()), onupdate=lambda: int(time.time()))  # 更新时间戳
     dxrating: Mapped[int] = mapped_column(default=0)  # DX Rating (Cache)
 
-    user_id: Mapped[Optional[int]] = mapped_column()  # qq
+    user_id: Mapped[Optional[int]] = mapped_column(BigInteger)  # qq
 
     chart: Mapped["MaiChart"] = relationship(back_populates="achs", lazy="selectin")
 
@@ -167,6 +167,10 @@ class MaiData(Model):
 
     def to_data(self, include_achs: bool = False) -> utils.MaiData:
         """转换为 utils.MaiData 对象"""
+        zip_path = Path(self.zip_path) if self.zip_path else None
+        if zip_path and not zip_path.is_absolute():
+            zip_path = PluginRegistry.get_data_dir() / zip_path
+
         maidata = utils.MaiData(
             shortid=self.shortid,
             title=self.title,
@@ -177,8 +181,8 @@ class MaiData(Model):
             version=self.version,
             version_cn=self.version_cn,
             converter=self.converter if self.converter else '',
-            img_path=Path(self.zip_path) / "bg.png",
-            zip_path=Path(self.zip_path) if self.zip_path else None,
+            img_path=(zip_path / "bg.png") if zip_path else Path("bg.png"),
+            zip_path=zip_path,
             aliases=[alias.to_data() for alias in self.aliases],
             is_utage=self.is_utage,
             buddy=all((self.buddy, self.is_utage)),
@@ -195,7 +199,7 @@ class MaiData(Model):
 class MaiUser(Model):
     __tablename__ = "maib_maiusers"
 
-    user_id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     username: Mapped[str] = mapped_column(default='')
     default_server: Mapped[SERVER_TAG] = mapped_column(default='CN')
     plate_version: Mapped[int | None] = mapped_column(default=None)  # 牌子信息

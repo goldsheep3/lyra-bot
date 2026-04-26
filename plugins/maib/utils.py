@@ -133,6 +133,8 @@ class MaiChartAch:
     def dxscore_star_count(self) -> int:
         if self.dxscore_max < self.dxscore:
             return 0
+        if self.dxscore_max <= 0 or self.dxscore <= 0:
+            return 0
         dxs_percent = self.dxscore / self.dxscore_max * 100
 
         # 0~85: 0星, 85~90: 1星, 90~93: 2星, 93~95: 3星, 95~97: 4星, 97~100: 5星

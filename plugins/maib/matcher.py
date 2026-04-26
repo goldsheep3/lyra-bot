@@ -149,12 +149,37 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
         await matcher.finish(f"登登~请查收 {song_name} 谱面！")
 
 
+async def get_username(event, bot, user_id: int | None = None) -> str:
+    resolved_name = ""
+    group_id = getattr(event, "group_id", None)
+    user_id = user_id or int(event.get_user_id())
+
+    if group_id:
+        try:
+            member_info = await bot.get_group_member_info(group_id=int(group_id), user_id=user_id)
+            resolved_name = str(member_info.get("card") or member_info.get("nickname") or "").strip()
+        except Exception:
+            pass
+
+    if not resolved_name:
+        try:
+            user_info = await bot.get_stranger_info(user_id=user_id)
+            resolved_name = str(user_info.get("nickname") or "").strip()
+        except Exception:
+            pass
+
+    return resolved_name
+
+
+
 @mai_info.handle()
-async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
+async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
     """处理命令: id11451 / info11451"""
     _, short_id, args = groups
     user_id = int(event.get_user_id())
-    maiuser = (await services.get_or_set_user_by_id(user_id)).to_data()
+    maiuser = await services.get_or_set_user_by_id(user_id)
+    if not maiuser.username:
+        maiuser.username = await get_username(event, bot)
     _, server = get_args(args)
     # 暂不支持 ALL
     server = server if (server != 'ALL' and server is not None) else maiuser.default_server
@@ -182,13 +207,15 @@ async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
 
 
 @mai_what_song.handle()
-async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
+async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
     """处理命令: xxx是什么歌"""
     keyword, all_tag = groups
     blur_search = bool(all_tag and all_tag.strip() in ['?', '？'])
     keyword = keyword.strip(' ')
     user_id = int(event.get_user_id())
-    maiuser = (await services.get_or_set_user_by_id(user_id)).to_data()
+    maiuser = await services.get_or_set_user_by_id(user_id)
+    if not maiuser.username:
+        maiuser.username = await get_username(event, bot)
     server = maiuser.default_server
 
     # 不带问号为智能搜索，带问号进行强制搜索
@@ -450,7 +477,9 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
         await matcher.finish("暂时还不支持全服查询qwq")
     current_version = ver_cn if server == 'CN' else ver_jp
 
-    target_maiuser = (await services.get_or_set_user_by_id(target_user_id)).to_data()
+    target_maiuser = await services.get_or_set_user_by_id(target_user_id)
+    if not target_maiuser.username:
+        target_maiuser.username = await get_username(event, bot, user_id=target_user_id)
     cut_version = services.get_cut_version(server)
     b35_achs, b15_achs = await services.get_mdts_for_b50(target_user_id, server, cut_version)
 

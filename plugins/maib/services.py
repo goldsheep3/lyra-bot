@@ -26,9 +26,15 @@ def with_session(func: Callable[..., Coroutine[Any, Any, Any]]):
         get_session = PluginRegistry.get_session
         async with get_session() as session:
             kwargs['session'] = session
-            result = await func(*args, **kwargs)
-            await session.commit()
-            return result
+            # 自动托管会话时关闭 commit 后过期，避免返回对象在会话结束后触发 DetachedInstanceError
+            original_expire_on_commit = session.sync_session.expire_on_commit
+            session.sync_session.expire_on_commit = False
+            try:
+                result = await func(*args, **kwargs)
+                await session.commit()
+                return result
+            finally:
+                session.sync_session.expire_on_commit = original_expire_on_commit
       
     return wrapper
 
@@ -555,6 +561,7 @@ async def set_mct_level_batch(data: list[dict], server: SERVER_TAG | Literal['sy
         .where(table.c.shortid == bindparam("b_shortid"))
         .where(table.c.difficulty == bindparam("b_diff"))
         .values({target_field: bindparam("b_level")})
+        .execution_options(synchronize_session=False)
     )
 
     # 3. 转换 data 中的键名以匹配 bindparam
@@ -610,9 +617,10 @@ async def set_mdt_version_batch(data: list[tuple[int, int]],  server: SERVER_TAG
         return
 
     # 1. 映射服务器标签到数据库字段
+    table = MaiData.__table__
     server_field_map = {
-        'CN': MaiData.version_cn,
-        'JP': MaiData.version
+        'CN': table.c.version_cn,
+        'JP': table.c.version,
     }
 
     if server not in server_field_map:
@@ -623,13 +631,14 @@ async def set_mdt_version_batch(data: list[tuple[int, int]],  server: SERVER_TAG
 
     # 2. 构建动态批量更新语句
     statement = (
-        update(MaiData)
-        .where(MaiData.shortid == bindparam("shortid"))
-        .values({target_field: bindparam("version")})
+        update(table)  # type: ignore
+        .where(table.c.shortid == bindparam("b_shortid"))
+        .values({target_field: bindparam("b_version")})
+        .execution_options(synchronize_session=False)
     )
 
     # 3. 执行批量更新
-    await session.execute(statement, [{"shortid": sid, "version": version} for sid, version in data])
+    await session.execute(statement, [{"b_shortid": sid, "b_version": version} for sid, version in data])
 
 # 通过 `shortid` 添加 `MaiData.aliases`，带鉴权属性
 @with_session
@@ -1063,18 +1072,19 @@ async def refresh_dxrating_cache_by_chart_user(shortid: int, difficulty: int, se
     await refresh_user_dxrating_cache(user_id=user_id, server=server, session=session)
 
 
-async def get_or_set_user_by_id(user_id: int) -> MaiUser:
-    """通过 `user_id` 获取 `MaiUser`，如果不存在则创建一个新的"""
+async def get_or_set_user_by_id(user_id: int) -> utils.MaiUser:
+    """通过 `user_id` 获取用户数据，如果不存在则创建一个新的"""
     # 该方法不接受外部 session，内部自行管理生命周期
     async with PluginRegistry.get_session() as session:
         user = await get_user_by_id(user_id, session=session)
         if user:
-            return user
+            return user.to_data()
 
         new_user = MaiUser(user_id=user_id)
         session.add(new_user)
         await session.commit()
-    return new_user
+        await session.refresh(new_user)
+        return new_user.to_data()
 
 
 @with_session

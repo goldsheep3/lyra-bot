@@ -7,7 +7,7 @@ _help = on_regex(r"^(帮助|help)\s*(maib|舞萌|mai|maimai)$", priority=10, blo
 @_help.handle()
 async def _():
     await _help.finish("""
-帮助 | maib (小梨音游核心)
+LyraHELP | maib (小梨音游核心)
 
 1. 下载谱面
    下载指定的谱面（下载谱面 11951）
