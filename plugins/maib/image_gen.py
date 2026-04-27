@@ -1183,7 +1183,16 @@ def simple_list(text: str) -> Image.Image:
 def get_image_bytes(img: Image.Image, format: str = 'jpeg') -> bytes:
     """将 PIL Image 对象转换为字节流"""
     with io.BytesIO() as output:
-        img.save(output, format=format)
+        if format.lower() == 'jpeg' and max(img.size) > 65500:
+            format = 'png'
+        try:
+            img.save(output, format=format)
+        except OSError:
+            if format.lower() != 'jpeg':
+                raise
+            output.seek(0)
+            output.truncate(0)
+            img.save(output, format='png')
         return output.getvalue()
 
 

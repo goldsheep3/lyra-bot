@@ -12,6 +12,7 @@ import orjson
 from . import utils, services, image_gen, bot_services, network
 from .utils import MaiChart, MaiChartAch
 from .constants import *
+from .bot_registry import PluginRegistry
 
 from nonebot import logger, on_regex, on_message
 from nonebot.rule import Rule
@@ -23,8 +24,6 @@ from nonebot.adapters.onebot.v11 import Bot, Event, Message, MessageSegment, Mes
 LOW_MEMORY_MODE: bool = False  # 低内存模式，会阻止 B50 等大型图片合成
 LOW_MEMORY_TIP: str | None = None
 DEVELOPER_TOKEN: Optional[str] = None
-
-
 
 
 # --- rule ---
@@ -118,8 +117,10 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
         return
 
     chart_file_path = Path(mdt.zip_path)
+    if not chart_file_path.is_absolute():
+        chart_file_path = PluginRegistry.get_data_dir() / chart_file_path
     if not chart_file_path or not chart_file_path.exists():
-        logger.warning(f"谱面 id {short_id} 不存在")
+        logger.warning(f"谱面 id {short_id} 不存在: {chart_file_path}")
         await matcher.finish("小梨没有找到这个谱面！可能还没被收录，请联系监护人确认喔qwq")
         return
 
@@ -458,9 +459,7 @@ async def _(event: Event, matcher: Matcher):
     user_id = int(event.get_user_id())
     diff_img = await get_sy_and_upload(user_id)
     if diff_img:
-        output = io.BytesIO()
-        diff_img.save(output, format="jpeg")
-        img_bytes = output.getvalue()
+        img_bytes = image_gen.get_image_bytes(diff_img)
         await matcher.finish(MessageSegment.image(img_bytes))
     else:
         await matcher.finish("已完成水鱼同步，似乎没有数据更新~")
@@ -508,9 +507,7 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
         if diff_img:
             if target_user_id == user_id:
                 # 如果查询目标是自己，同步数据给予提示
-                output = io.BytesIO()
-                diff_img.save(output, format="jpeg")
-                img_bytes = output.getvalue()
+                img_bytes = image_gen.get_image_bytes(diff_img)
                 await matcher.send(MessageSegment.image(img_bytes))
             else:
                 # 如果查询目标是他人，不直接展示差异图，改为提示已同步
@@ -558,9 +555,7 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
                              dxrating=dxrating,
                              update_time=update_time)
 
-    output = io.BytesIO()
-    img.save(output, format="jpeg")
-    img_bytes = output.getvalue()
+    img_bytes = image_gen.get_image_bytes(img)
     # 计算生成耗时
     generate_time = time.time() - generate_start_time
     logger.info(f"B50 生成耗时: {generate_time:.2f}秒")
@@ -740,9 +735,7 @@ async def _(bot: Bot, event: PrivateMessageEvent, matcher: Matcher):
 
         diff_img = build_achievements_diff_image(data_diffs)
         if diff_img:
-            output = io.BytesIO()
-            diff_img.save(output, format="jpeg")
-            img_bytes = output.getvalue()
+            img_bytes = image_gen.get_image_bytes(diff_img)
             await matcher.finish(Message([
                 MessageSegment.text(
                     f"{summary_text}\n\n以下是本次成绩变更明细：\n"

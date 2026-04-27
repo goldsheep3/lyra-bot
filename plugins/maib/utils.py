@@ -234,10 +234,14 @@ class MaiChart:
         frac_part = level - int_part
         return f"{int_part}+" if frac_part * 10 >= plus else f"{level}"
 
-    def get_ach(self, server: SERVER_TAG = "JP", user_id: int = 0) -> MaiChartAch:
+    def get_ach(self, server: SERVER_TAG = "JP", user_id: int | None = None) -> MaiChartAch:
         """获取谱面成绩"""
-        ach = self._achs.get(server, {}).get(user_id, None)
-        return ach if ach else MaiChartAch( shortid=self.shortid, difficulty=self.difficulty, server=server, achievement=-100)
+        achs = self._achs.get(server, {})
+        if user_id is None:
+            ach = next(iter(achs.values()), None)
+        else:
+            ach = achs.get(user_id, None)
+        return ach if ach else MaiChartAch(shortid=self.shortid, difficulty=self.difficulty, server=server, achievement=-100)
 
     def set_ach(self, ach: MaiChartAch):
         """覆盖原有谱面成绩"""
@@ -250,9 +254,9 @@ class MaiChart:
         new_ach.update_ach(ach)
         return new_ach
 
-    def get_dxrating(self, server: SERVER_TAG = "JP", ap_bonus: int = 0) -> int:
+    def get_dxrating(self, server: SERVER_TAG = "JP", ap_bonus: int = 0, user_id: int | None = None) -> int:
         """获取谱面 DX Rating"""
-        ach = self.get_ach(server=server, user_id=0)
+        ach = self.get_ach(server=server, user_id=user_id)
         if not ach or ach.achievement < 0:
             return 0
         factor = next((f for threshold, f in RATE_FACTOR_TABLE if ach.achievement >= threshold), 0.0)
