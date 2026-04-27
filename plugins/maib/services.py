@@ -931,7 +931,7 @@ async def _recalculate_single_mct_ach_dxrating(
 
     ach = mct_ach.to_data()
     maichart.set_ach(ach)
-    new_dxrating = maichart.get_dxrating(server=mct_ach.server, ap_bonus=ap_bonus)
+    new_dxrating = maichart.get_dxrating(server=mct_ach.server, ap_bonus=ap_bonus, user_id=mct_ach.user_id)
     mct_ach.dxrating = new_dxrating
     return new_dxrating
 
@@ -1149,7 +1149,7 @@ async def upload_achievements_batch(user_id: int, ach_list: Sequence[utils.MaiCh
             existing.update(incoming)
             merged = existing.to_data()
             maichart.set_ach(merged)
-            new_dxrating = maichart.get_dxrating(server=server, ap_bonus=ap_bonus)
+            new_dxrating = maichart.get_dxrating(server=server, ap_bonus=ap_bonus, user_id=user_id)
 
             old_payload = {
                 "achievement": existing.achievement,
@@ -1179,7 +1179,7 @@ async def upload_achievements_batch(user_id: int, ach_list: Sequence[utils.MaiCh
             continue
 
         maichart.set_ach(incoming)
-        new_dxrating = maichart.get_dxrating(server=server, ap_bonus=ap_bonus)
+        new_dxrating = maichart.get_dxrating(server=server, ap_bonus=ap_bonus, user_id=user_id)
 
         new_model = MaiChartAch(
             user_id=user_id,
