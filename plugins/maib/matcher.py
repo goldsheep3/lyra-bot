@@ -132,14 +132,7 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
 
     group_id = getattr(event, "group_id", None)
     
-    if group_id:
-        result = await bot_services.update_group_file(bot, group_id, chart_file_path, file_name=file_name)
-        if result:
-            logger.error(f"上传失败: {result}")
-            await matcher.finish("小梨上传谱面时遇到了问题，请联系监护人确认喔qwq")
-            return
-        await matcher.finish(f"小梨已经帮你把 {song_name} 的谱面传到群里啦！")
-    else:
+    if not group_id:
         user_id = event.get_user_id()
         result = await bot_services.upload_private_file(bot, user_id, chart_file_path, file_name=file_name)
         if result:
@@ -147,7 +140,58 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
             await matcher.finish("小梨上传谱面时遇到了问题，请联系监护人确认喔qwq")
             return
         await matcher.finish(f"登登~请查收 {song_name} 谱面！")
+    else:
+        group_folder = await bot_services.get_group_root_files(bot, group_id)
+        if isinstance(group_folder, Exception):
+            await matcher.send("出现了意外问题，上传失败了qwq")
+            logger.error(f"获取群文件夹失败: {group_folder}")
+            return
+        folder_id = None
+        for folder in group_folder.get("folders", []):
+            if folder.get("folder_name") == "maib-adx":
+                folder_id = folder.get("folder_id")
+                break
+        if not folder_id:
+            # 没有找到 maib-adx 文件夹，尝试创建
+            created = await bot_services.create_group_file_folder(bot, group_id, "maib-adx")
+            if isinstance(created, Exception):
+                logger.error(f"创建文件夹失败: {created}")
+                await matcher.send("出现了意外问题，上传失败了qwq")
+                return
+            folder_id = created.get("groupItem", {}).get("folderInfo", {}).get("folderId")
 
+        result = await bot_services.update_group_file(bot, group_id, chart_file_path, file_name=file_name, folder_id=folder_id)
+        if result:
+            logger.error(f"上传失败: {result}")
+            await matcher.send("小梨上传谱面时遇到了问题，请联系监护人确认喔qwq")
+            return
+        await matcher.send(f"小梨已经帮你把 {song_name} 的谱面传到群里啦！")
+        
+        # 群文件：旧文件检查机制
+        # 1. `get_group_root_files` 检查 `maib-adx` 文件夹是否存在
+        # 2. 获取 `maib-adx` 文件夹内的文件，根据时间排序，超过 72 小时的文件视为过期文件，进行删除
+        files = await bot_services.get_group_files_by_folder(bot, group_id, folder_id)
+        if isinstance(files, Exception):
+            logger.error(f"获取群文件失败: {files}")
+            return
+        files = files.get("files", [])
+        # 按照 modify_time 排序，删除超过 72 小时的文件
+        files.sort(key=lambda x: x.get("modify_time", 0))
+        now = time.time()
+        for file in files:
+            modify_time = file.get("modify_time", 0)
+            if now - modify_time > 72 * 3600:
+                try:
+                    file_id = file.get("file_id")
+                    await bot.call_api("delete_group_file", group_id=str(group_id), file_id=str(file_id))
+                    logger.info(f"已删除过期文件: {file.get('file_name')}")
+                except Exception as e:
+                    logger.error(f"删除过期文件失败: {e}")
+            else:
+                # 文件未过期，后续文件更不需要检查，直接结束逻辑
+                break
+        logger.info(f"删除过期文件完成")
+        return
 
 async def get_username(event, bot, user_id: int | None = None) -> str:
     resolved_name = ""
