@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import utils
-from .models import MaiData, MaiChart, MaiChartAch, MaiAlias, MaiUser, MaiDataModel
+from .models import MaiData, MaiChart, MaiChartAch, MaiAlias, MaiUser, MaiDataModel, MaiIdCheck
 from .bot_registry import PluginRegistry
 from .constants import *
 
@@ -917,6 +917,193 @@ def _get_current_version_by_server(server: SERVER_TAG) -> int:
 def get_cut_version(server: SERVER_TAG) -> int:
     """获取 B50 分段所需的 cut_version。"""
     return _get_current_version_by_server(server)
+
+
+@with_session
+async def list_pending_id_checks(*, session: AsyncSession) -> list[tuple[int, int]]:
+    """返回所有 mapped_id 不为 None 的待处理映射 (original_id, mapped_id)。"""
+    stmt = select(MaiIdCheck).where(MaiIdCheck.mapped_id != None)
+    result = await session.execute(stmt)
+    rows = result.scalars().all()
+    return [(r.original_id, r.mapped_id) for r in rows]  # type: ignore
+
+
+@with_session
+async def apply_id_mapping(original_id: int, mapped_id: int, *, session: AsyncSession):
+    """对单个 original_id -> mapped_id 执行迁移。
+
+    策略：
+    - 每个 id 在独立事务中处理（由装饰器保证）。
+    - 如果 target 不存在：复制 source 到 target 并移动子行；然后删除 source。
+    - 如果 target 存在：优先保留 target 的 `MaiData`/`MaiChart`（maidata/maichart），
+      alias 与 ach 使用源数据优先（替换目标冲突）。
+    - 处理过程中保持子对象引用一致（chart_id 映射），并在最后删除 idcheck 条目。
+    """
+    # 获取完整的 source (含 charts -> achs, aliases)
+    stmt = (
+        select(MaiData)
+        .options(
+            selectinload(MaiData.charts).selectinload(MaiChart.achs),
+            selectinload(MaiData.aliases),
+        )
+        .where(MaiData.shortid == original_id)
+    )
+    result = await session.execute(stmt)
+    source = result.scalar_one_or_none()
+
+    # 无源数据，删除 idcheck 后返回
+    if not source:
+        await session.execute(delete(MaiIdCheck).where(MaiIdCheck.original_id == original_id))
+        return
+
+    # 目标
+    stmt_t = (
+        select(MaiData)
+        .options(selectinload(MaiData.charts).selectinload(MaiChart.achs), selectinload(MaiData.aliases))
+        .where(MaiData.shortid == mapped_id)
+    )
+    result = await session.execute(stmt_t)
+    target = result.scalar_one_or_none()
+
+    # 构建目标难度映射
+    target_charts_map: dict[int, MaiChart] = {}
+    if target:
+        for tc in target.charts:
+            target_charts_map[tc.difficulty] = tc
+
+    # Helper: 删除指定对象安全地
+    async def _del(obj):
+        try:
+            await session.delete(obj)
+        except Exception:
+            pass
+
+    # CASE A: 目标不存在 -> 复制 source 为新 target
+    if not target:
+        new_mdt = MaiData(
+            shortid=mapped_id,
+            title=source.title,
+            bpm=source.bpm,
+            artist=source.artist,
+            genre=source.genre,
+            cabinet=source.cabinet,
+            version=source.version,
+            version_cn=source.version_cn,
+            converter=source.converter,
+            zip_path=source.zip_path,
+            is_utage=source.is_utage,
+            utage_tag=source.utage_tag,
+            buddy=source.buddy,
+        )
+        session.add(new_mdt)
+
+        # 复制 charts + achs
+        for sc in source.charts:
+            new_chart = MaiChart(
+                shortid=mapped_id,
+                difficulty=sc.difficulty,
+                lv=sc.lv,
+                lv_cn=sc.lv_cn,
+                lv_synh=sc.lv_synh,
+                des=sc.des,
+                inote=sc.inote,
+                note_count_tap=sc.note_count_tap,
+                note_count_hold=sc.note_count_hold,
+                note_count_slide=sc.note_count_slide,
+                note_count_touch=sc.note_count_touch,
+                note_count_break=sc.note_count_break,
+            )
+            new_mdt.charts.append(new_chart)
+            for ach in sc.achs:
+                new_ach = MaiChartAch(
+                    shortid=mapped_id,
+                    chart=new_chart,
+                    difficulty=ach.difficulty,
+                    server=ach.server,
+                    achievement=ach.achievement,
+                    dxscore=ach.dxscore,
+                    combo=ach.combo,
+                    sync=ach.sync,
+                    update_time=ach.update_time,
+                    user_id=ach.user_id,
+                    dxrating=ach.dxrating,
+                )
+                session.add(new_ach)
+
+        # 复制 aliases
+        for sa in source.aliases:
+            new_alias = MaiAlias(
+                shortid=mapped_id,
+                alias=sa.alias,
+                create_qq=sa.create_qq,
+                create_qq_group=sa.create_qq_group,
+                create_time=sa.create_time,
+            )
+            new_mdt.aliases.append(new_alias)
+
+        # 删除 source 的子对象与 source 自身
+        for sc in list(source.charts):
+            for ach in list(sc.achs):
+                await _del(ach)
+            await _del(sc)
+        for sa in list(source.aliases):
+            await _del(sa)
+        await _del(source)
+
+    else:
+        # CASE B: 目标存在 -> 合并
+        # 1) charts: 若目标有相同 difficulty 则保留目标 chart 并把源的 achs 移到目标 chart; 否则把源 chart 的 shortid 改为 mapped_id
+        source_chart_map = {c.difficulty: c for c in source.charts}
+        for sd, sc in source_chart_map.items():
+            if sd in target_charts_map:
+                tc = target_charts_map[sd]
+                # 把源 chart 下的 achs 迁移到 tc
+                for ach in list(sc.achs):
+                    # 删除目标可能已有的冲突 ach (新数据优先)
+                    exists_stmt = (
+                        select(MaiChartAch)
+                        .where(
+                            MaiChartAch.user_id == ach.user_id,
+                            MaiChartAch.server == ach.server,
+                            MaiChartAch.shortid == mapped_id,
+                            MaiChartAch.difficulty == ach.difficulty,
+                        )
+                    )
+                    res = await session.execute(exists_stmt)
+                    existing_ach = res.scalar_one_or_none()
+                    if existing_ach:
+                        await _del(existing_ach)
+                    # 更新 ach 指向 target chart
+                    ach.shortid = mapped_id
+                    ach.chart_id = tc.id
+                # 删除源 chart
+                await _del(sc)
+            else:
+                # 将源 chart 移动到 mapped_id（更新 shortid）
+                sc.shortid = mapped_id
+
+        # 2) aliases: 新数据优先 -> 若目标已有同名别名则删掉目标的，再把源 alias 更新为 mapped_id
+        for sa in list(source.aliases):
+            # 查找目标是否已有同名别名
+            dup_stmt = select(MaiAlias).where(MaiAlias.shortid == mapped_id, MaiAlias.alias == sa.alias)
+            res = await session.execute(dup_stmt)
+            dup = res.scalar_one_or_none()
+            if dup:
+                await _del(dup)
+            sa.shortid = mapped_id
+
+        # 3) 其余独立 ach（如果还有）会随 chart 的迁移被处理
+
+        # 4) 尝试删除 source（如果没有残留子行）
+        # 检查残留计数
+        cnt_charts = (await session.execute(select(func.count()).select_from(MaiChart).where(MaiChart.shortid == original_id))).scalar_one()
+        cnt_aliases = (await session.execute(select(func.count()).select_from(MaiAlias).where(MaiAlias.shortid == original_id))).scalar_one()
+        cnt_achs = (await session.execute(select(func.count()).select_from(MaiChartAch).where(MaiChartAch.shortid == original_id))).scalar_one()
+        if cnt_charts == 0 and cnt_aliases == 0 and cnt_achs == 0:
+            await _del(source)
+
+    # 删除 idcheck
+    await session.execute(delete(MaiIdCheck).where(MaiIdCheck.original_id == original_id))
 
 
 async def _recalculate_single_mct_ach_dxrating(

@@ -235,6 +235,19 @@ class MaiUser(Model):
         )
 
 
+class MaiIdCheck(Model):
+    """ID 映射检查表 - 用于临时记录 shortid 的重映射 (original_id -> mapped_id)
+
+    设计：
+    - original_id: 原始 shortid (主键)
+    - mapped_id: 目标 shortid（可为 None，表示待填写）
+    """
+    __tablename__ = "maib_idchecks"
+
+    original_id: Mapped[int] = mapped_column(primary_key=True)
+    mapped_id: Mapped[Optional[int]] = mapped_column(default=None, nullable=True, index=True)
+
+
 # ====== 工厂函数 ======
 
 class MaiDataModel:
