@@ -136,7 +136,7 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
     if not group_id:
         user_id = event.get_user_id()
         result = await bot_services.upload_private_file(bot, user_id, chart_file_path, file_name=file_name)
-        if result:
+        if isinstance(result, Exception) or result.get("file_id", None) is None:
             logger.error(f"上传失败: {result}")
             await matcher.finish("小梨上传谱面时遇到了问题，请联系监护人确认喔qwq")
             return
@@ -162,7 +162,7 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
             folder_id = created.get("groupItem", {}).get("folderInfo", {}).get("folderId")
 
         result = await bot_services.update_group_file(bot, group_id, chart_file_path, file_name=file_name, folder_id=folder_id)
-        if result:
+        if isinstance(result, Exception) or result.get("file_id", None) is None:
             logger.error(f"上传失败: {result}")
             await matcher.send("小梨上传谱面时遇到了问题，请联系监护人确认喔qwq")
             return

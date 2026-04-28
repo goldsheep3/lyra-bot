@@ -26,7 +26,7 @@ async def get_group_files_by_folder(bot: Bot, group_id: str | int, folder_id: st
         return e
 
 
-async def update_group_file(bot: Bot, group_id: str | int, file_path: Path, **kwargs) -> Exception | None:
+async def update_group_file(bot: Bot, group_id: str | int, file_path: Path, **kwargs) -> Exception | dict:
     file_name = kwargs.get("file_name", file_path.name)
     try:
         return await bot.call_api(
@@ -39,7 +39,7 @@ async def update_group_file(bot: Bot, group_id: str | int, file_path: Path, **kw
     except Exception as e:
         return e
 
-async def upload_private_file(bot: Bot, user_id: str | int, file_path: Path, **kwargs) -> Exception | None:
+async def upload_private_file(bot: Bot, user_id: str | int, file_path: Path, **kwargs) -> Exception | dict:
     file_name = kwargs.get("file_name", file_path.name)
     try:
         return await bot.call_api(
