@@ -137,16 +137,16 @@ async def maintenance_task():
 
 
     # --- 1. 文件包的获取与 stat 判定 ---
-    logger.info("maib-fetch Step 1/5: 获取谱面文件列表并进行 stat 判定")
+    logger.info("maib-fetch Step 1/6: 获取谱面文件列表并进行 stat 判定")
     data_dir = PluginRegistry.get_data_dir()
     if not data_dir:
-        logger.error("maib-fetch Step 1/5: 无法获取谱面目录")
+        logger.error("maib-fetch Step 1/6: 无法获取谱面目录")
         return
     files = [p for p in data_dir.glob("charts*/*") if p.suffix.lower() in {'.zip', '.adx'}]
     if not files:
-        logger.warning("maib-fetch Step 1/5: 未找到任何谱面文件")
+        logger.warning("maib-fetch Step 1/6: 未找到任何谱面文件")
         return
-    logger.debug(f"maib-fetch Step 1/5: 找到 {len(files)} 个谱面文件")
+    logger.debug(f"maib-fetch Step 1/6: 找到 {len(files)} 个谱面文件")
     # stat
     stat_cache_file = PluginRegistry.get_cache_dir() / "chart_stat.json"
     chart_stat = orjson.loads(stat_cache_file.read_bytes()) if stat_cache_file.exists() else {"timestamp": -1, "stats": {}}
@@ -171,19 +171,35 @@ async def maintenance_task():
                 results["Updated"].append((file_key, identity))
         else:
             results["New"].append((file_key, identity))
-    logger.info(f"maib-fetch Step 1/5: {len(results['Cached'])} 个文件未变更，{len(results['Updated'])} 个文件已更新，{len(results['New'])} 个文件为新增")
+    logger.info(f"maib-fetch Step 1/6: {len(results['Cached'])} 个文件未变更，{len(results['Updated'])} 个文件已更新，{len(results['New'])} 个文件为新增")
     if not results["Updated"] and not results["New"]:
         # 检查 stat timestamp
         if now_time - chart_stat.get("timestamp", -1) < CACHE_EXPIRATION_SECONDS:
-            logger.info("maib-fetch Step 1/5: stat 数据较新，且无更新或新增文件，结束 fetch 流程")
+            logger.info("maib-fetch Step 1/6: stat 数据较新，且无更新或新增文件，结束 fetch 流程")
             return
     change_files: list[tuple[str, str]] = results["Updated"] + results["New"]
     del results  # 简化列表结构
 
 
+    # --- 2. ID 迁移 ---
+    # 处理 id_check 表中已填写的映射 (每个 id 单独事务)
+    try:
+        id_checks = await services.list_pending_id_checks()
+        if id_checks:
+            logger.info(f"maib-fetch Step 2/6: 处理 {len(id_checks)} 条 shortid 映射规则")
+            for k, v in id_checks:
+                try:
+                    await services.apply_id_mapping(k, v)
+                    logger.info(f"maib-fetch Step 2/6: 应用映射 {k} -> {v}")
+                except Exception as e:
+                    logger.error(f"maib-fetch Step 2/6: 映射 {k}->{v} 失败: {e}")
+    except Exception as e:
+        logger.error(f"maib-fetch Step 2/6: 读取 id_check 失败: {e}")
+
+
     # --- 2. 进行文件解析并更新数据库 ---
     if change_files:
-        logger.info("maib-fetch Step 2/5: 拆包解析和数据库处理")
+        logger.info("maib-fetch Step 2/6: 拆包解析和数据库处理")
         maidata_dict: dict[int, utils.MaiData] = {}
         for file_key, identity in change_files:
             chart_path = data_dir / file_key  # 根据插件数据存储位置和 file_key 还原为绝对路径
@@ -193,7 +209,7 @@ async def maintenance_task():
                     with zip_ref.open("maidata.txt") as f:
                         content = f.read().decode('utf-8')
             except Exception as e:
-                logger.error(f"maib-fetch Step 2/5: 无法解析 {file_key}，错误: {e}")
+                logger.error(f"maib-fetch Step 3/6: 无法解析 {file_key}，错误: {e}")
                 continue
             raw_mdt = _extract_metadata(content)
             maidata = await parse_maidata(raw_mdt, file_key)
@@ -204,24 +220,24 @@ async def maintenance_task():
             try:
                 await services.sync_mdt_list([models.MaiDataModel.mdt(maidata)
                                               for maidata in maidata_dict.values()])
-                logger.info(f"maib-fetch Step 2/5: 成功同步 {len(maidata_dict)} 个曲目")
+                logger.info(f"maib-fetch Step 3/6: 成功同步 {len(maidata_dict)} 个曲目")
             except Exception as e:
-                logger.error(f"maib-fetch Step 2/5: 数据库同步失败，原因：{e}")
+                logger.error(f"maib-fetch Step 3/6: 数据库同步失败，原因：{e}")
 
     else:
-        logger.info("maib-fetch Step 2/5: 无需拆包解析")
+        logger.info("maib-fetch Step 3/6: 无需拆包解析")
 
     # 更新 chart_stat
     chart_stat["timestamp"] = time.time()
     stat_cache_file.write_bytes(orjson.dumps(chart_stat))
-    logger.info("maib-fetch Step 2/5: stat 缓存已更新")
+    logger.info("maib-fetch Step 3/6: stat 缓存已更新")
     
     
     # --- 3. 获取水鱼版本数据，同步国服的版本信息和定数信息 ---
     sy_data, is_new = await network.sy_music_data_from_file(data_dir)
     if (is_new or change_files) and sy_data:
         # 如果拆过包，就强制刷新一下数据
-        logger.info("maib-fetch Step 3/5: 准备更新国服版本和定数")
+        logger.info("maib-fetch Step 4/6: 准备更新国服版本和定数")
         
         version_update_list: list[tuple[int, int]] = []
         level_update_list: list[dict] = []
@@ -258,20 +274,20 @@ async def maintenance_task():
                         await services.set_mct_level_batch(level_update_list, 'CN', session=session)
                     
                     await session.commit()
-                    logger.success(f"maib-fetch Step 3/5: 同步完成 (曲目:{len(version_update_list)}, 谱面:{len(level_update_list)})")
+                    logger.success(f"maib-fetch Step 4/6: 同步完成 (曲目:{len(version_update_list)}, 谱面:{len(level_update_list)})")
             except Exception as e:
-                logger.error(f"maib-fetch Step 3/5: 数据库同步失败: {e}")
+                logger.error(f"maib-fetch Step 4/6: 数据库同步失败: {e}")
         
     elif not sy_data:
-        logger.warning("maib-fetch Step 3/5: 无法获取水鱼数据，跳过国服版本和定数更新")
+        logger.warning("maib-fetch Step 4/6: 无法获取水鱼数据，跳过国服版本和定数更新")
     else:
-        logger.info("maib-fetch Step 3/5: 水鱼数据未更新，无需同步调整")
+        logger.info("maib-fetch Step 4/6: 水鱼数据未更新，无需同步调整")
     
     
     # --- 4. 尝试从水鱼获取拟合数据 ---
     sy_chart_stats = await network.sy_chart_stats()
     if sy_chart_stats:
-        logger.info("maib-fetch Step 4/5: 更新水鱼的国服拟合定数数据")
+        logger.info("maib-fetch Step 5/6: 更新水鱼的国服拟合定数数据")
         try:
             synh_list: list[dict] = []
             for shortid, sy_stats in sy_chart_stats.get("charts", {}).items():
@@ -281,12 +297,12 @@ async def maintenance_task():
                             synh_list.append({"shortid": shortid, "difficulty": diff, "level": lv_synh})
             await services.set_mct_level_batch(synh_list, server="synh")
         except Exception as e:
-            logger.error(f"maib-fetch Step 4/5: 更新水鱼拟合定数数据失败，原因：{e}")
+            logger.error(f"maib-fetch Step 5/6: 更新水鱼拟合定数数据失败，原因：{e}")
     else:
-        logger.info("maib-fetch Step 4/5: 未获取到水鱼拟合定数数据")
+        logger.info("maib-fetch Step 5/6: 未获取到水鱼拟合定数数据")
 
     # --- 5. 从别名库更新别名 ---
-    logger.info("maib-fetch Step 5/5: 同步别名库数据")
+    logger.info("maib-fetch Step 6/6: 同步别名库数据")
     
     async def yuzuchan():
         yuzuchan_data = await network.yuzuchan_alias_list()
@@ -312,9 +328,9 @@ async def maintenance_task():
     
     
     await services.add_mdt_alias_batch(await yuzuchan(), -101)
-    logger.info("maib-fetch Step 5/5: 同步 yuzuchan 别名数据完成")
+    logger.info("maib-fetch Step 6/6: 同步 yuzuchan 别名数据完成")
     await services.add_mdt_alias_batch(await lxns(), -102, lxns_id_rule=True)
-    logger.info("maib-fetch Step 5/5: 同步 lxns 别名数据完成")
+    logger.info("maib-fetch Step 6/6: 同步 lxns 别名数据完成")
     
     
     # --- 6. 结束 ---
