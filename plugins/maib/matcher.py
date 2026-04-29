@@ -10,6 +10,7 @@ import aiofiles
 import orjson
 
 from . import utils, services, image_gen, bot_services, network
+from .napcat_stream import NapCatStreamFile
 from .report import build_achievements_report, build_import_report
 from .utils import MaiChart, MaiChartAch
 from .constants import *
@@ -20,6 +21,7 @@ from nonebot.rule import Rule
 from nonebot.params import RegexGroup
 from nonebot.internal.matcher import Matcher
 from nonebot.adapters.onebot.v11 import Bot, Event, Message, MessageSegment, MessageEvent, PrivateMessageEvent
+from nonebot.adapters.onebot.v11.exception import ActionFailed
 
 
 LOW_MEMORY_MODE: bool = False  # 低内存模式，会阻止 B50 等大型图片合成
@@ -84,6 +86,18 @@ def get_args(args_text: str) -> tuple[int | None, SERVER_TAG | Literal['ALL'] | 
             if arg in ['国服', '国'] and not target_server:
                 target_server = 'CN'
     return target_user_id, target_server
+
+
+async def _finish_with_optional_image(matcher: Matcher, text: str, image_bytes: bytes, *, fallback_text: str | None = None):
+    try:
+        await matcher.finish(Message([
+            MessageSegment.text(text),
+            MessageSegment.image(image_bytes),
+        ]))
+    except ActionFailed as exc:
+        logger.warning(f"图片发送失败，已降级为纯文本: {exc}")
+        await matcher.finish(fallback_text or text)
+
 
 # =================================
 # 业务逻辑
@@ -571,7 +585,7 @@ async def _(bot: Bot, event: PrivateMessageEvent, matcher: Matcher):
     
     file_data = None
     # 1. base64 直接读取
-    if not file_data and file_base64:
+    if file_base64:
         try:
             if "," in file_base64:
                 file_base64 = file_base64.split(",")[1]
@@ -597,6 +611,16 @@ async def _(bot: Bot, event: PrivateMessageEvent, matcher: Matcher):
                 logger.error(f"网络请求失败: {e}")
         else:
             logger.warning(f"URL 协议错误: {file_url}")
+    # 4. NapCat 流式接管
+    if not file_data and file_id:
+        try:
+            async with NapCatStreamFile(bot, file_id) as stream_path:
+                async with aiofiles.open(stream_path, "rb") as f:
+                    content = await f.read()
+                file_data = orjson.loads(content)
+            logger.info(f"成功从 NapCat 流式接管读取文件: {file_id}")
+        except Exception as e:
+            logger.warning(f"流式接管失败: {e}")
     # E. 失败
     if not file_data:
         await matcher.finish("读取或解析文件失败，请重试。")
@@ -696,11 +720,12 @@ async def _(bot: Bot, event: PrivateMessageEvent, matcher: Matcher):
 
     if detail_img:
         img_bytes = image_gen.get_image_bytes(detail_img)
-        await matcher.finish(Message([
-            MessageSegment.text(f"{summary_text}\n\n以下是本次成绩变更明细：\n"),
-            MessageSegment.image(img_bytes),
-            MessageSegment.text(warning_text),
-        ]))
+        await _finish_with_optional_image(
+            matcher,
+            f"{summary_text}\n\n以下是本次成绩变更明细：\n{warning_text}",
+            img_bytes,
+            fallback_text=f"{summary_text}{warning_text}",
+        )
 
     await matcher.finish(f"{summary_text}{warning_text}")
 

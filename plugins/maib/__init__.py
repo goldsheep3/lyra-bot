@@ -25,9 +25,10 @@ else:
         usage="",
         config=Config,
     )
-    from . import matcher, models, utils, plugin_help, fetch
+    from . import matcher, models, utils, plugin_help, fetch, napcat_stream
     # 将配置项传递给 matcher 模块
     cfg = get_plugin_config(Config)
     matcher.LOW_MEMORY_MODE = cfg.LOW_MEMORY_MODE
     matcher.LOW_MEMORY_TIP = cfg.LOW_MEMORY_TIP
     matcher.DEVELOPER_TOKEN = cfg.DIVING_FISH_DEVELOPER_TOKEN
+    napcat_stream.install_hook()
