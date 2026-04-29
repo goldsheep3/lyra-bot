@@ -1,10 +1,11 @@
 import random
+import time
 from typing import Sequence, Literal
 from sqlalchemy import update, select, case, cast, Float
 from sqlalchemy.dialects.sqlite import insert
 from nonebot_plugin_datastore import create_session
 
-from .models import EatableItem, ScoreRecord, UserPreference
+from .models import EatableItem, ScoreRecord, UserPreference, UserBan
 
 
 async def get_user_preference(user_id: int) -> UserPreference:
@@ -18,6 +19,7 @@ async def get_user_preference(user_id: int) -> UserPreference:
             session.add(result)
             await session.commit()
         return result
+
 
 async def set_user_preference(user_id: int, offset: float) -> None:
     """设置用户偏好"""
@@ -61,12 +63,14 @@ async def add_item(name: str, category: Literal['Food', 'Drink'], user_id: int, 
         await session.commit()
         return new_item
 
+
 async def get_item(item_id: int) -> EatableItem | None:
     """根据 ID 获取餐点"""
     async with create_session() as session:
         query = select(EatableItem).where(EatableItem.id == item_id)
         result = await session.scalar(query)
         return result
+
 
 async def get_item_by_name(name: str, category: Literal['Food', 'Drink']) -> EatableItem | None:
     """根据名称和类别获取餐点"""
@@ -78,6 +82,7 @@ async def get_item_by_name(name: str, category: Literal['Food', 'Drink']) -> Eat
         result = await session.scalar(query)
         return result
 
+
 async def get_items(category: Literal['Food', 'Drink'], offset: float = 0) -> Sequence[EatableItem]:
     """获取餐点列表，支持基于评分的偏好过滤"""
     async with create_session() as session:
@@ -88,6 +93,7 @@ async def get_items(category: Literal['Food', 'Drink'], offset: float = 0) -> Se
             query = query.where(EatableItem.current_score < abs(offset))
         result = await session.execute(query)
         return result.scalars().all()
+
 
 async def choice_item(category: Literal['Food', 'Drink'], offset: float = 0) -> EatableItem | None:
     """基于评分偏好随机选择餐点"""
@@ -108,7 +114,8 @@ async def choice_item(category: Literal['Food', 'Drink'], offset: float = 0) -> 
     chosen = random.choices(items, weights=weights, k=1)[0]
     return chosen
 
-async def set_score(item_id: int, user_id: int, score: int, weight: int = 1) -> float:
+
+async def set_score(item_id: int, user_id: int, score: int, *, weight: int = 1, reason: str | None = None) -> float:
     """设置评分，支持更新和插入，并返回新的平均分"""
     async with create_session() as session:
         # 获取旧记录用于计算 delta
@@ -127,7 +134,8 @@ async def set_score(item_id: int, user_id: int, score: int, weight: int = 1) -> 
             item_id=item_id,
             user_id=user_id,
             score=score,
-            weight=weight
+            weight=weight,
+            reason=reason
         ).on_conflict_do_update(
             index_elements=['item_id', 'user_id'],
             set_=dict(score=score, weight=weight)
@@ -161,3 +169,99 @@ async def set_score(item_id: int, user_id: int, score: int, weight: int = 1) -> 
         
         await session.commit()
         return round(new_avg, 2)
+
+
+async def set_item_enabled(item_id: int, enabled: bool) -> bool:
+    """设置餐点的启用/禁用状态，返回设置后的状态"""
+    async with create_session() as session:
+        update_stmt = (
+            update(EatableItem)
+            .where(EatableItem.id == item_id)
+            .values(enabled=enabled)
+            .returning(EatableItem.enabled)
+        )
+        result = await session.execute(update_stmt)
+        new_state = result.scalar_one()
+        await session.commit()
+        return new_state
+
+
+async def set_admin_score(item_id: int, score: int, reason: str | None = None, admin_id: int = -1) -> float:
+    """设置管理员评分（权重为30），返回新的平均分"""
+    return await set_score(item_id, admin_id, score, reason=reason, weight=30)
+
+
+async def ban_user(user_id: int, group_id: int, ban_seconds: int, reason: str | None = None) -> None:
+    """禁止用户一段时间"""
+    async with create_session() as session:
+        current_time = int(time.time())
+        end_time = current_time + ban_seconds
+        
+        # 查找并删除该用户在该群的旧禁用记录（如果有的话）
+        result = await session.execute(
+            select(UserBan).where(
+                UserBan.user_id == user_id,
+                UserBan.group_id == group_id
+            )
+        )
+        old_ban = result.scalar_one_or_none()
+        if old_ban:
+            await session.delete(old_ban)
+        
+        # 添加新的禁用记录
+        ban_record = UserBan(
+            user_id=user_id,
+            group_id=group_id,
+            reason=reason,
+            ban_time=ban_seconds,
+            create_time=current_time,
+            end_time=end_time
+        )
+        session.add(ban_record)
+        await session.commit()
+
+
+async def unban_user(user_id: int, group_id: int) -> bool:
+    """解除用户禁令，返回是否成功（存在禁用记录）"""
+    async with create_session() as session:
+        # 查找并删除用户在该群的禁用记录
+        result = await session.execute(
+            select(UserBan).where(
+                UserBan.user_id == user_id,
+                UserBan.group_id == group_id
+            )
+        )
+        ban_record = result.scalar_one_or_none()
+        
+        if not ban_record:
+            return False
+        
+        await session.delete(ban_record)
+        await session.commit()
+        return True
+
+
+async def is_user_banned(user_id: int, group_id: int) -> tuple[bool, str | None, int | None]:
+    """检查用户是否被禁用，返回(是否被禁用, 禁用理由, 解禁时间戳)"""
+    async with create_session() as session:
+        result = await session.execute(
+            select(UserBan).where(
+                UserBan.user_id == user_id,
+                UserBan.group_id == group_id
+            )
+        )
+        ban_record = result.scalar_one_or_none()
+        
+        if not ban_record:
+            return False, None, None
+        
+        current_time = int(time.time())
+        
+        # 检查禁用是否已过期
+        if current_time >= ban_record.end_time:
+            # 删除过期的禁用记录
+            await session.delete(ban_record)
+            await session.commit()
+            return False, None, None
+        
+        return True, ban_record.reason, ban_record.end_time

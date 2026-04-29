@@ -4,6 +4,8 @@
 # ==============================================================
 
 import random
+import time
+from datetime import datetime
 from pydantic import BaseModel
 
 from nonebot import logger, get_plugin_config, require, on_regex
@@ -52,6 +54,7 @@ else:
 LYRA_NICKNAMES = ("小梨", "Lyra", "莱茵", "Lyrandra", "小莱")
 
 # --- 发言字典 ---
+
 REPLY_DICT: dict[str, str | list[str]] = {
     # 吃什么
     'csm_no_items': "没有符合你当前「爱好」的餐点TT",
@@ -76,7 +79,13 @@ REPLY_DICT: dict[str, str | list[str]] = {
     # 特殊提示
     'alcohol_warning': "未成年请勿饮酒，成年人也要适量饮酒喔！",
     'csm_to_lyra': "不用给小梨推荐啦！小梨的餐点都是莉莉丝阿姐一手包办的~",
+    # ban相关
+    'user_banned': "你被管理员暂停了菜单权限ww\n解禁时间是 {time}",
+    'user_banned_with_reason': "你因为 {reason} 被管理员暂停了菜单权限ww\n解禁时间是 {time}",
 }
+
+
+# --- tool function ---
 
 def get_reply(key: str, **kwargs) -> str:
     """获取回复文本"""
@@ -85,9 +94,60 @@ def get_reply(key: str, **kwargs) -> str:
         template = random.choice(template)
     return template.format(**kwargs)
 
+def format_unban_time(end_time: int) -> str:
+    """格式化解禁时间为可读字符串"""
+    current_time = int(time.time())
+    remaining_seconds = end_time - current_time
+    
+    if remaining_seconds <= 0:
+        return "已过期"
+    
+    # 计算剩余时间
+    minutes = remaining_seconds // 60
+    hours = minutes // 60
+    days = hours // 24
+    
+    if days > 0:
+        hours_remainder = hours % 24
+        if hours_remainder > 0:
+            time_str = f"{days}天{hours_remainder}小时"
+        else:
+            time_str = f"{days}天"
+    elif hours > 0:
+        minutes_remainder = minutes % 60
+        if minutes_remainder > 0:
+            time_str = f"{hours}小时{minutes_remainder}分钟"
+        else:
+            time_str = f"{hours}小时"
+    else:
+        time_str = f"{minutes}分钟"
+    
+    # 获取解禁的具体时间
+    unban_dt = datetime.fromtimestamp(end_time)
+    unban_time = unban_dt.strftime("%Y-%m-%d %H:%M:%S")
+    
+    return f"{time_str}后（{unban_time}）"
+
 def pronoun_switch(text: str) -> str:
     """用户代词转换"""
     return text.replace("你", "他").replace("我", "你")
+
+async def check_user_banned(event: MessageEvent, matcher: Matcher) -> bool:
+    """检查用户是否被禁用，如果被禁用则直接返回禁用提示并返回True，否则返回False"""
+    user_id = int(event.get_user_id())
+    group_id = int(getattr(event, 'group_id', 0))
+    
+    is_banned, reason, end_time = await services.is_user_banned(user_id, group_id)
+    if is_banned and end_time is not None:
+        unban_time = format_unban_time(end_time)
+        if reason:
+            await matcher.finish(get_reply('user_banned_with_reason', reason=reason, time=unban_time))
+        else:
+            await matcher.finish(get_reply('user_banned', time=unban_time))
+        return True
+    
+    return False
+
 
 # ------ matcher ------
 
@@ -98,15 +158,21 @@ kyc = on_regex(r"^([吃喝])什么\s+(.*)$", priority=5, block=True)
 phb = on_regex(r"^([吃喝])什么排行榜\s*(?:\s+(-?\d+))?$", priority=5, block=True)
 admin = on_regex(r"^(sudo\s+(WhatFood|what_food|whatfood))\s+(.+)$", permission=SUPERUSER, rule=to_me(), priority=1)
 
+
 # ------ functions ------
 
 @csm.handle()
 async def _(event: MessageEvent, matcher: Matcher, groups: tuple = RegexGroup()):
     """处理「吃什么」"""
+    if await check_user_banned(event, matcher):
+        return
+    
+    user_id = int(event.get_user_id())
+    
     user_input, action = groups
     category = 'Food' if action == '吃' else 'Drink'
 
-    preference = await services.get_user_preference(int(event.get_user_id()))
+    preference = await services.get_user_preference(user_id)
 
     item = await services.choice_item(category=category, offset=preference.offset)    
     if not item:
@@ -119,6 +185,11 @@ async def _(event: MessageEvent, matcher: Matcher, groups: tuple = RegexGroup())
 @czg.handle()
 async def _(event: MessageEvent, matcher: Matcher, groups: tuple = RegexGroup()):
     """处理「吃这个」"""
+    if await check_user_banned(event, matcher):
+        return
+    
+    user_id = int(event.get_user_id())
+    
     action, food = groups
     category = 'Food' if action == '吃' else 'Drink'
 
@@ -133,7 +204,7 @@ async def _(event: MessageEvent, matcher: Matcher, groups: tuple = RegexGroup())
     ai_info = await ai_service.get_ai_service().analyze_food(food)
     alcohol = ai_info.get("contains_alcohol", False)
 
-    await services.add_item(food, category, int(event.get_user_id()), alcohol,
+    await services.add_item(food, category, user_id, alcohol,
                             ai_score=ai_info.get("score", None), ai_reason=ai_info.get("reason", None))
 
     await matcher.finish(get_reply('czg_success', food=food) + (get_reply('alcohol_warning') if alcohol else ""))
@@ -142,6 +213,11 @@ async def _(event: MessageEvent, matcher: Matcher, groups: tuple = RegexGroup())
 @hcm.handle()
 async def _(event: MessageEvent, matcher: Matcher, groups: tuple = RegexGroup()):
     """处理「好吃吗」"""
+    if await check_user_banned(event, matcher):
+        return
+    
+    user_id = int(event.get_user_id())
+    
     action, food, score = groups
     category = 'Food' if action == '吃' else 'Drink'
 
@@ -160,13 +236,18 @@ async def _(event: MessageEvent, matcher: Matcher, groups: tuple = RegexGroup())
                 raise ValueError
         except ValueError:
             await matcher.finish(get_reply('hcm_wrong_score'))
-        current_score = await services.set_score(item.id, int(event.get_user_id()), score)
+        current_score = await services.set_score(item.id, user_id, score)
         await matcher.finish(get_reply('hcm_set_score', food=food, score=score, current_score=current_score))
 
 
 @kyc.handle()
 async def _(event: MessageEvent, matcher: Matcher, groups: tuple = RegexGroup()):
     """处理「吃什么 好吃的」，设置 offset 倾向"""
+    if await check_user_banned(event, matcher):
+        return
+    
+    user_id = int(event.get_user_id())
+    
     _, user_input = groups
 
     try:
@@ -192,7 +273,7 @@ async def _(event: MessageEvent, matcher: Matcher, groups: tuple = RegexGroup())
 
     if offset is not None:
         tip = f"{'大于' if offset > 0 else '小于'}{offset}"
-        await services.set_user_preference(int(event.get_user_id()), offset)
+        await services.set_user_preference(user_id, offset)
         await matcher.finish(get_reply('kyc_success', tip=tip))
     else:
         await matcher.finish(get_reply('kuc_not_understand'))
@@ -214,29 +295,149 @@ async def _(event: MessageEvent, matcher: Matcher, groups: tuple = RegexGroup())
 async def _(event: MessageEvent, matcher: Matcher, groups: tuple = RegexGroup()):
     """处理管理员命令"""
     _, _, command = groups
+    
+    cmd_parts = command.split()
+    if not cmd_parts:
+        return
+    
+    action = cmd_parts[0]
 
-    # sudo whatfood enabled/disabled itemname  # 启用/禁用餐点
-    if command.startswith("enabled"):
+    # sudo whatfood enabled {itemname}  # 启用餐点
+    if action == "enabled":
+        if len(cmd_parts) < 2:
+            await matcher.finish("用法：sudo whatfood enabled {itemname}")
+        itemname = " ".join(cmd_parts[1:])
+        item = await services.get_item_by_name(itemname, 'Food') or await services.get_item_by_name(itemname, 'Drink')
+        if not item:
+            await matcher.finish(f"找不到餐点 {itemname} 呀。")
+        await services.set_item_enabled(item.id, True)
+        await matcher.finish(f"已启用餐点 {itemname}。")
         return
 
-    # sudo whatfood setscore itemname score reason weight # 设置餐点的高权重评分和理由
-    elif command.startswith("setscore"):
+    # sudo whatfood disabled {itemname}  # 禁用餐点
+    elif action == "disabled":
+        if len(cmd_parts) < 2:
+            await matcher.finish("用法：sudo whatfood disabled {itemname}")
+        itemname = " ".join(cmd_parts[1:])
+        item = await services.get_item_by_name(itemname, 'Food') or await services.get_item_by_name(itemname, 'Drink')
+        if not item:
+            await matcher.finish(f"找不到餐点 {itemname} 呀。")
+        await services.set_item_enabled(item.id, False)
+        await matcher.finish(f"已禁用餐点 {itemname}。")
         return
 
-    # sudo whatfood ban userid time(minutes)  # 禁止用户在该群使用插件一段时间
-    elif command.startswith("ban"):
+    # sudo whatfood setscore {itemname} {score} [reason]  # 设置餐点的高权重管理员评分
+    elif action == "setscore":
+        if len(cmd_parts) < 3:
+            await matcher.finish("用法：sudo whatfood setscore {itemname} {score} [reason]")
+        
+        itemname = cmd_parts[1]
+        try:
+            score = int(cmd_parts[2])
+        except ValueError:
+            await matcher.finish("评分应该是整数哦！")
+            return
+        
+        reason = " ".join(cmd_parts[3:]) if len(cmd_parts) > 3 else None
+        
+        item = await services.get_item_by_name(itemname, 'Food') or await services.get_item_by_name(itemname, 'Drink')
+        if not item:
+            await matcher.finish(f"找不到餐点 {itemname} 呀。")
+            return
+        
+        new_score = await services.set_admin_score(item.id, score, reason)
+        await matcher.finish(f"已为 {itemname} 设置管理员评分 {score} 分。\n当前的分数为 {new_score}。")
         return
 
-    # sudo whatfood unban userid  # 解除用户禁令
-    elif command.startswith("unban"):
+    # sudo whatfood ban {userid} {time(d/h/m/s)} [reason]  # 禁止用户使用插件一段时间（支持小数，单位：d/h/m/s）
+    elif action == "ban":
+        group_id = int(getattr(event, 'group_id', 0))
+        
+        if len(cmd_parts) < 3:
+            await matcher.finish("用法：sudo whatfood ban {userid} {time} [reason]\n时间格式：1.5d(天) 2h(小时) 30m(分钟) 60s(秒)，支持小数")
+        
+        try:
+            user_id = int(cmd_parts[1])
+        except ValueError:
+            await matcher.finish("用户ID应该是整数哦！")
+            return
+        
+        # 解析时间输入，支持单位 d(天) h(小时) m(分钟) s(秒)
+        time_input = cmd_parts[2]
+        if time_input[-1].lower() in ['d', 'h', 'm', 's']:
+            unit = time_input[-1].lower()
+            value_str = time_input[:-1]
+        else:
+            # 默认单位为秒
+            unit = 's'
+            value_str = time_input
+        
+        try:
+            value = float(value_str)
+        except ValueError:
+            await matcher.finish("禁用时长格式错误！请输入数字，可选单位：d(天) h(小时) m(分钟) s(秒)")
+            return
+        
+        # 转换为秒数
+        if unit == 'd':
+            ban_seconds = int(value * 86400)  # 1天 = 86400秒
+        elif unit == 'h':
+            ban_seconds = int(value * 3600)   # 1小时 = 3600秒
+        elif unit == 'm':
+            ban_seconds = int(value * 60)     # 1分钟 = 60秒
+        else:  # 's'
+            ban_seconds = int(value)
+        
+        if ban_seconds <= 0:
+            await matcher.finish("禁用时长应该是正数哦！")
+            return
+        
+        reason = " ".join(cmd_parts[3:]) if len(cmd_parts) > 3 else None
+        
+        await services.ban_user(user_id, group_id, ban_seconds, reason)
+        
+        # 计算可读的时间字符串（约分到分钟为最小单位）
+        minutes = ban_seconds // 60
+        hours = minutes // 60
+        days = hours // 24
+        
+        if days > 0:
+            time_str = f"{days}天" if hours % 24 == 0 else f"{days}天{hours % 24}小时"
+        elif hours > 0:
+            time_str = f"{hours}小时" if minutes % 60 == 0 else f"{hours}小时{minutes % 60}分钟"
+        else:
+            time_str = f"{minutes}分钟"
+        
+        await matcher.finish(f"已禁用用户 {user_id} {time_str}。\n原因：{reason or '未填写'}")
+        return
+
+    # sudo whatfood unban {userid}  # 解除用户禁令
+    elif action == "unban":
+        group_id = int(getattr(event, 'group_id', 0))
+        
+        if len(cmd_parts) < 2:
+            await matcher.finish("用法：sudo whatfood unban {userid}")
+        
+        try:
+            user_id = int(cmd_parts[1])
+        except ValueError:
+            await matcher.finish("用户ID应该是整数哦！")
+            return
+        
+        success = await services.unban_user(user_id, group_id)
+        
+        if success:
+            await matcher.finish(f"已解除用户 {user_id} 的禁令。")
+        else:
+            await matcher.finish(f"用户 {user_id} 没有禁用记录呀。")
         return
 
     # sudo whatfood init  # 将初始菜品填入数据库
-    elif command.startswith("init"):
-        return
+    elif action == "init":
+        await matcher.finish("暂时还不支持 init 指令喵（）请等待从旧版本将默认菜单迁移过来qwq")
 
     # sudo whatfood update  # 从 JSON/NPZ 文件更新数据
-    elif command.startswith("update"):
+    elif action == "update":
         require("nonebot_plugin_localstore")
         from nonebot_plugin_localstore import get_plugin_data_dir, get_plugin_cache_dir
         from .json_update import full_migrate_old_data

@@ -36,8 +36,7 @@
 # Output Format
 仅输出一个 JSON 对象，不要包含 Markdown 标记：
 {
-  "offset": float, 
-  "reason": "简短理由，明确指出是基于哪个阈值（3.2/2.4）或反向逻辑"
+  "offset": float
 }
 
 # User Input
