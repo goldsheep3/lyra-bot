@@ -1,8 +1,9 @@
+import io
 import re
 import time
-import yaml
 import bisect
 import zipfile
+from thefuzz import process
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Optional, List, Tuple, Literal
@@ -10,77 +11,7 @@ from typing import Dict, Optional, List, Tuple, Literal
 from PIL import Image
 from loguru import logger
 
-
-# 完成率别名映射
-rate_alias_map: Dict[str, float] = {}
-for rate_value, aliases in {
-    101.0000: ("ap+", "理论"),
-    100.7500: ("ap",),
-    100.5000: ("鸟加", "鸟家", "sss+", "3s+"),
-    100.0000: ("鸟", "鸟s", "sss", "3s"),
-    99.5000:  ("ss+", "2s+"),
-    99.0000:  ("ss", "2s"),
-    98.0000:  ("s+", "1s+"),
-    97.0000:  ("s", "1s"),
-    94.0000:  ("鸟a", "aaa", "3a"),
-    90.0000:  ("aa", "2a"),
-    80.0000:  ("a", "1a"),
-    75.0000:  ("鸟b", "bbb", "3b"),
-    70.0000:  ("bb", "2b"),
-    60.0000:  ("b", "1b"),
-    50.0000:  ("c", "1c"),
-    0.0000:   ("d", "1d"),
-}.items():
-    for alias in aliases:
-        rate_alias_map[alias.lower()] = rate_value
-
-
-# 完成率对应的评分因子表
-RATE_FACTOR_TABLE: List[Tuple[float, float]] = [
-    (100.5000, 0.224),
-    (100.4999, 0.222),
-    (100.0000, 0.216),
-    (99.9999, 0.214),
-    (99.5000, 0.211),
-    (99.0000, 0.208),
-    (98.9999, 0.206),
-    (98.0000, 0.203),
-    (97.0000, 0.200),
-    (96.9999, 0.176),
-    (94.0000, 0.168),
-    (90.0000, 0.152),
-    (80.0000, 0.136),
-    (79.9999, 0.128),
-    (75.0000, 0.120),
-    (70.0000, 0.112),
-    (60.0000, 0.096),
-    (50.0000, 0.080),
-    (40.0000, 0.064),
-    (30.0000, 0.048),
-    (20.0000, 0.032),
-    (10.0000, 0.016),
-]
-
-# Diving-Fish 的 FC/FS 解析映射
-DF_FC_MAP = {v: i for i, v in enumerate(['fc', 'fcp', 'ap', 'app'], start=1)}
-DF_FS_MAP = {v: i for i, v in enumerate(['sync', 'fs', 'fsp', 'fsd', 'fsdp'], start=1)}
-# 难度颜色字符串解析映射
-DIFFS_MAP = {v: i for i, v in enumerate(["蓝", "绿", "黄", "红", "紫", "白"], start=1)}
-
-# 服务器标识类型
-SERVER_TAG = Literal["JP", "INTL", "CN"]
-
-# 基础路径及 yml 数据
-PLUGIN_BASE_PATH = Path(__file__).parent
-ASSETS_PATH = PLUGIN_BASE_PATH / "assets"
-GENRES_YAML_PATH = ASSETS_PATH / "genres.yaml"
-GENRES_DATA = yaml.safe_load(GENRES_YAML_PATH.read_text(encoding="utf-8"))
-VERSIONS_YAML_PATH = ASSETS_PATH / "versions.yaml"
-VERSIONS_DATA = yaml.safe_load(VERSIONS_YAML_PATH.read_text(encoding="utf-8"))
-
-# DXRating 版本分界线
-BOUNDARIES_DX_RATING = [0, 1000, 2000, 5000, 7000, 10000, 12000, 13000, 14000, 14500, 15000]
-BOUNDARIES_DX_RATING_NEW = [0, 1000, 2000, 5000, 7000, 10000, 12000, 13000, 14000, 14250, 14500, 14750, 15000, 15250, 15500, 15750, 16000, 16250, 16500, 16750]
+from .constants import *  # 导入常量表
 
 def parse_status(target: str, mapping: Dict[str, int]) -> int:
     """通过映射表常量进行数值获取"""
@@ -88,12 +19,88 @@ def parse_status(target: str, mapping: Dict[str, int]) -> int:
 
 def get_current_versions():
     """从 VERSIONS_DATA 获取当前最新版本号"""
-    jp_versions = [v for v in VERSIONS_DATA.keys() if v < 2000]
-    cn_versions = [v for v in VERSIONS_DATA.keys() if v >= 2000]
+    jp_versions: list[int] = [v for v in VERSIONS_DATA.keys() if v < 2000]
+    cn_versions: list[int] = [v for v in VERSIONS_DATA.keys() if v >= 2000]
     
     jp_current = max(jp_versions) if jp_versions else 0
     cn_current = max(cn_versions) if cn_versions else 0
     return jp_current, cn_current
+
+def get_file_stat_identity(file_path: Path) -> str:
+    """获取文件的特征标识（修改时间 + 文件大小）"""
+    stat = file_path.stat()
+    # 使用 修改时间_文件大小 作为唯一标识
+    return f"{stat.st_mtime}_{stat.st_size}"
+
+
+async def parse_version(version_str: str) -> int:
+    """辅助函数：解析版本号"""
+    global VERSIONS_DATA
+
+    v_str = version_str.lower().strip()
+    if not v_str:
+        return -1
+    rd = {v.lower().strip(): k for k, v in VERSIONS_DATA.items()}
+    # 1. 直接匹配
+    v = rd.get(v_str, None)
+    # 2. 尝试去掉前缀 "maimai "
+    if not v:
+        if v_str[:7] == "maimai ":
+            v_str = v_str[7:].strip()
+            v = rd.get(v_str, None)
+    # 3. 尝试替换 DX -> でらっくす
+    if not v:
+        if 'dx' in v_str:
+            v_str = v_str.replace('dx', 'でらっくす')
+            v = rd.get(v_str, None)
+    # 4. 尝试去掉前缀 "でらっくす "
+    if not v:
+        if v_str[:6] == "でらっくす ":
+            v_str = v_str[6:].strip()
+            v = rd.get(v_str, None)
+    if v is None:
+        logger.warning(f"无法解析版本号: {version_str}")
+        return -1
+    return v
+
+
+async def parse_diving_fish_version(version_str: str) -> int:
+    """辅助函数：解析国服版本号"""
+    v_jp_result = await parse_version(version_str)
+    if v_jp_result <= 12:
+        # 旧框版本，一致
+        return v_jp_result
+    else:
+        # 新框版本，转化
+        # 版本号为 maib 自主定义，兼容水鱼版本号输出格式，不受官方版本号影响
+        v = (v_jp_result - 13) // 2 + 2020
+        return v
+
+
+async def parse_genre(genre_str: str, genre_dict_fixed: dict[str, int]) -> int:
+    """辅助函数：解析流派名"""
+    g_str = genre_str.lower().strip()
+    if not g_str:
+        return -1
+
+    # 1. 精确匹配
+    g = genre_dict_fixed.get(g_str, None)
+    
+    # 2. 模糊匹配 (容错几个字符)
+    if g is None:
+        try:
+            # 提取相似度最高的一个，阈值设为 80 (可以根据实际效果调整)
+            best_match = process.extractOne(g_str, list(genre_dict_fixed.keys()))
+            if best_match and best_match[1] >= 80:
+                g = genre_dict_fixed[best_match[0]]
+                logger.debug(f"流派模糊匹配成功: '{genre_str}' -> '{best_match[0]}' (相似度: {best_match[1]})")
+        except ImportError:
+            logger.warning("未安装 thefuzz 库，跳过模糊匹配")
+
+    if g is None:
+        logger.warning(f"无法解析流派名: {genre_str}")
+        return -1
+    return g
 
 @dataclass
 class MaiAlias:
@@ -115,7 +122,7 @@ class MaiChartAch:
     server: SERVER_TAG  # 服务器标识
     achievement: float  # 成就率
     dxscore: int = 0  # DX 分数
-    dxscore_max: int = -1  # DX 分数上限
+    dxscore_max: int = 0  # DX 分数上限
     combo: int = 0  # 连击
     sync: int = 0  # 同步游玩
     update_time: int = 0  # 更新时间戳
@@ -125,6 +132,8 @@ class MaiChartAch:
     @property
     def dxscore_star_count(self) -> int:
         if self.dxscore_max < self.dxscore:
+            return 0
+        if self.dxscore_max <= 0 or self.dxscore <= 0:
             return 0
         dxs_percent = self.dxscore / self.dxscore_max * 100
 
@@ -143,15 +152,31 @@ class MaiChartAch:
     def dxscore_tuple(self) -> tuple[int, int, int]:
         return self.dxscore, self.dxscore_max, self.dxscore_star_count
 
-    def update(self, new_ach: 'MaiChartAch'):
-        """
-        合并成绩逻辑：取各项指标的最大值
-        """
-        self.achievement = max(self.achievement, new_ach.achievement)
-        self.dxscore = max(self.dxscore, new_ach.dxscore)
-        self.combo = max(self.combo, new_ach.combo)
-        self.sync = max(self.sync, new_ach.sync)
+    def update_ach(self, maichart_ach: 'MaiChartAch'):
+        """更新成就信息"""
+        if (self.shortid != maichart_ach.shortid or self.difficulty != maichart_ach.difficulty or self.server != maichart_ach.server):
+            raise ValueError("只能更新相同谱面和服务器的成绩数据")
+        
+        self.achievement = max(self.achievement, maichart_ach.achievement)
+        self.dxscore = max(self.dxscore, maichart_ach.dxscore)
+        self.combo = max(self.combo, maichart_ach.combo)
+        self.sync = max(self.sync, maichart_ach.sync)
         self.update_time = int(time.time())
+
+    def __gt__(self, other: "MaiChartAch") -> bool:
+        """定义大于操作，用于比较成绩数据"""
+        if not isinstance(other, MaiChartAch):
+            return NotImplemented
+        if (self.shortid != other.shortid or self.difficulty != other.difficulty or self.server != other.server):
+            raise ValueError("只能比较相同谱面和服务器的成绩数据")
+        
+        # 任何一个指标更高都算作整体更高
+        return any([
+            self.achievement > other.achievement,
+            self.dxscore > other.dxscore,
+            self.combo > other.combo,
+            self.sync > other.sync
+        ])
 
 @dataclass
 class MaiChart:
@@ -172,12 +197,11 @@ class MaiChart:
     note_count_touch: int = -1
     note_count_break: int = -1
 
-    # 成就信息，键为服务器标识
-    _achs: dict[SERVER_TAG, MaiChartAch | None] = field(
+    # 成就信息，键为服务器标识和user_id
+    _achs: dict[SERVER_TAG, dict[int, MaiChartAch | None]] = field(
             default_factory=lambda: {
-                "JP": None,
-                "INTL": None,
-                "CN": None,
+                "JP": {},
+                "CN": {},
             }
         )
 
@@ -210,30 +234,34 @@ class MaiChart:
         frac_part = level - int_part
         return f"{int_part}+" if frac_part * 10 >= plus else f"{level}"
 
-    def get_ach(self, server: SERVER_TAG = "JP") -> MaiChartAch:
+    def get_ach(self, server: SERVER_TAG = "JP", user_id: int | None = None) -> MaiChartAch:
         """获取谱面成绩"""
-        ach = self._achs.get(server, None)
-        return ach if ach else MaiChartAch( shortid=self.shortid, difficulty=self.difficulty, server=server, achievement=-100)
+        achs = self._achs.get(server, {})
+        if user_id is None:
+            ach = next(iter(achs.values()), None)
+        else:
+            ach = achs.get(user_id, None)
+        return ach if ach else MaiChartAch(shortid=self.shortid, difficulty=self.difficulty, server=server, achievement=-100)
 
     def set_ach(self, ach: MaiChartAch):
         """覆盖原有谱面成绩"""
         ach.dxscore_max = self.dxscore_max  # 同步 DX 分数上限
-        self._achs[ach.server] = ach
+        self._achs[ach.server][ach.user_id] = ach
 
     def update_ach(self, ach: MaiChartAch) -> MaiChartAch:
         """更新谱面成绩"""
-        old_ach = self.get_ach(ach.server)
-        old_ach.update(ach)
-        self.set_ach(old_ach)
-        return old_ach
+        new_ach = self.get_ach(ach.server, ach.user_id)
+        new_ach.update_ach(ach)
+        return new_ach
 
-    def get_dxrating(self, server: SERVER_TAG = "JP", ap_bonus: int = 0) -> int:
+    def get_dxrating(self, server: SERVER_TAG = "JP", ap_bonus: int = 0, user_id: int | None = None) -> int:
         """获取谱面 DX Rating"""
-        ach = self.get_ach(server=server)
+        ach = self.get_ach(server=server, user_id=user_id)
         if not ach or ach.achievement < 0:
             return 0
         factor = next((f for threshold, f in RATE_FACTOR_TABLE if ach.achievement >= threshold), 0.0)
-        ra = int(self.lv * ach.achievement * factor)
+        achievement = 100.5 if ach.achievement >= 100.5 else ach.achievement  # SSS+ 即为最高分数
+        ra = int(self.lv * achievement * factor)
         if ach.combo >= 3:
             ra += ap_bonus
         return ra
@@ -391,6 +419,9 @@ class MaiData:
         """解析来自水鱼查分器的响应体数据，填充 MaiChartAch 分数信息"""
 
         for record in records:
+            if record.get("song_id") != self.shortid:
+                continue  # 过滤掉不匹配曲目的记录，兼容 b50 接口
+
             # 1. 难度转换
             level_idx = record.get("level_index")
             if level_idx is None:
@@ -429,97 +460,67 @@ class MaiData:
                 existing_alias_names.add(alias.alias)
 
 
-class MaiB50Manager:
-    def __init__(self, current_version: int, server: SERVER_TAG):
-        self.current_version = current_version
-        self.server: SERVER_TAG = server
-        # 存储格式: (rating, maidata, diff)
-        self._b35: List[Tuple[int, 'MaiData', int]] = []
-        self._b15: List[Tuple[int, 'MaiData', int]] = []
+@dataclass
+class MaiUser:
+    user_id: int
+    username: str = ''
+    default_server: SERVER_TAG = 'CN'
+    # 牌子：元素1 和 JP 版本对应；元素2 的 1~4 分别表示 极 将 神 舞舞
+    # 对于 舞 系牌子，版本号匹配 -1 ，霸者匹配 元素2 为 0
+    plate: tuple[int, int] | None = None
+
+    jp_update_time: int = 0
+    jp_dxrating: int = 0
+    cn_update_time: int = 0
+    cn_dxrating: int = 0
+
+    # 缓存
+    jp_current_version: int = -1
+    cn_current_version: int = -1
 
     @property
     def dxrating(self) -> int:
-        """获取当前 B50 的总 Rating"""
-        return sum(item[0] for item in self._b35 + self._b15)
+        return {
+            'JP': self.jp_dxrating,
+            'CN': self.cn_dxrating
+        }.get(self.default_server, 0)
 
-    @property
-    def dxrating_filename(self) -> str:
-        """根据当前 DX Rating 获取对应的外框文件名"""
-        ra = self.dxrating
-        ver = self.current_version
-        
-        # 1. 确定使用的边界和前缀
-        is_cirp = 26 <= ver < 2000
-        bounds = BOUNDARIES_DX_RATING_NEW if is_cirp else BOUNDARIES_DX_RATING
-        
-        # 定位索引
-        idx = max(0, bisect.bisect_right(bounds, ra) - 1)
-        
-        if idx < 8:
-            # 金框之前不区分
-            return f"JP_{idx}.png"
-        if is_cirp:
-            return f"JP_CIRP_{idx}.png"
-        return f"JP_{idx}.png"
+    def get_update_time(self, server: SERVER_TAG | None = None) -> int:
+        server = server or self.default_server
+        return {
+            'JP': self.jp_update_time,
+            'CN': self.cn_update_time
+        }.get(server, 0)
 
-    def get_b35_list(self) -> list[tuple['MaiData', int]]:
-        """获取当前 B35 的曲目列表"""
-        return [(item[1], item[2]) for item in self._b35]
+    def get_formated_time(self, server: SERVER_TAG | None = None) -> str:
+        server = server or self.default_server
+        update_time = self.get_update_time(server=server)
+        if update_time <= 0:
+            return "Not Updated"
+        return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(update_time))
 
-    def get_b15_list(self) -> list[tuple['MaiData', int]]:
-        """获取当前 B15 的曲目列表"""
-        return [(item[1], item[2]) for item in self._b15]
+    def get_current_version(self, server: SERVER_TAG) -> int:
+        return {
+            'JP': self.jp_current_version,
+            'CN': self.cn_current_version
+        }.get(server, -1)
 
-    def get_lists(self) -> tuple[list[tuple['MaiData', int]], list[tuple['MaiData', int]]]:
-        """获取当前 B35 和 B15 的曲目列表"""
-        return self.get_b35_list(), self.get_b15_list()
+    def set_avatar(self, avatar: Image.Image | bytes):
+        if isinstance(avatar, Image.Image):
+            self.avatar = avatar
+        elif isinstance(avatar, bytes):
+            try:
+                img = Image.open(io.BytesIO(avatar)).convert('RGB')
+                self.avatar = img
+            except Exception as e:
+                logger.error(f"Failed to load avatar image: {e}")
+                self.avatar = None
 
-    def get_b50_list(self) -> list[tuple['MaiData', int]]:
-        """获取当前 B50 的曲目列表，格式为 (MaiData, diff)"""
-        b50 = self._b35 + self._b15
-        b50.sort(key=lambda x: x[0], reverse=True)  # 按照 DX Rating 从高到低排序
-        return [(item[1], item[2]) for item in b50]
-
-    def _process_entry(self, maidata: 'MaiData', diff: int) -> Optional[Tuple[int, 'MaiData', int]]:
-        ra = maidata.get_chart_dxrating(diff, server=self.server, current_version=self.current_version)
-        return (ra, maidata, diff) if ra is not None else None
-
-    def add_entry(self, maidata: 'MaiData', diff: int):
-        """添加单个条目"""
-        entry = self._process_entry(maidata, diff)
-        if not entry:
-            return
-
-        is_new = maidata.is_b15(self.current_version)
-        target = self._b15 if is_new else self._b35
-        max_len = 15 if is_new else 35
-
-        # 逻辑：如果没满直接加；如果满了且比最小值大，则替换最小值
-        if len(target) < max_len:
-            target.append(entry)
-            target.sort(key=lambda x: x[0], reverse=True)
-        else:
-            # target[-1] 是当前最小值（因为已排序）
-            if entry[0] > target[-1][0]:
-                target[-1] = entry
-                target.sort(key=lambda x: x[0], reverse=True)
-
-    def add_entries(self, entries: List[Tuple['MaiData', int]]):
-        """添加多个条目"""
-        new_entries = []
-        old_entries = []
-        
-        for md, diff in entries:
-            entry = self._process_entry(md, diff)
-            if not entry: continue
-            if md.is_b15(self.current_version):
-                new_entries.append(entry)
-            else:
-                old_entries.append(entry)
-
-        # 合并当前数据与新数据，排序并截取前 N 个
-        self._b15 = sorted(self._b15 + new_entries, key=lambda x: x[0], reverse=True)[:15]
-        self._b35 = sorted(self._b35 + old_entries, key=lambda x: x[0], reverse=True)[:35]
+    def set_current_version(self, server: SERVER_TAG, version: int):
+        if server == 'JP':
+            self.jp_current_version = version
+        elif server == 'CN':
+            self.cn_current_version = version
 
 
 class SimaiNoteCount:
@@ -629,3 +630,56 @@ class SimaiNoteCount:
             stats.get("TOUCH", 0),
             stats.get("BREAK", 0),
         )
+
+
+def parse_dxrating_filename(dxrating: int, cirp_frame: bool = True) -> str:
+        """根据当前 DX Rating 获取对应的外框文件名"""
+        # 1. 确定使用的边界和前缀
+        bounds = BOUNDARIES_DX_RATING_NEW if cirp_frame else BOUNDARIES_DX_RATING
+        
+        # 定位索引
+        idx = max(0, bisect.bisect_right(bounds, dxrating) - 1)
+        
+        if idx < 8:
+            # 金框之前不区分
+            return f"JP_{idx}.png"
+        if cirp_frame:
+            return f"JP_CIRP_{idx}.png"
+        return f"JP_{idx}.png"
+
+
+def get_sy_records(records: list[dict]) -> list[MaiChartAch]:
+    """解析水鱼用户成绩数据为 MaiChartAch 列表"""
+    achs = []
+    for record in records:
+        shortid = record.get('song_id')
+        if not shortid:
+            continue  # 如果没有 song_id 则无法匹配曲目，跳过该记录
+        
+        level_idx = record.get("level_index")
+        if level_idx is None:
+            continue
+        diff = level_idx + 2  
+        
+        # 2. 提取各项分数
+        achievement = record.get("achievements", 0.0)
+        dx_score = record.get("dxScore", 0)
+        
+        # 3. 解析状态码 (FC/FS)
+        combo = DF_FC_MAP.get(record.get("fc", "").lower(), 0)
+        sync = DF_FS_MAP.get(record.get("fs", "").lower(), 0)
+        
+        # 4. 创建成就对象
+        ach = MaiChartAch(
+            shortid=shortid,
+            difficulty=diff,
+            server="CN",
+            achievement=achievement,
+            dxscore=dx_score,
+            combo=combo,
+            sync=sync,
+            update_time=int(time.time())
+        )
+        achs.append(ach)
+
+    return achs

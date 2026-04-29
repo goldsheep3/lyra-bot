@@ -1,22 +1,24 @@
 import re
+import time
 import orjson
 import zipfile
 from pathlib import Path
 
-from sqlalchemy import select
-from sqlalchemy.orm import selectinload
-from sqlalchemy.ext.asyncio import AsyncSession
-from thefuzz import process
 from nonebot import logger, require
 require("nonebot_plugin_datastore")
 from nonebot_plugin_datastore.db import post_db_init
 
-from. import models, network, services
+from . import utils, models, services, network
 from .bot_registry import PluginRegistry
-from .utils import MaiData, MaiChart, GENRES_DATA, VERSIONS_DATA, SimaiNoteCount
+from .constants import GENRES_DATA
 
 
-def initialize_genres_data_rev():
+# Cache Time
+CACHE_EXPIRATION_SECONDS = 3600 * 72  # 72小时
+
+
+def _initialize_genres_data_rev():
+    """初始化 `GENRES_DATA` 的反向映射，支持多语言模糊匹配"""
     genres_config_rev = {}
     for k, v in GENRES_DATA.items():
         if isinstance(v, dict):
@@ -26,143 +28,84 @@ def initialize_genres_data_rev():
                     genres_config_rev[clean_key] = k
     return genres_config_rev
 
-GENRES_DATA_REV = initialize_genres_data_rev()
+_GENRES_DATA_REV = _initialize_genres_data_rev()
 
 
-def get_file_stat_identity(file_path: Path) -> str:
-    """获取文件的特征标识（修改时间 + 文件大小）"""
-    stat = file_path.stat()
-    # 使用 修改时间_文件大小 作为唯一标识
-    return f"{stat.st_mtime}_{stat.st_size}"
+def _extract_metadata(content: str) -> dict[str, str]:
+    """从 maidata.txt 内容提取键值元数据。"""
+    metadata = {}
+    # 预处理换行
+    cleaned_content = content.replace('\r\n', '\n')
+    for part in cleaned_content.split('&'):
+        key, sep, value = part.partition('=')
+        if sep:  # 只有存在 '=' 时才处理
+            metadata[key.strip()] = value.strip()
+    return metadata
 
 
-async def parse_version(version_str: str) -> int:
-    """辅助函数：解析版本号"""
-    global VERSIONS_DATA
-
-    v_str = version_str.lower().strip()
-    if not v_str:
-        return -1
-    rd = {v.lower().strip(): k for k, v in VERSIONS_DATA.items()}
-    # 1. 直接匹配
-    v = rd.get(v_str, None)
-    # 2. 尝试去掉前缀 "maimai "
-    if not v:
-        if v_str[:7] == "maimai ":
-            v_str = v_str[7:].strip()
-            v = rd.get(v_str, None)
-    # 3. 尝试替换 DX -> でらっくす
-    if not v:
-        if 'dx' in v_str:
-            v_str = v_str.replace('dx', 'でらっくす')
-            v = rd.get(v_str, None)
-    # 4. 尝试去掉前缀 "でらっくす "
-    if not v:
-        if v_str[:6] == "でらっくす ":
-            v_str = v_str[6:].strip()
-            v = rd.get(v_str, None)
-    if v is None:
-        logger.warning(f"无法解析版本号: {version_str}")
-        return -1
-    return v
-
-
-async def parse_diving_fish_version(version_str: str) -> int:
-    """辅助函数：解析国服版本号"""
-    v_jp_result = await parse_version(version_str)
-    if v_jp_result <= 12:
-        # 旧框版本，一致
-        return v_jp_result
-    else:
-        # 新框版本，转化
-        v = (v_jp_result - 13) // 2 + 2020
-        return v
-
-
-async def parse_genre(genre_str: str, genre_dict_fixed: dict[str, int]) -> int:
-    """辅助函数：解析流派名"""
-    g_str = genre_str.lower().strip()
-    if not g_str:
-        return -1
-
-    # 1. 精确匹配
-    g = genre_dict_fixed.get(g_str, None)
-    
-    # 2. 模糊匹配 (容错几个字符)
-    if g is None:
-        try:
-            # 提取相似度最高的一个，阈值设为 80 (可以根据实际效果调整)
-            best_match = process.extractOne(g_str, list(genre_dict_fixed.keys()))
-            if best_match and best_match[1] >= 80:
-                g = genre_dict_fixed[best_match[0]]
-                logger.debug(f"流派模糊匹配成功: '{genre_str}' -> '{best_match[0]}' (相似度: {best_match[1]})")
-        except ImportError:
-            logger.warning("未安装 thefuzz 库，跳过模糊匹配")
-
-    if g is None:
-        logger.warning(f"无法解析流派名: {genre_str}")
-        return -1
-    return g
-
-async def get_chart(raw_metadata: dict, short_id: int, chart_num: int) -> MaiChart | None:
-    """辅助函数：获取谱面信息"""
+async def get_chart(raw_mdt: dict, short_id: int, chart_num: int) -> utils.MaiChart | None:
+    """获取谱面信息"""
 
     lv_key = f'lv_{chart_num}'
     des_key = f'des_{chart_num}'
     inote_key = f'inote_{chart_num}'
-    if lv_key in raw_metadata:
-        lv_str = raw_metadata.get(lv_key, '0').rstrip('?')
+    if lv_key in raw_mdt:
+        lv_str = raw_mdt.get(lv_key, '0').rstrip('?')
         if not lv_str:
             return None  # lv 为空，视为无该难度谱面
-        chart = MaiChart(
+        chart = utils.MaiChart(
             shortid=short_id,
             difficulty=chart_num,
             lv=float(lv_str),
-            des=str(raw_metadata.get(des_key, '')),
-            inote=str(raw_metadata.get(inote_key, '')),
+            des=str(raw_mdt.get(des_key, '')),
+            inote=str(raw_mdt.get(inote_key, '')),
         )
-        snc = await SimaiNoteCount(raw_metadata.get(inote_key, '')).process()
+        snc = await utils.SimaiNoteCount(raw_mdt.get(inote_key, '')).process()
         chart.set_notes_with_tuple(snc.to_tuple())
         return chart
     return None
 
-async def parse_maidata(raw_metadata: dict[str, str], zip_path: Path) -> MaiData:
+
+async def parse_maidata(raw_mdt: dict[str, str], zip_path: Path | str) -> utils.MaiData:
     """通过 maidata.txt 元数据解析 MaiData"""
-    global GENRES_DATA_REV
+    global _GENRES_DATA_REV
 
     def raw_get(key_list, return_type: type = str, default = None):
         """从 raw_metadata 中获取数据的工具函数，支持多个候选 key 和类型转换"""
         if isinstance(key_list, str):
             key_list = [key_list]
         for key in key_list:
-            if key in raw_metadata:
+            if key in raw_mdt:
                 if return_type:
                     try:
-                        return return_type(raw_metadata[key])
+                        return return_type(raw_mdt[key])
                     except (ValueError, TypeError):
                         continue
         return default
 
     shortid = raw_get(['shortid', 'id'], int, 0)
     title = raw_get(['title'], default="")
+    clean_title = re.sub(r'\[(宴|DX|SD)]$', '', title)  # title 处理：去掉`[XXXX]`
     bpm = raw_get(['wholebpm', 'bpm'], int, 0)
     artist = raw_get(['artist'], default="")
-    genre = await parse_genre(raw_get(['genre'], default=""), GENRES_DATA_REV)
+    genre = await utils.parse_genre(raw_get(['genre'], default=""), _GENRES_DATA_REV)
     _cabinet = raw_get(['cabinet'], default=None)
     if _cabinet is None:
         cabinet = "SD" if shortid < 10000 else "DX"
     else:
         cabinet = "DX" if any(k in _cabinet.lower() for k in ["dx", "でらっくす", "deluxe"]) else "SD"
     version_str = raw_get(['version'], default="")
-    version = await parse_version(version_str)
+    version = await utils.parse_version(version_str)
     converter = raw_get(['ChartConverter'], default="")
 
-    # title 处理：去掉`[XXXX]`
-    title = re.sub(r'\[(宴|DX|SD)]$', '', title)
+    # Utage Tag
+    is_utage = shortid > 100000
+    matched = re.match(r'\[(.)]', title)  # 取`[X]......`的`X`宴会场标签
+    utage_tag = matched.group(1) if matched else "宴"
 
-    mai = MaiData(
+    mai = utils.MaiData(
         shortid=shortid,
-        title=title,
+        title=clean_title,
         bpm=bpm,
         artist=artist,
         genre=genre,
@@ -170,268 +113,226 @@ async def parse_maidata(raw_metadata: dict[str, str], zip_path: Path) -> MaiData
         version=version,
         version_cn=None,
         converter=converter,
-        zip_path=zip_path,
-        img_path=zip_path / 'bg.png'
+        zip_path=Path(zip_path),
+        img_path=Path(zip_path) / 'bg.png',
+        # utage 相关字段
+        is_utage=is_utage,
+        utage_tag=utage_tag if is_utage else '',
+        buddy=not bool(raw_mdt.get('lv_7', '').strip()),
     )
 
-    # Utage 宴会场 判断
-    if mai.shortid > 100000:
-        # Utage
-        mai.is_utage = True
-        matched = re.match(r'\[(.)]', mai.title)  # 取`[X]......`的`X`宴会场标签
-        mai.utage_tag = matched.group(1) if matched else "宴"
-        if raw_metadata.get('lv_7', '').strip():
-            mai.buddy = False
-            mai.set_chart(await get_chart(raw_metadata, shortid, 7))
-        else:
-            mai.buddy = True
-            mai.set_chart(await get_chart(raw_metadata, shortid, 2))
-            mai.set_chart(await get_chart(raw_metadata, shortid, 3))
-    else:
-        # 非 Utage 谱面
-        for chart_num in range(2, 7):
-            mai.set_chart(await get_chart(raw_metadata, shortid, chart_num))
+    # 设置 2~7 的谱面数据
+    for chart_num in range(2, 8):
+        if chart := await get_chart(raw_mdt, shortid, chart_num):
+            mai.set_chart(chart)
 
     return mai
 
-async def process_chart_files(chart_files: list[Path]) -> list[MaiData]:
-    """处理文件夹中所有 zip 文件，提取 maidata.txt 中的元数据"""
-    logger.info(f"数据同步-谱面处理开始：共 {len(chart_files)} 个 zip 文件")
-    cache_path = PluginRegistry.get_cache_dir() / "stat_cache.json"
-    if cache_path.exists():
-        stat_cache = orjson.loads(cache_path.read_bytes())
-    else:
-        stat_cache = {}
-
-    result = dict()
-    for chart_path in chart_files:
-
-        if not chart_path.exists():
-            logger.warning(f"数据同步-谱面处理：{str(chart_path)} 不存在，跳过")
-            continue
-        chart_file_name = chart_path.stem
-
-        # 文件状态校验，跳过未修改的文件
-        file_identity = get_file_stat_identity(chart_path)
-        if stat_cache.get(chart_file_name) == file_identity:
-            logger.info(f"数据同步-谱面处理：{chart_path.name} 未修改，跳过")
-            continue
-        else:
-            stat_cache[chart_file_name] = file_identity
-
-        try:
-            # 打开 zip 文件
-            with zipfile.ZipFile(chart_path, 'r') as zip_ref:
-                # 直接读取 maidata.txt 内容
-                with zip_ref.open("maidata.txt") as f:
-                    content = f.read().decode('utf-8')
-
-            # 提取元数据
-            parts = content.replace('\r\n', '\n').split('&')
-            raw_metadata = {}
-
-            for part in parts:
-                if '=' in part:
-                    # 只分割第一个 '='，防止注释或内容里有等号
-                    k, v = part.split('=', 1)
-                    # 去掉首尾空格和换行
-                    raw_metadata[k.strip()] = v.strip()
-
-            if not raw_metadata:
-                # 未提取到元数据
-                logger.warning(f"数据同步-谱面处理：未提取到 {chart_file_name} 的元数据")
-                continue
-            mai: MaiData = await parse_maidata(raw_metadata, chart_path)
-
-            # 去重：以 shortid 为准，后处理的覆盖前处理的
-            # 若前处理的含 Re:MASTER 谱面，优先保留有 Re:MASTER 谱面的版本
-            if mai.shortid in result.keys():
-                exist_remaster: bool = getattr(result[mai.shortid], '_chart6', None) is not None
-                new_remaster: bool = getattr(mai, '_chart6', None) is not None
-                if not (exist_remaster and not new_remaster):
-                    result[mai.shortid] = mai
-            else:
-                result[mai.shortid] = mai
-
-            logger.success(f"数据同步-谱面处理成功：{chart_file_name}({mai.title})")
-
-        except Exception as e:
-            logger.warning(f"数据同步-谱面处理失败 {chart_file_name}: {e}")
-            raise e
-
-    # 更新 stat 缓存
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    cache_path.write_bytes(orjson.dumps(stat_cache))
-
-    logger.success(f"数据同步-谱面处理完成：合计处理到 {len(result)} 条谱面数据")
-    return list(result.values())
-
-
-async def upsert_maidata(session: AsyncSession, data: MaiData):
-    """插入或更新 MaiData 数据"""
-    result = await session.execute(
-        select(models.MaiData)
-        .where(models.MaiData.shortid == data.shortid)
-        .options(
-            selectinload(models.MaiData.charts),
-            selectinload(models.MaiData.aliases))
-    )
-    existing = result.scalar_one_or_none()
-    if existing:
-        # 更新基础信息
-        for attr in ['title', 'bpm', 'artist', 'genre', 'cabinet', 'version', 
-                     'version_cn', 'converter', 'is_utage', 'utage_tag', 'buddy']:
-            setattr(existing, attr, getattr(data, attr))
-        existing.zip_path = str(data.zip_path)
-    else:
-        # 创建新数据
-        existing = models.MaiDataModelFactory.mai_data(data)
-        session.add(existing)
-        existing.charts = existing.charts or []
-        existing.aliases = existing.aliases or []
-
-    # 处理谱面数据
-    changed_tasks = []
-    existing_charts = {chart.difficulty: chart for chart in existing.charts}
-    for chart in data.charts.values():
-        if chart.difficulty in existing_charts:
-            # 更新已有谱面
-            ec = existing_charts[chart.difficulty]
-            if ec.lv != chart.lv:
-                changed_tasks.append((data.shortid, chart.difficulty, "JP"))
-            if ec.lv_cn != chart.lv_cn:
-                changed_tasks.append((data.shortid, chart.difficulty, "CN"))
-            ec.lv = chart.lv
-            ec.lv_cn = chart.lv_cn
-            ec.lv_synh = chart.lv_synh
-            ec.des = chart.des
-            ec.inote = chart.inote
-            (
-                ec.note_count_tap,
-                ec.note_count_hold,
-                ec.note_count_slide,
-                ec.note_count_touch,
-                ec.note_count_break
-                ) = chart.notes
-        else:
-            # 添加新谱面
-            new_chart = models.MaiDataModelFactory.mai_chart(chart, data.shortid)
-            existing.charts.append(new_chart)
-
-    # 处理别名数据
-    existing_alias_names = {a.alias for a in existing.aliases}
-    for alias_obj in data.aliases:
-        if alias_obj.alias not in existing_alias_names:
-            new_alias = models.MaiDataModelFactory.mai_alias(alias_obj)
-            existing.aliases.append(new_alias)
-            existing_alias_names.add(alias_obj.alias)
-
-    for shortid, diff, server_tag in changed_tasks:
-        await services.refresh_dxrating_cache(shortid, diff, server_tag)
-        
 
 
 @post_db_init
 async def maintenance_task():
-    """每日重启后自动运行的数据重整理"""
-    logger.info("maib 数据同步中")
-    
+    """数据重整主流程"""
+    now_time = time.time()
+
+
+    # --- 1. 文件包的获取与 stat 判定 ---
+    logger.info("maib-fetch Step 1/6: 获取谱面文件列表并进行 stat 判定")
+    data_dir = PluginRegistry.get_data_dir()
+    if not data_dir:
+        logger.error("maib-fetch Step 1/6: 无法获取谱面目录")
+        return
+    files = [p for p in data_dir.glob("charts*/*") if p.suffix.lower() in {'.zip', '.adx'}]
+    if not files:
+        logger.warning("maib-fetch Step 1/6: 未找到任何谱面文件")
+        return
+    logger.debug(f"maib-fetch Step 1/6: 找到 {len(files)} 个谱面文件")
+    # stat
+    stat_cache_file = PluginRegistry.get_cache_dir() / "chart_stat.json"
+    chart_stat = orjson.loads(stat_cache_file.read_bytes()) if stat_cache_file.exists() else {"timestamp": -1, "stats": {}}
+    """
+    # chart_stat.json 结构示例
+    {
+        timestamp: -1,
+        stats: {
+            "file_path": "stat_value",
+             ...
+        }
+    }
+    """
+    results = {"Cached": [], "Updated": [], "New": []}
+    for file in files:
+        file_key = str(file.relative_to(data_dir))
+        identity = utils.get_file_stat_identity(file)
+        if file_key in chart_stat.get("stats", {}):
+            if chart_stat["stats"][file_key] == identity:
+                results["Cached"].append((file_key, identity))
+            else:
+                results["Updated"].append((file_key, identity))
+        else:
+            results["New"].append((file_key, identity))
+    logger.info(f"maib-fetch Step 1/6: {len(results['Cached'])} 个文件未变更，{len(results['Updated'])} 个文件已更新，{len(results['New'])} 个文件为新增")
+    if not results["Updated"] and not results["New"]:
+        # 检查 stat timestamp
+        if now_time - chart_stat.get("timestamp", -1) < CACHE_EXPIRATION_SECONDS:
+            logger.info("maib-fetch Step 1/6: stat 数据较新，且无更新或新增文件，结束 fetch 流程")
+            return
+    change_files: list[tuple[str, str]] = results["Updated"] + results["New"]
+    del results  # 简化列表结构
+
+
+    # --- 2. ID 迁移 ---
+    # 处理 id_check 表中已填写的映射 (每个 id 单独事务)
     try:
-        # 1. 准备路径和配置
-        data_dir = PluginRegistry.get_data_dir()
-        if not data_dir:
-            logger.error("数据同步失败：无法获取谱面目录")
-            return
-        chart_dirs = [data_dir / "charts", data_dir / "charts2"]
-        
-        # 2. 收集文件
-        charts_files = []
-        for d in chart_dirs:
-            if d.exists():
-                charts_files.extend(d.glob("*.zip"))
-        if not charts_files:
-            logger.warning("数据同步结束：未找到任何谱面文件")
-            return
-
-        # 3. 处理数据
-        maidata_dict: dict[int, MaiData] = {m.shortid: m for m in await process_chart_files(charts_files)}
-
-        # 4. 同步国服难度和版本
-        if sy_music_data := await network.sy_music_data_from_file(PluginRegistry.get_cache_dir() / "sy_music_data.json"):
-            for sy_data in sy_music_data:
-                shortid = int(sy_data.get('id', 0))
-                # 国服难度表
-                ds: list[int] = sy_data.get("ds", [])
-                # 国服版本号
-                ver = await parse_diving_fish_version(sy_data.get('basic_info', {}).get('from', ''))
-            
-                if shortid in maidata_dict:
-                    maidata = maidata_dict[shortid]
-                    # 同步版本号
-                    maidata.version_cn = ver
-                    # 同步难度
-                    for diff, chart in maidata.charts.items():
-                        lv_cn = ds[diff-2] if diff-2 < len(ds) else None
-                        if lv_cn is not None:
-                            chart.lv_cn = lv_cn
-        else:
-            logger.warning("数据同步-水鱼数据：music_data 加载失败，无法同步国服版本号")
-
-        # 5. 存储到数据库
-        get_session = PluginRegistry.get_session
-        async with get_session() as session:
-            total = len(maidata_dict)
-            for idx, mai in enumerate(maidata_dict.values()):
+        id_checks = await services.list_pending_id_checks()
+        if id_checks:
+            logger.info(f"maib-fetch Step 2/6: 处理 {len(id_checks)} 条 shortid 映射规则")
+            for k, v in id_checks:
                 try:
-                    await upsert_maidata(session, mai)
-                    if (idx + 1) % 50 == 0:
-                        await session.commit()
-                        logger.info(f"数据同步进度: [{idx+1}/{total}]")
+                    await services.apply_id_mapping(k, v)
+                    logger.info(f"maib-fetch Step 2/6: 应用映射 {k} -> {v}")
                 except Exception as e:
-                    logger.error(f"处理 {mai.shortid} ({mai.title}) 失败: {e}")
-                    await session.rollback()
-            
-            # 最后统一 commit 剩余部分
-            await session.commit()
-
-        # 6. 同步拟合难度
-        sy_lvnh = []
-        if sy_chart_stats := await network.sy_chart_stats():
-            for shortid, sy_stats in sy_chart_stats.get("charts", {}).items():
-                shortid = int(shortid)
-                fit_diffs: list[float] = [s.get('fit_diff', 0) for s in sy_stats]
-                for diff, fit_diff in enumerate(fit_diffs, start=2):
-                    sy_lvnh.append((shortid, diff, fit_diff))
-            if sy_lvnh:
-                await services.set_lv_synh_batch(sy_lvnh)
-        else:
-            logger.warning("数据同步-水鱼数据：chart_stats 加载失败，无法同步拟合难度")
-
-        # 7. 独立获取别名数据
-        from time import time
-        
-        now = int(time())
-        # 处理 Yuzuchan 别名
-        if yuzuchan_data := await network.yuzuchan_alias_list():
-            aliases_set: set[tuple[int, str]] = set()
-            for entry in yuzuchan_data.get("content", []):
-                song_id = int(entry.get('SongID', 0))
-                aliases: list[str] = entry.get('Alias', '')
-                aliases_set.update((song_id, alias) for alias in aliases)
-            # 存储别名数据
-            await services.add_aliases(list(aliases_set), source_id=-101, add_time=now)
-        # 处理 LXNS 别名
-        if lxns_data := await network.lx_alias_list():
-            aliases_set: set[tuple[int, str]] = set()
-            for entry in lxns_data.get("aliases", []):
-                song_id = int(entry.get('song_id', 0))
-                aliases: list[str] = entry.get('aliases', [])
-                aliases_set.update((song_id, alias) for alias in aliases)
-            # 存储别名数据
-            await services.add_aliases(list(aliases_set), source_id=-102, add_time=now)
-
-        logger.success("maib 数据重整理完成！")
-        
+                    logger.error(f"maib-fetch Step 2/6: 映射 {k}->{v} 失败: {e}")
     except Exception as e:
-        logger.error(f"数据重整理失败: {e}")
+        logger.error(f"maib-fetch Step 2/6: 读取 id_check 失败: {e}")
+
+
+    # --- 2. 进行文件解析并更新数据库 ---
+    if change_files:
+        logger.info("maib-fetch Step 2/6: 拆包解析和数据库处理")
+        maidata_dict: dict[int, utils.MaiData] = {}
+        for file_key, identity in change_files:
+            chart_path = data_dir / file_key  # 根据插件数据存储位置和 file_key 还原为绝对路径
+            # 拆包！
+            try:
+                with zipfile.ZipFile(chart_path, 'r') as zip_ref:
+                    with zip_ref.open("maidata.txt") as f:
+                        content = f.read().decode('utf-8')
+            except Exception as e:
+                logger.error(f"maib-fetch Step 3/6: 无法解析 {file_key}，错误: {e}")
+                continue
+            raw_mdt = _extract_metadata(content)
+            maidata = await parse_maidata(raw_mdt, file_key)
+            maidata_dict[maidata.shortid] = maidata
+            chart_stat["stats"][file_key] = identity  # 更新 stat_cache 信息
+
+        if maidata_dict:
+            try:
+                await services.sync_mdt_list([models.MaiDataModel.mdt(maidata)
+                                              for maidata in maidata_dict.values()])
+                logger.info(f"maib-fetch Step 3/6: 成功同步 {len(maidata_dict)} 个曲目")
+            except Exception as e:
+                logger.error(f"maib-fetch Step 3/6: 数据库同步失败，原因：{e}")
+
+    else:
+        logger.info("maib-fetch Step 3/6: 无需拆包解析")
+
+    # 更新 chart_stat
+    chart_stat["timestamp"] = time.time()
+    stat_cache_file.write_bytes(orjson.dumps(chart_stat))
+    logger.info("maib-fetch Step 3/6: stat 缓存已更新")
+    
+    
+    # --- 3. 获取水鱼版本数据，同步国服的版本信息和定数信息 ---
+    sy_data, is_new = await network.sy_music_data_from_file(data_dir)
+    if (is_new or change_files) and sy_data:
+        # 如果拆过包，就强制刷新一下数据
+        logger.info("maib-fetch Step 4/6: 准备更新国服版本和定数")
+        
+        version_update_list: list[tuple[int, int]] = []
+        level_update_list: list[dict] = []
+
+        # 1. 解析数据并构造批量列表
+        for sy_item in sy_data:
+            try:
+                sid = int(sy_item.get("id", 0))
+                # 转换版本号
+                raw_ver = sy_item.get("basic_info", {}).get("from", "")
+                ver_int = await utils.parse_diving_fish_version(raw_ver)
+                version_update_list.append((sid, ver_int))
+
+                # 转换定数列表 (ds)
+                ds_list: list[float] = sy_item.get("ds", [])
+                for diff, level in enumerate(ds_list, start=2):
+                    level_update_list.append({
+                        "shortid": sid, 
+                        "difficulty": diff, 
+                        "level": level
+                    })
+            except (ValueError, TypeError, KeyError) as e:
+                continue # 容错处理
+        
+        if version_update_list or level_update_list:
+            try:
+                async with PluginRegistry.get_session() as session:
+                    # 批量更新曲目版本
+                    if version_update_list:
+                        await services.set_mdt_version_batch(version_update_list, 'CN', session=session)
+                    
+                    # 批量更新谱面定数
+                    if level_update_list:
+                        await services.set_mct_level_batch(level_update_list, 'CN', session=session)
+                    
+                    await session.commit()
+                    logger.success(f"maib-fetch Step 4/6: 同步完成 (曲目:{len(version_update_list)}, 谱面:{len(level_update_list)})")
+            except Exception as e:
+                logger.error(f"maib-fetch Step 4/6: 数据库同步失败: {e}")
+        
+    elif not sy_data:
+        logger.warning("maib-fetch Step 4/6: 无法获取水鱼数据，跳过国服版本和定数更新")
+    else:
+        logger.info("maib-fetch Step 4/6: 水鱼数据未更新，无需同步调整")
+    
+    
+    # --- 4. 尝试从水鱼获取拟合数据 ---
+    sy_chart_stats = await network.sy_chart_stats()
+    if sy_chart_stats:
+        logger.info("maib-fetch Step 5/6: 更新水鱼的国服拟合定数数据")
+        try:
+            synh_list: list[dict] = []
+            for shortid, sy_stats in sy_chart_stats.get("charts", {}).items():
+                        shortid = int(shortid)
+                        fit_diffs: list[float] = [s.get('fit_diff', 0) for s in sy_stats]
+                        for diff, lv_synh in enumerate(fit_diffs, start=2):
+                            synh_list.append({"shortid": shortid, "difficulty": diff, "level": lv_synh})
+            await services.set_mct_level_batch(synh_list, server="synh")
+        except Exception as e:
+            logger.error(f"maib-fetch Step 5/6: 更新水鱼拟合定数数据失败，原因：{e}")
+    else:
+        logger.info("maib-fetch Step 5/6: 未获取到水鱼拟合定数数据")
+
+    # --- 5. 从别名库更新别名 ---
+    logger.info("maib-fetch Step 6/6: 同步别名库数据")
+    
+    async def yuzuchan():
+        yuzuchan_data = await network.yuzuchan_alias_list()
+        if not yuzuchan_data:
+            return []
+        aliases_set: set[tuple[int, str]] = set()
+        for entry in yuzuchan_data.get("content", []):
+            song_id = int(entry.get('SongID', 0))
+            aliases: list[str] = entry.get('Alias', '')
+            aliases_set.update((song_id, alias) for alias in aliases)
+        return list(aliases_set)
+    
+    async def lxns():
+        lxns_data = await network.lx_alias_list()
+        if not lxns_data:
+            return []
+        aliases_set: set[tuple[int, str]] = set()
+        for entry in lxns_data.get("aliases", []):
+            song_id = int(entry.get('song_id', 0))
+            aliases: list[str] = entry.get('aliases', [])
+            aliases_set.update((song_id, alias) for alias in aliases)
+        return list(aliases_set)
+    
+    
+    await services.add_mdt_alias_batch(await yuzuchan(), -101)
+    logger.info("maib-fetch Step 6/6: 同步 yuzuchan 别名数据完成")
+    await services.add_mdt_alias_batch(await lxns(), -102, lxns_id_rule=True)
+    logger.info("maib-fetch Step 6/6: 同步 lxns 别名数据完成")
+    
+    
+    # --- 6. 结束 ---
+    logger.info(f"maib-fetch 同步完成，耗时: {(time.time() - now_time):.2f} 秒")
 

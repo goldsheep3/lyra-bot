@@ -1,16 +1,18 @@
 .venv/
-plugins/__pycache__/
-
-uv.lock
 
 *.pyc
+plugins/__pycache__/
+
+# Python 管理器锁文件
+*.lock
+
 
 # PyCharm
 .idea/
 
 # 隐藏隐私token
-.env.prod
 .env
+.env.*
 
 # 测试临时文件
 temp/

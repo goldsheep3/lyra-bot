@@ -4,7 +4,7 @@ import re
 import shutil
 import tarfile
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Literal
 from pathlib import Path
 
 import anyio
@@ -60,12 +60,14 @@ REPLY_DICT: Dict[str, str] = {
     "hlg_none": "还没有人娶到你喔ww",
     # qq: 成功、自己、未指定、对方已婚、上限、离过婚了
     "qq_success": "怎么还有强制play（）总之恭喜娶到 {qq} ！",
+    "qq_success_ntr": "我去，还有大权限NTR（）{qq} 现在已经被你强娶了。让我们可怜原配三秒钟（",
     "qq_self": "终归是要水仙啊……那我先磕！",
     "qq_usage": "若想强娶那个TA，请勇敢地@出来=w=",
-    "qq_with_lyra": "小梨不能跟你们玩这种游戏啦！莉莉丝阿姐听说了会生气的qwq",
+    "qq_with_bot_self": "小梨不能跟你们玩这种游戏啦！莉莉丝阿姐听说了会生气的qwq",
     "qq_fail_married": "不可以哦——TA已经有老婆了，TA的老婆会闹情绪的！",
     "qq_fail_limit": "再换老婆你可就没有老婆了，今天安安心心过这日子吧（",
     "qq_fail_lh": "你今天已经离过婚了，不可以再找新老婆了！",
+    "qq_fail_not_allowed": "TA似乎不太愿意玩这个喔……",
     # lh: 成功、自己、还没有老婆
     "lh_success": "你已经和 {qq} 离婚了。（记笔记）",
     "lh_self": "水仙也要离婚吗（大脑过载）\n那便如此吧（",
@@ -105,18 +107,18 @@ class GroupInstance:
         b = self.get_member(user_b)
         a.wife, b.husband = user_b, user_a
 
-    def _clear_relation(self, user_id: int) -> None:
+    def _clear_relation(self, user_id: int, target: Literal['wife', 'husband', 'both']) -> None:
         """清除关系，确保双向解绑"""
         user = self.get_member(user_id)
         # 清理老婆
-        if user.wife:
+        if user.wife and target in ('wife', 'both'):
             wife = self.get_member(user.wife)
             wife.husband = None
             user.wife = None
             if wife.count == -1 or wife.count > MAX_COUNT:
                 wife.count = MAX_COUNT - 1
         # 清理老公
-        if user.husband:
+        if user.husband and target in ('husband', 'both'):
             husband = self.get_member(user.husband)
             husband.wife = None
             user.husband = None
@@ -124,7 +126,14 @@ class GroupInstance:
                 husband.count = MAX_COUNT - 1
 
     def random_partner(self, pool: List[int], user_id: int, hope: Optional[int] = None, ex_partner_id: Optional[int] = None) -> int:
-        others = [m for m in pool if m != user_id and m != ex_partner_id]
+        # 双重过滤：避免抽到自己、前任，且不选择已与他人绑定的对象。
+        others = [
+            m
+            for m in pool
+            if m != user_id
+            and m != ex_partner_id
+            and (not self.get_member(m).husband or self.get_member(m).husband == user_id)
+        ]
         if not others:
             return user_id
         if hope in others and random.random() < 0.5:
@@ -148,20 +157,21 @@ class GroupInstance:
         async with self._lock:
             member = self.get_member(user_id)
             
-            # 1. 离婚状态检查
+            # 离婚状态检查
             if member.count == -1:
-                return "hlp_lh", None # 对应 (翻笔记) 那个回复
-            
-            # 2. 次数限制检查
+                return "hlp_lh", None
+
+            # 解除关系并记录前任ID
+            ex_partner_id = member.wife
+            self._clear_relation(user_id, 'wife')
+
+            # 次数限制检查
             if member.count >= MAX_COUNT:
                 return "hlp_limit", None
             
-            # 3. 正常更换逻辑
             member.count += 1
-            ex_partner_id = member.wife
-            self._clear_relation(user_id)
-            
-            target_id = self.random_partner(pool, user_id, hope, ex_partner_id)
+            clean_pool = [m for m in pool if m != ex_partner_id]
+            target_id = self.random_partner(clean_pool, user_id, hope, ex_partner_id)
             self._update_relation(user_id, target_id)
             
             # 4. 文案分支判断
@@ -180,10 +190,10 @@ class GroupInstance:
                 return "hlg_none", None
             husband_id = member.husband
             member.count += 1
-            self._clear_relation(user_id)
+            self._clear_relation(user_id, 'husband')
             return ("hlp_limit" if member.count > MAX_COUNT else "hlg_success"), husband_id
 
-    async def handle_qq(self, user_id: int, target_id: int, bot_id: int) -> Tuple[str, int | None]:
+    async def handle_qq(self, user_id: int, target_id: int, bot_id: int, is_admin: bool = False) -> Tuple[str, int | None]:
         async with self._lock:
             member = self.get_member(user_id)
             
@@ -195,21 +205,25 @@ class GroupInstance:
                 return "qq_fail_limit", None
             # 强娶机器人判定
             if target_id == bot_id:
-                return "qq_with_lyra", None
-            # 自己
-            if user_id == target_id:
-                self._clear_relation(user_id)
-                member.count += 1
-                self._update_relation(user_id, user_id)
-                return "qq_self", user_id
-            # 对方已婚判定
-            if self.get_member(target_id).husband: 
-                return "qq_fail_married", None
-            
-            self._clear_relation(user_id)
+                return "qq_with_bot_self", None
+
+            target_member = self.get_member(target_id)
+            if target_member.husband:
+                if not is_admin:
+                    return "qq_fail_married", None
+                # 管理员NTR已婚对象，先清理对方关系
+                self._clear_relation(target_id, 'husband')
+                success_key = "qq_success_ntr"
+            elif target_id == user_id:
+                # 水仙
+                success_key = "qq_self"
+            else:
+                success_key = "qq_success"
+
+            self._clear_relation(user_id, 'wife')
             member.count += 1
             self._update_relation(user_id, target_id)
-            return "qq_success", target_id
+            return success_key, target_id
 
     async def handle_lh(self, user_id: int) -> Tuple[str, Optional[int]]:
         async with self._lock:
@@ -220,7 +234,7 @@ class GroupInstance:
             partner_id = member.wife
             status = "lh_self" if partner_id == user_id else "lh_success"
             
-            self._clear_relation(user_id)
+            self._clear_relation(user_id, 'wife')
             # 设置离婚标记：count 为 -1
             member.count = -1 
             return status, partner_id
@@ -230,7 +244,8 @@ class PluginManager:
     _instance: Optional["PluginManager"] = None
     
     # 使用标准库的 Path 类型进行注解
-    groups: Dict[int, GroupInstance]
+    # TODO: 可以考虑设置清理机制，避免内存占用过大
+    groups: Dict[Tuple[int, str], GroupInstance]
     config_path: Path 
 
     def __new__(cls):
@@ -241,9 +256,10 @@ class PluginManager:
             cls._instance.config_path = get_plugin_data_dir() / "config.json"
         return cls._instance
 
-    async def get_group(self, group_id: int) -> GroupInstance:
-        if group_id not in self.groups:
-            path = get_plugin_cache_dir() / datetime.now().strftime("%Y%m%d") / f"{group_id}.json"
+    async def get_group(self, group_id: int, date_str: str) -> GroupInstance:
+        group_key = (group_id, date_str)
+        if group_key not in self.groups:
+            path = get_plugin_cache_dir() / date_str / f"{group_id}.json"
             data = {}
             if path.exists():
                 try:
@@ -253,13 +269,18 @@ class PluginManager:
                     logger.warning(f"读取群 {group_id} 数据异常，启用空配置: {e}")
                 except Exception as e:
                     logger.error(f"未知异常读取缓存: {e}")
-            self.groups[group_id] = GroupInstance(group_id, data)
-        return self.groups[group_id]
+            self.groups[group_key] = GroupInstance(group_id, data)
+        return self.groups[group_key]
 
-    async def save_group(self, group_id: int) -> None:
-        path = get_plugin_cache_dir() / datetime.now().strftime("%Y%m%d") / f"{group_id}.json"
+    async def save_group(self, group_id: int, date_str: str) -> None:
+        path = get_plugin_cache_dir() / date_str / f"{group_id}.json"
+        group_key = (group_id, date_str)
+        instance = self.groups.get(group_key)
+        if not instance:
+            return
+
         await anyio.Path(path.parent).mkdir(parents=True, exist_ok=True)
-        dumped_dict = {str(k): getattr(v, "model_dump", v.dict)() for k, v in self.groups[group_id].members.items()}
+        dumped_dict = {str(k): getattr(v, "model_dump", v.model_dump)() for k, v in instance.members.items()}
         dumped_bytes = orjson.dumps(dumped_dict, option=orjson.OPT_INDENT_2)
         await anyio.Path(path).write_bytes(dumped_bytes)
 
@@ -341,7 +362,7 @@ async def build_message(bot: Bot, group_id: int, user_id: int, template: str, pa
         msg.append(MessageSegment.image(f"http://q1.qlogo.cn/g?b=qq&nk={partner_id}&s=640"))
     return msg
 
-async def get_pool(bot: Bot, group_id: int, user_id: int, config: dict) -> List[int]:
+async def get_pool(bot: Bot, group_id: int, user_id: int, config: dict, group_instance: GroupInstance) -> List[int]:
     pref = config["allowed"].get(str(user_id), {})
     try:
         member_list = await bot.get_group_member_list(group_id=group_id)
@@ -355,8 +376,11 @@ async def get_pool(bot: Bot, group_id: int, user_id: int, config: dict) -> List[
     now = datetime.now().timestamp()
     pool = []
     for member_info in member_list:
-        member_id = member_info["user_id"]
-        if member_id in config["not_allowed"] or member_id == user_id: 
+        member_id: int = member_info["user_id"]
+        if str(member_id) in config["not_allowed"] or member_id == user_id: 
+            continue
+        member_data = group_instance.get_member(member_id)
+        if member_data.husband and member_data.husband != user_id:
             continue
         if not pref.get("allow_bot") and (member_info.get("is_bot") or str(member_id) == bot.self_id): 
             continue
@@ -366,56 +390,92 @@ async def get_pool(bot: Bot, group_id: int, user_id: int, config: dict) -> List[
     return pool
 
 # --- 响应器 ---
+help = on_regex(r"^(今日老婆|jrlp)\s*(帮助|help)$", priority=5, block=True)
 jrlp = on_regex(r"^(今日老婆|jrlp)$", priority=5, block=True)
 hlp = on_regex(r"^(换老婆|hlp)$", priority=5, block=True)
 hlg = on_regex(r"^(换老公|hlg)$", priority=5, block=True)
-qq = on_regex(r"^(强娶|qq)", priority=5, block=True)
+qq = on_regex(r"^强娶", priority=5, block=True)
 lh = on_regex(r"^(离婚|lh)$", priority=5, block=True)
 jrlg = on_regex(r"^(今日老公|jrlg)$", priority=5, block=True)
 toggle_status = on_regex(r"^(不当老婆|当老婆|不娶bot|娶bot)$", priority=5, block=True)
 
+@help.handle()
+async def _():
+    await help.finish("""
+帮助 | DailyPartner（今日老婆）
+
+1. 今日老婆 / jrlp
+   随机抽选一个「老婆」，每日一次，各群独立
+2. 今日老公 / jrlg
+   根据「今日老婆」的抽选结果，显示当前锚定的「老公」
+3. 换老婆 / hlp
+   重新抽选一个「老婆」（有次数限制）
+4. 换老公 / hlg
+   和当前的「老公」离婚（有次数限制）
+5. 强娶 [QQ 或 at]
+   尝试指定某个群友为你的「老婆」（有次数等限制）
+6. 离婚 / lh
+   和当前的「老婆」离婚（谨慎！）
+7. 当老婆 / 不当老婆
+   配置项：控制你是否可以参与抽选，以及是否可以被抽选
+8. 娶bot / 不娶bot
+   配置项：控制你是否可以娶该群的QQ官方机器人作为「老婆」
+""".strip())
+
 @jrlp.handle()
 async def _(bot: Bot, event: MessageEvent):
+    user_id, group_id = int(event.user_id), int(getattr(event, "group_id", -1))
     if not isinstance(event, GroupMessageEvent): return
+    now_date = datetime.now().strftime("%Y%m%d")
     config = await plugin_manager.load_config()
-    if event.user_id in config["not_allowed"]: 
+    if user_id in config["not_allowed"]: 
         return  # 直接返回，保持沉默
-        
-    pool = await get_pool(bot, event.group_id, event.user_id, config)
-    group = await plugin_manager.get_group(event.group_id)
-    status, partner_id = await group.handle_jrlp(event.user_id, pool, config["allowed"].get(str(event.user_id), {}).get("hope"))
+
+    group = await plugin_manager.get_group(group_id, now_date)
+    pool = await get_pool(bot, group_id, user_id, config, group)
+    status, partner_id = await group.handle_jrlp(user_id, pool, config["allowed"].get(str(user_id), {}).get("hope"))
     
-    await plugin_manager.save_group(event.group_id)
-    await jrlp.finish(await build_message(bot, event.group_id, event.user_id, REPLY_DICT[status], partner_id))
+    await plugin_manager.save_group(group_id, now_date)
+    await jrlp.finish(await build_message(bot, group_id, user_id, REPLY_DICT[status], partner_id))
 
 @hlp.handle()
 async def _(bot: Bot, event: MessageEvent):
+    user_id, group_id = int(event.user_id), int(getattr(event, "group_id", -1))
     if not isinstance(event, GroupMessageEvent): return
+    now_date = datetime.now().strftime("%Y%m%d")
     config = await plugin_manager.load_config()
-    pool = await get_pool(bot, event.group_id, event.user_id, config)
-    group = await plugin_manager.get_group(event.group_id)
-    status, partner_id = await group.handle_hlp(event.user_id, pool, config["allowed"].get(str(event.user_id), {}).get("hope"))
+    group = await plugin_manager.get_group(group_id, now_date)
+    pool = await get_pool(bot, group_id, user_id, config, group)
+    status, partner_id = await group.handle_hlp(user_id, pool, config["allowed"].get(str(user_id), {}).get("hope"))
     
-    await plugin_manager.save_group(event.group_id)
-    await hlp.finish(await build_message(bot, event.group_id, event.user_id, REPLY_DICT[status], partner_id))
+    await plugin_manager.save_group(group_id, now_date)
+    await hlp.finish(await build_message(bot, group_id, user_id, REPLY_DICT[status], partner_id))
 
 @hlg.handle()
 async def _(bot: Bot, event: MessageEvent):
+    user_id, group_id = int(event.user_id), int(getattr(event, "group_id", -1))
+   
     if not isinstance(event, GroupMessageEvent): return
-    group = await plugin_manager.get_group(event.group_id)
-    status, partner_id = await group.handle_hlg(event.user_id)
+    now_date = datetime.now().strftime("%Y%m%d")
+    group = await plugin_manager.get_group(group_id, now_date)
+    status, partner_id = await group.handle_hlg(user_id)
     
-    await plugin_manager.save_group(event.group_id)
-    await hlg.finish(await build_message(bot, event.group_id, event.user_id, REPLY_DICT[status], partner_id, "husband"))
+    await plugin_manager.save_group(group_id, now_date)
+    await hlg.finish(await build_message(bot, group_id, user_id, REPLY_DICT[status], partner_id, "husband"))
 
 @qq.handle()
 async def _(bot: Bot, event: MessageEvent):
+    user_id, group_id = int(event.user_id), int(getattr(event, "group_id", -1))
+
     target_id = None
     for segment in event.get_message():
         if segment.type == "at":
             target_id = int(segment.data["qq"])
             break
-            
+      
+    if getattr(event, 'to_me', None):
+        await qq.finish(REPLY_DICT["qq_with_bot_self"])
+      
     if not target_id:
         text = event.get_plaintext().strip()
         match = re.search(r'\d+', text)
@@ -424,10 +484,12 @@ async def _(bot: Bot, event: MessageEvent):
 
     if not target_id:
         await qq.finish(REPLY_DICT["qq_usage"])
+        return
 
     if isinstance(event, PrivateMessageEvent):
+        # 设定 hope 的私聊接口
         config = await plugin_manager.load_config()
-        uid_str = str(event.user_id)
+        uid_str = str(user_id)
         if uid_str not in config["allowed"]:
             config["allowed"][uid_str] = {}
         config["allowed"][uid_str]["hope"] = target_id
@@ -435,39 +497,53 @@ async def _(bot: Bot, event: MessageEvent):
         await qq.finish(REPLY_DICT["hope_set"].replace("{qq}", str(target_id)))
         return
 
-    if not isinstance(event, GroupMessageEvent): return
+    if isinstance(event, GroupMessageEvent):
+        # 群内的「强娶」逻辑线
+        config = await plugin_manager.load_config()
+        if str(target_id) in config["not_allowed"]:
+            await qq.finish(REPLY_DICT["qq_fail_not_allowed"])
+            return
+        now_date = datetime.now().strftime("%Y%m%d")
+        is_admin = event.sender.role in ("owner", "admin")  # 管理员权限检查
 
-    group = await plugin_manager.get_group(event.group_id)
-    status, partner_id = await group.handle_qq(event.user_id, target_id, int(bot.self_id))
-    
-    await plugin_manager.save_group(event.group_id)
-    await qq.finish(await build_message(bot, event.group_id, event.user_id, REPLY_DICT[status], partner_id))
+        group = await plugin_manager.get_group(group_id, now_date)
+        status, partner_id = await group.handle_qq(user_id, target_id, int(bot.self_id), is_admin=is_admin)
+        
+        await plugin_manager.save_group(group_id, now_date)
+        await qq.finish(await build_message(bot, group_id, user_id, REPLY_DICT[status], partner_id))
 
 @lh.handle()
 async def _(bot: Bot, event: MessageEvent):
+    user_id, group_id = int(event.user_id), int(getattr(event, "group_id", -1))
+
     if not isinstance(event, GroupMessageEvent): return
-    group = await plugin_manager.get_group(event.group_id)
-    status, partner_id = await group.handle_lh(event.user_id)
-    
-    await plugin_manager.save_group(event.group_id)
-    await lh.finish(await build_message(bot, event.group_id, event.user_id, REPLY_DICT[status], partner_id))
+    now_date = datetime.now().strftime("%Y%m%d")
+    group = await plugin_manager.get_group(group_id, now_date)
+    status, partner_id = await group.handle_lh(user_id)
+
+    await plugin_manager.save_group(group_id, now_date)
+    await lh.finish(await build_message(bot, group_id, user_id, REPLY_DICT[status], partner_id))
 
 @jrlg.handle()
 async def _(bot: Bot, event: MessageEvent):
+    user_id, group_id = int(event.user_id), int(getattr(event, "group_id", -1))
+
     if not isinstance(event, GroupMessageEvent): return
-    group = await plugin_manager.get_group(event.group_id)
-    member = group.get_member(event.user_id)
+    now_date = datetime.now().strftime("%Y%m%d")
+    group = await plugin_manager.get_group(group_id, now_date)
+    member = group.get_member(user_id)
     if not member.husband: 
         await jrlg.finish(REPLY_DICT["jrlg_none"])
         
-    await jrlg.finish(await build_message(bot, event.group_id, event.user_id, REPLY_DICT["jrlg_status"], member.husband, "husband"))
+    await jrlg.finish(await build_message(bot, group_id, user_id, REPLY_DICT["jrlg_status"], member.husband, "husband"))
 
 @toggle_status.handle()
 async def _(bot: Bot, event: MessageEvent):
+    user_id, _group_id = int(event.user_id), int(getattr(event, "group_id", -1))
+
     if not isinstance(event, GroupMessageEvent): return
     cmd = event.get_plaintext().strip()
     config = await plugin_manager.load_config()
-    user_id = event.user_id
     uid_str = str(user_id)
     
     if cmd == "不当老婆":

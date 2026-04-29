@@ -1,0 +1,15 @@
+{
+    "configurations": [
+        {
+            "name": "image_gen",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "plugins.maib.image_gen", 
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        }
+    ]
+}
