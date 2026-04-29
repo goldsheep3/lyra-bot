@@ -116,8 +116,11 @@ async def sy_music_data(etag: str | None = None) -> tuple[str | None, list | Non
             logger.error(f"解析水鱼数据失败: {e}")
     return None, None
 
-async def sy_music_data_from_file(dir_path: Path, max_retries: int = 3) -> list | None:
-    """获取公开乐曲数据"""
+async def sy_music_data_from_file(dir_path: Path, max_retries: int = 3) -> tuple[list | None, bool]:
+    """
+    获取公开乐曲数据
+    返回：数据; 是否为刚刚获取的远程新数据
+    """
     data_path = dir_path / "music_data.json"
     etag_path = dir_path / "music_data.etag"
     
@@ -143,13 +146,13 @@ async def sy_music_data_from_file(dir_path: Path, max_retries: int = 3) -> list 
             except Exception as e:
                 logger.error(f"保存数据失败: {e}")
             # 无论保存成功与否，该数据都可用
-            return remote_data
+            return remote_data, True  # 数据比本地的新
 
         # 4. 处理缓存数据（ETag 命中）
         if new_etag and not remote_data:
             if data_path.exists():
                 try:
-                    return orjson.loads(data_path.read_bytes())
+                    return orjson.loads(data_path.read_bytes()), False
                 except Exception as e:
                     logger.warning(f"本地缓存损坏，清除 ETag 并重试: {e}")
                     etag_path.unlink(missing_ok=True)
@@ -163,12 +166,12 @@ async def sy_music_data_from_file(dir_path: Path, max_retries: int = 3) -> list 
         # 尝试读取本地现有数据作为最后的保障
         if data_path.exists():
             try:
-                return orjson.loads(data_path.read_bytes())
+                return orjson.loads(data_path.read_bytes()), False
             except:
                 pass
         
         break # 无效状态，跳出循环
-    return None
+    return None, False
 
 
 async def sy_chart_stats():

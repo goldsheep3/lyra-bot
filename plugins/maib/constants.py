@@ -67,17 +67,17 @@ RATE_FACTOR_TABLE: list[tuple[float, float]] = [
 # Diving-Fish 的 FC/FS 解析映射
 DF_FC_DICT = dict(enumerate([
     ('fc', 'full combo', 'fullcombo'),
-    ('fcp', 'fc+', 'full combo +', 'fullcombo +', 'fullcombo+', 'full combo plus', 'fullcombo plus', 'fullcomboplus'),
+    ('fc+', 'fcp', 'full combo +', 'fullcombo +', 'fullcombo+', 'full combo plus', 'fullcombo plus', 'fullcomboplus'),
     ('ap', 'all perfect', 'allperfect'),
-    ('app', 'ap+', 'all perfect +', 'allperfect +', 'allperfect+', 'all perfect plus', 'allperfect plus', 'allperfectplus'),
+    ('ap+', 'app', 'all perfect +', 'allperfect +', 'allperfect+', 'all perfect plus', 'allperfect plus', 'allperfectplus'),
     ], start=1))
 DF_FC_MAP = _get_map(DF_FC_DICT)
 DF_FS_DICT = dict(enumerate([
     ('sync', 'sync play', 'syncplay'),
     ('fs', 'full sync', 'fullsync'),
-    ('fsp', 'fs+', 'full sync plus', 'fullsync plus', 'fullsync+', 'full sync+'),
-    ('fsd', 'fdx', 'full sync deluxe', 'fullsync deluxe', 'fullsyncdeluxe', 'full sync deluxe'),
-    ('fsdp', 'fsd+', 'fdxp', 'fdx+',  'full sync deluxe plus', 'fullsync deluxe plus', 'fullsyncdeluxe plus', 'fullsyncdeluxe+', 'full sync deluxe plus', 'full sync deluxe+'),
+    ('fs+', 'fsp', 'full sync plus', 'fullsync plus', 'fullsync+', 'full sync+'),
+    ('fdx', 'fsd', 'full sync deluxe', 'fullsync deluxe', 'fullsyncdeluxe', 'full sync deluxe'),
+    ('fsd+',  'fsdp','fdxp', 'fdx+',  'full sync deluxe plus', 'fullsync deluxe plus', 'fullsyncdeluxe plus', 'fullsyncdeluxe+', 'full sync deluxe plus', 'full sync deluxe+'),
     ], start=1))
 DF_FS_MAP = _get_map(DF_FS_DICT)
 
@@ -94,7 +94,7 @@ DIFFS_DICT = dict(enumerate([
 DIFFS_MAP = _get_map(DIFFS_DICT)
 
 # 服务器标识类型
-SERVER_TAG = Literal["JP", "INTL", "CN"]
+SERVER_TAG = Literal["JP", "CN"]
 
 # 基础路径及 yml 数据
 PLUGIN_BASE_PATH = Path(__file__).parent
