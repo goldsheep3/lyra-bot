@@ -1,5 +1,5 @@
 import io
-import bisect
+import base64
 import re
 import time
 from pathlib import Path
@@ -549,58 +549,70 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
 
 @file_receiver.handle()
 async def _(bot: Bot, event: PrivateMessageEvent, matcher: Matcher):
-    # 1. 获取文件基础信息
+
+    """
+    file: /home/goldsheep3/.config/QQ/NapCat/temp/a.json
+    url: /home/goldsheep3/.config/QQ/NapCat/temp/a.json
+    file_size: 2
+    file_name: a.json
+    """
+
+    # 获取文件
     file_seg = event.get_message()["file"][0]
     file_id = file_seg.data.get("file_id")
     file_name = file_seg.data.get("file", "")
-    
     if not file_name.endswith(".json"):
         return
 
-    # 获取文件下载/路径信息
     file_info = await bot.get_file(file_id=file_id)
-    url = file_info.get("url", "")
-    raw_path = file_info.get("file")
-    local_path = Path(raw_path) if raw_path else None
+    file_path = Path(file_info.get("file", "")) if file_info.get("file") else None
+    file_url = file_info.get("url", None)
+    file_base64 = file_info.get("base64", None)
     
-    data = None
-
-    # --- 策略 1: 优先从本地路径读取 (解决 NapCat 路径报错) ---
-    if local_path and local_path.exists():
+    file_data = None
+    # 1. base64 直接读取
+    if not file_data and file_base64:
         try:
-            async with aiofiles.open(local_path, "rb") as f:
+            if "," in file_base64:
+                file_base64 = file_base64.split(",")[1]
+            content = base64.b64decode(file_base64)
+            file_data = orjson.loads(content)
+        except:
+            logger.warning("base64 解码失败，尝试其他方式读取文件")
+    # 2. 本地路径读取
+    if not file_data and file_path and file_path.exists():
+        try:
+            async with aiofiles.open(file_path, "rb") as f:
                 content = await f.read()
-                data = orjson.loads(content)
-            logger.info(f"成功从本地路径读取文件: {local_path}")
+                file_data = orjson.loads(content)
+            logger.info(f"成功从本地路径读取文件: {file_path}")
         except Exception as e:
-            logger.warning(f"本地读取失败，尝试网络下载: {e}")
-
-    # --- 策略 2: 降级走网络请求 ---
-    if not data and url:
-        if url.startswith("http"):
+            logger.warning(f"本地读取失败，尝试其他方式读取文件: {e}")
+    # 3. URL 下载读取
+    if not file_data and file_url:
+        if file_url.startswith("http"):
             try:
-                data = await network.request_json(url)
+                file_data = await network.request_json(file_url)
             except Exception as e:
                 logger.error(f"网络请求失败: {e}")
         else:
-            logger.error(f"URL 协议错误: {url}")
-
-    if not data:
+            logger.warning(f"URL 协议错误: {file_url}")
+    # E. 失败
+    if not file_data:
         await matcher.finish("读取或解析文件失败，请重试。")
 
-    # 2. 校验数据格式
+    # 校验数据格式
     if not all([
-        isinstance(data, list),  # 数据必须是列表
-        len(data) > 0,  # 列表不能为空
-        "sheetId" in data[0],  # 必须包含 sheetId 字段
-        '__dxrt__' in data[0].get("sheetId")  # sheetId 中必须包含 __dxrt__ 字样
+        isinstance(file_data, list),  # 数据必须是列表
+        len(file_data) > 0,  # 列表不能为空
+        "sheetId" in file_data[0],  # 必须包含 sheetId 字段
+        '__dxrt__' in file_data[0].get("sheetId")  # sheetId 中必须包含 __dxrt__ 字样
     ]):
         # 格式不正确，静默失败（可能是其他插件识别的文件，不进行失败提醒）
         return
 
-     # 3. 解析
+    # 落到数据解析
     await matcher.send("检查到 lyra-maimai 数据导出！正在识别曲目并记录成绩...")
-
     user_id = int(event.get_user_id())
     ach_list = []
     title_cache = {}  # 缓存标题查询结果
@@ -613,7 +625,7 @@ async def _(bot: Bot, event: PrivateMessageEvent, matcher: Matcher):
         if value and value not in items:
             items.append(value)
     
-    for record in data:
+    for record in file_data:
         try:
             title = str(record.get("title", "")).strip() or "(无标题)"
             record_type = str(record.get("type", "sd")).lower() # 'sd' 或 'dx'
@@ -675,7 +687,7 @@ async def _(bot: Bot, event: PrivateMessageEvent, matcher: Matcher):
 
     summary_text, warning_text, detail_img = build_import_report(
         data_diffs,
-        file_count=len(data),
+        file_count=len(file_data),
         parsed_count=len(ach_list),
         unmatched_titles=unmatched_titles,
         invalid_diff_items=invalid_diff_items,
@@ -696,4 +708,3 @@ async def _(bot: Bot, event: PrivateMessageEvent, matcher: Matcher):
 @get_code.handle()
 async def _(matcher: Matcher):
     await matcher.finish("lyra-sync 服务器尚未开放，请等待 API 开放后再试一下~")
-
