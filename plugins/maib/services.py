@@ -291,8 +291,7 @@ def _ach_to_change_json(ach: utils.MaiChartAch | None) -> dict[str, Any] | None:
 def generate_change_log(chart: MaiChart, new_ach: utils.MaiChartAch, old_ach: utils.MaiChartAch | None) -> dict[str, Any] | None:
     """生成成绩变更的 JSON 描述。
 
-    返回值同时保留结构化字段和展示所需信息，调用方可以直接把 `lines` 串接后交给
-    `image_gen.simple_list()`。
+    仅保留结构化变更数据，不携带展示文本，展示层由 report 模块统一处理。
     """
     if old_ach is not None and not (new_ach > old_ach):
         return None
@@ -324,29 +323,7 @@ def generate_change_log(chart: MaiChart, new_ach: utils.MaiChartAch, old_ach: ut
         "new": _ach_to_change_json(merged_ach),
     }
 
-    lines = [f"{chart.shortid}. {title}({diff_text})"]
-    if old_ach is None:
-        lines.extend([
-            f"Achievement: {merged_ach.achievement:.2f}%",
-            f"DX Score: {merged_ach.dxscore}",
-            f"Combo: {DF_FC_DICT.get(merged_ach.combo, None)}",
-            f"Sync: {DF_FS_DICT.get(merged_ach.sync, None)}",
-        ])
-    else:
-        lines.extend([
-            f"Achievement: {old_ach.achievement:.2f}% -> {merged_ach.achievement:.2f}%",
-            f"DX Score: {old_ach.dxscore} -> {merged_ach.dxscore}",
-            f"Combo: {DF_FC_DICT.get(old_ach.combo, None)} -> {DF_FC_DICT.get(merged_ach.combo, None)}",
-            f"Sync: {DF_FS_DICT.get(old_ach.sync, None)} -> {DF_FS_DICT.get(merged_ach.sync, None)}",
-        ])
-
-    payload["lines"] = lines
     return payload
-
-
-def change_log_to_text(change_log: dict[str, Any]) -> str:
-    """把成绩变更 JSON 转为 `simple_list` 可直接渲染的文本"""
-    return "\n".join(change_log.get("lines", []))
 
 
 def _is_achievement_priority_better(new_ach: utils.MaiChartAch, old_ach: utils.MaiChartAch) -> bool:

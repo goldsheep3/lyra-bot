@@ -10,6 +10,7 @@ import aiofiles
 import orjson
 
 from . import utils, services, image_gen, bot_services, network
+from .report import build_achievements_report, build_import_report
 from .utils import MaiChart, MaiChartAch
 from .constants import *
 from .bot_registry import PluginRegistry
@@ -405,40 +406,7 @@ async def _(matcher: Matcher, groups: tuple = RegexGroup()):
     await matcher.finish(msg)
 
 
-def build_achievements_diff_image(data_diffs: list[dict]) -> image_gen.Image.Image | None:
-    """将成绩变更列表渲染为图片，便于直接发送给用户。"""
-    if not data_diffs:
-        return None
-
-    diff_update, diff_insert = [], []
-    for data_diff in data_diffs:
-        action = data_diff.get('action')
-        if action == 'update':
-            diff_update.append(data_diff)
-        elif action == 'insert':
-            diff_insert.append(data_diff)
-
-    def get_log_text_items(log_items: list[dict]) -> list[str]:
-        return [
-            services.change_log_to_text(item)
-            for item in log_items
-            if isinstance(item.get('lines'), list) and item.get('lines')
-        ]
-
-    if (not diff_insert) and (not diff_update):
-        return None
-
-    data_diff_text = '\n'.join([
-        '发现成绩更新！\n',
-        '新增成绩数据：',
-        *get_log_text_items(diff_insert),
-        '\n更新了已有成绩：',
-        *get_log_text_items(diff_update)
-    ])
-    return image_gen.simple_list(data_diff_text)
-
-
-async def get_sy_and_upload(user_id: int) -> image_gen.Image.Image | None:
+async def get_sy_and_upload(user_id: int) -> list[dict] | None:
     # 获取水鱼数据
     data = await network.sy_dev_player_records(qq=user_id, developer_token=DEVELOPER_TOKEN)
     records = data.get('records', []) if data else []
@@ -450,19 +418,27 @@ async def get_sy_and_upload(user_id: int) -> image_gen.Image.Image | None:
     if not data_diffs:
         return None
 
-    return build_achievements_diff_image(data_diffs)
+    return data_diffs
 
 
 @sync_sy.handle()
 async def _(event: Event, matcher: Matcher):
     """处理命令: sytb"""
     user_id = int(event.get_user_id())
-    diff_img = await get_sy_and_upload(user_id)
-    if diff_img:
-        img_bytes = image_gen.get_image_bytes(diff_img)
-        await matcher.finish(MessageSegment.image(img_bytes))
-    else:
-        await matcher.finish("已完成水鱼同步，似乎没有数据更新~")
+    data_diffs = await get_sy_and_upload(user_id)
+    if data_diffs:
+        summary_text, diff_img = build_achievements_report(data_diffs)
+        if diff_img:
+            img_bytes = image_gen.get_image_bytes(diff_img)
+            await matcher.finish(Message([
+                MessageSegment.text(f"{summary_text}\n"),
+                MessageSegment.image(img_bytes),
+            ]))
+        else:
+            await matcher.finish(summary_text)
+        return
+
+    await matcher.finish("已完成水鱼同步，似乎没有数据更新~")
 
 
 @b50.handle()
@@ -474,7 +450,7 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
             await matcher.finish(LOW_MEMORY_TIP)
         return
     _, args_text = groups
-    user_id, group_id = int(event.get_user_id()), getattr(event, "group_id", None)
+    user_id = int(event.get_user_id())
     target_user_id, target_server = None, None
     args_text: str = args_text.strip()
     if args_text:
@@ -498,12 +474,19 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
     
     # 同步水鱼数据
     if server in ['CN', 'ALL']:
-        diff_img = await get_sy_and_upload(target_user_id)
-        if diff_img:
+        data_diffs = await get_sy_and_upload(target_user_id)
+        if data_diffs:
             if target_user_id == user_id:
                 # 如果查询目标是自己，同步数据给予提示
-                img_bytes = image_gen.get_image_bytes(diff_img)
-                await matcher.send(MessageSegment.image(img_bytes))
+                summary_text, diff_img = build_achievements_report(data_diffs)
+                if diff_img:
+                    img_bytes = image_gen.get_image_bytes(diff_img)
+                    await matcher.send(Message([
+                        MessageSegment.text(f"{summary_text}\n"),
+                        MessageSegment.image(img_bytes),
+                    ]))
+                else:
+                    await matcher.send(summary_text)
             else:
                 # 如果查询目标是他人，不直接展示差异图，改为提示已同步
                 await matcher.send(f"已同步其水鱼数据，正在查询 B50 数据……")
@@ -629,14 +612,6 @@ async def _(bot: Bot, event: PrivateMessageEvent, matcher: Matcher):
         value = value.strip()
         if value and value not in items:
             items.append(value)
-
-    def format_preview(items: list[str], limit: int = 12) -> str:
-        if not items:
-            return ""
-        show = items[:limit]
-        if len(items) > limit:
-            return f"{'、'.join(show)} 等 {len(items)} 项"
-        return '、'.join(show)
     
     for record in data:
         try:
@@ -688,79 +663,34 @@ async def _(bot: Bot, event: PrivateMessageEvent, matcher: Matcher):
                 append_unique(parse_failed_items, rec_title)
             continue
 
-    # 4. 批量上传
+    # 4. 批量上传与报告生成
+    data_diffs: list[dict] | None = None
     if ach_list:
         try:
             data_diffs = await services.upload_achievements_batch(user_id, ach_list)
         except Exception as e:
             logger.error(f"数据库写入崩溃: {e}")
             await matcher.finish("同步到数据库时出错了……请联系监护人确认情况哦qwq")
+            return
 
-        insert_count = sum(1 for item in data_diffs if item.get("action") == "insert")
-        update_count = sum(1 for item in data_diffs if item.get("action") == "update")
-        changed_count = len(data_diffs)
-        unchanged_count = max(0, len(ach_list) - changed_count)
+    summary_text, warning_text, detail_img = build_import_report(
+        data_diffs,
+        file_count=len(data),
+        parsed_count=len(ach_list),
+        unmatched_titles=unmatched_titles,
+        invalid_diff_items=invalid_diff_items,
+        parse_failed_items=parse_failed_items,
+    )
 
-        summary_lines = [
-            "导入完成，以下为实际入库结果：",
-            f"- 文件记录总数：{len(data)}",
-            f"- 可识别成绩数：{len(ach_list)}",
-            f"- 实际入库变更：{changed_count}（新增 {insert_count} / 更新 {update_count}）",
-        ]
+    if detail_img:
+        img_bytes = image_gen.get_image_bytes(detail_img)
+        await matcher.finish(Message([
+            MessageSegment.text(f"{summary_text}\n\n以下是本次成绩变更明细：\n"),
+            MessageSegment.image(img_bytes),
+            MessageSegment.text(warning_text),
+        ]))
 
-        if unchanged_count > 0:
-            summary_lines.append(f"- 未写入（已有更优或相同成绩）：{unchanged_count}")
-
-        warning_lines = []
-        if unmatched_titles:
-            warning_lines.append(
-                f"- 曲库尚未匹配（数据库未更新）：{format_preview(unmatched_titles)}"
-            )
-        if invalid_diff_items:
-            warning_lines.append(
-                f"- 难度字段无法识别：{format_preview(invalid_diff_items)}"
-            )
-        if parse_failed_items:
-            warning_lines.append(
-                f"- 记录解析异常：{format_preview(parse_failed_items)}"
-            )
-
-        summary_text = "\n".join(summary_lines)
-        warning_text = ""
-        if warning_lines:
-            warning_text = "\n\n以下数据未入库（正常情况）：\n" + "\n".join(warning_lines)
-
-        diff_img = build_achievements_diff_image(data_diffs)
-        if diff_img:
-            img_bytes = image_gen.get_image_bytes(diff_img)
-            await matcher.finish(Message([
-                MessageSegment.text(
-                    f"{summary_text}\n\n以下是本次成绩变更明细：\n"
-                ),
-                MessageSegment.image(img_bytes),
-                MessageSegment.text(warning_text),
-            ]))
-
-        await matcher.finish(f"{summary_text}{warning_text}")
-    else:
-        warning_lines = []
-        if unmatched_titles:
-            warning_lines.append(
-                f"- 曲库尚未匹配（数据库未更新）：{format_preview(unmatched_titles)}"
-            )
-        if invalid_diff_items:
-            warning_lines.append(
-                f"- 难度字段无法识别：{format_preview(invalid_diff_items)}"
-            )
-        if parse_failed_items:
-            warning_lines.append(
-                f"- 记录解析异常：{format_preview(parse_failed_items)}"
-            )
-
-        msg = "已解析，但没有可入库的有效成绩。"
-        if warning_lines:
-            msg += "\n\n以下数据未入库（正常情况）：\n" + "\n".join(warning_lines)
-        await matcher.finish(msg)
+    await matcher.finish(f"{summary_text}{warning_text}")
 
 
 @get_code.handle()
