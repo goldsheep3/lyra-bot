@@ -493,11 +493,6 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
                 target_user_id = int(segment.data["qq"])  # 优先解析 @ 的用户信息
                 break
     target_user_id = target_user_id or user_id  # 最后默认使用发送者的 QQ 号
-    if group_id:
-        user_info = await bot.get_group_member_info(group_id=group_id, user_id=target_user_id)
-        target_name = user_info.get("card") or user_info.get("nickname") or str(target_user_id)
-    else:
-        target_name = str(target_user_id)
     avatar = await network.request_image(f"http://q2.qlogo.cn/headimg_dl?dst_uin={target_user_id}&spec=100")
     server: SERVER_TAG | Literal['ALL'] = cast(SERVER_TAG | Literal['ALL'], target_server or 'CN')
     
@@ -511,11 +506,12 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
                 await matcher.send(MessageSegment.image(img_bytes))
             else:
                 # 如果查询目标是他人，不直接展示差异图，改为提示已同步
-                await matcher.send(f"已同步水鱼数据，正在查询 {target_name} 的 B50 数据……")
+                await matcher.send(f"已同步其水鱼数据，正在查询 B50 数据……")
 
     ver_jp, ver_cn = utils.get_current_versions()
     if server == 'ALL':
         await matcher.finish("暂时还不支持全服查询qwq")
+        return
     current_version = ver_cn if server == 'CN' else ver_jp
 
     target_maiuser = await services.get_or_set_user_by_id(target_user_id)
@@ -543,17 +539,18 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
         await matcher.send("你还没有日服数据！可以通过 lyra-sync 上传成绩后再试哦！")
 
     dxrating = target_maiuser.cn_dxrating if server == 'CN' else target_maiuser.jp_dxrating
-    update_time = target_maiuser.get_update_time(server)
+    update_time = target_maiuser.get_formated_time(server)
 
     # 记录生成开始时间
     generate_start_time = time.time()
     img = image_gen.draw_b50(b35_entries, b15_entries,
                              current_version=current_version,
                              server=server,
-                             user_name=target_name,
+                             user_name=target_maiuser.username,
                              user_avatar=avatar,
                              dxrating=dxrating,
-                             update_time=update_time)
+                             update_time=update_time,
+                             cn_level=1 if server == 'CN' else 0)
 
     img_bytes = image_gen.get_image_bytes(img)
     # 计算生成耗时

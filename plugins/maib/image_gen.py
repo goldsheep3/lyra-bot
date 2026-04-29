@@ -867,7 +867,7 @@ def _user_header_board(
     server: SERVER_TAG,
     user_name: str,
     user_avatar: bytes | Image.Image | None = None,
-    update_time: int = -1,
+    update_time: str = 'Unknown Time',
     dxra_cirp_frame: bool = True,
     ms: MS = _MS_DEFAULT,
     cn_level: Literal[0, 1, 2] = 0
@@ -1089,7 +1089,7 @@ def draw_b50(b35_entries: list[tuple[MaiData, int]],
              server: SERVER_TAG,
              user_name: str,
              user_avatar: bytes | Image.Image | None = None,
-             update_time: int = -1,
+             update_time: str = 'Unknown Update Time',
              line_width: Literal[4, 5] = 5,
              ms: MS = _MS_DEFAULT,
              cn_level: Literal[0, 1, 2] = 0) -> Image.Image:

@@ -382,7 +382,12 @@ async def get_mdts_for_b50(user_id: int, server: SERVER_TAG, cut_version: int, *
             .join(MaiChartAch.chart)
             .join(MaiChart.maidata)
             .options(
-                selectinload(MaiChartAch.chart).selectinload(MaiChart.maidata)
+                selectinload(MaiChartAch.chart)
+                .selectinload(MaiChart.maidata)
+                .selectinload(MaiData.charts),
+                selectinload(MaiChartAch.chart)
+                .selectinload(MaiChart.maidata)
+                .selectinload(MaiData.aliases),
             )
             .where(
                 MaiChartAch.user_id == user_id,
