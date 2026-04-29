@@ -42,6 +42,7 @@ async def full_migrate_old_data(
                     "create_qq": -1
                 })
 
+    score_total = 0
     if not all_items_to_create:
         logger.warning("未发现可迁移的食物/饮品数据文件。")
     else:
@@ -69,7 +70,6 @@ async def full_migrate_old_data(
             logger.success(f"基础项目迁移完成，最高新 ID 为: {len(all_items_to_create)}")
 
         # --- 第三阶段：解析 NPZ 并注入评分 ---
-        score_total = 0
         for cfg in config:
             if not cfg["npz"].exists():
                 continue
