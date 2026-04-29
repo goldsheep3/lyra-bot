@@ -898,7 +898,11 @@ def _get_current_version_by_server(server: SERVER_TAG) -> int:
 
 def get_cut_version(server: SERVER_TAG) -> int:
     """获取 B50 分段所需的 cut_version。"""
-    return _get_current_version_by_server(server)
+    version = _get_current_version_by_server(server)
+    # PRiSM PLUS 开始, b15 扩展到两个版本，因此 cut_version 回退 1 版本以确保扩展
+    if 2000 > version >= 24:
+        version -= 1
+    return version
 
 
 @with_session

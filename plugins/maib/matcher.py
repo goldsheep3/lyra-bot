@@ -1,10 +1,8 @@
-import io
 import base64
 import re
 import time
 from pathlib import Path
 from typing import Optional, List, cast
-from dataclasses import dataclass
 
 import aiofiles
 import orjson
@@ -564,13 +562,6 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
 @file_receiver.handle()
 async def _(bot: Bot, event: PrivateMessageEvent, matcher: Matcher):
 
-    """
-    file: /home/goldsheep3/.config/QQ/NapCat/temp/a.json
-    url: /home/goldsheep3/.config/QQ/NapCat/temp/a.json
-    file_size: 2
-    file_name: a.json
-    """
-
     # 获取文件
     file_seg = event.get_message()["file"][0]
     file_id = file_seg.data.get("file_id")
@@ -709,6 +700,8 @@ async def _(bot: Bot, event: PrivateMessageEvent, matcher: Matcher):
             await matcher.finish("同步到数据库时出错了……请联系监护人确认情况哦qwq")
             return
 
+    # TODO 造成过 Exception: nonebot.adapters.onebot.v11.exception.ActionFailed
+    # ActionFailed(status='failed', retcode=1200, data=None, message='EventChecker Failed: NTEvent serviceAndMethod:NodeIKernelMsgService/sendMsg ListenerName:NodeIKernelMsgListener/onMsgInfoListUpdate EventRet:\n{\n    "result": -1,\n    "errMsg": "rich media transfer failed"\n}\n', wording='EventChecker Failed: NTEvent serviceAndMethod:NodeIKernelMsgService/sendMsg ListenerName:NodeIKernelMsgListener/onMsgInfoListUpdate EventRet:\n{\n    "result": -1,\n    "errMsg": "rich media transfer failed"\n}\n', echo='9', stream='normal-action')
     summary_text, warning_text, detail_img = build_import_report(
         data_diffs,
         file_count=len(file_data),
