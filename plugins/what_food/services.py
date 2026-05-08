@@ -8,17 +8,18 @@ from nonebot_plugin_datastore import create_session
 from .models import EatableItem, ScoreRecord, UserPreference, UserBan
 
 
-async def get_user_preference(user_id: int) -> UserPreference:
-    """获取用户偏好"""
+async def get_user_preference(user_id: int) -> float:
+    """获取用户偏好分值"""
     async with create_session() as session:
-        query = select(UserPreference).where(UserPreference.user_id == user_id)
+        query = select(UserPreference.offset).where(UserPreference.user_id == user_id)
         result = await session.scalar(query)
-        if not result:
+        if result is None:
             # 创建默认偏好
-            result = UserPreference(user_id=user_id, offset=3.0)
-            session.add(result)
+            default_offset = 3.0
+            session.add(UserPreference(user_id=user_id, offset=default_offset))
             await session.commit()
-        return result
+            return default_offset
+        return float(result)
 
 
 async def set_user_preference(user_id: int, offset: float) -> None:

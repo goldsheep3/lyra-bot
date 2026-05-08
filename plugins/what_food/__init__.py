@@ -172,9 +172,9 @@ async def _(event: MessageEvent, matcher: Matcher, groups: tuple = RegexGroup())
     user_input, action = groups
     category = 'Food' if action == '吃' else 'Drink'
 
-    preference = await services.get_user_preference(user_id)
+    preference_offset = await services.get_user_preference(user_id)
 
-    item = await services.choice_item(category=category, offset=preference.offset)    
+    item = await services.choice_item(category=category, offset=preference_offset)
     if not item:
         await matcher.finish(get_reply('csm_no_items'))
         return
