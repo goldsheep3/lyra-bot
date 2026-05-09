@@ -57,6 +57,7 @@ class FontManager:
             if not font_file.exists():
                 raise FileNotFoundError(f"字体文件缺失: {font_file}")
             raise e
+
 FONT = FontManager(ASSETS_PATH / "fonts")
 
 # 图片常量
@@ -984,14 +985,18 @@ def draw_info_box(maidata: MaiData, server: SERVER_TAG, maiuser: MaiUser | None 
         du1.text(cnv_x+17, im_y1_5, text="\n国服无此乐曲", fill='#FFF', anchor='mm', font=FONT.font('MIS_DB', size=ms.x(4)))
     # 游玩记录信息
     if maiuser:
-        record_info = '\n'.join([
-            f"{get_full_width_text(maiuser.username or "maimai")}",
-            f"[CN ({maiuser.cn_dxrating}) ] {maiuser.get_formated_time('CN')}",
-            f"[JP ({maiuser.jp_dxrating}) ] {maiuser.get_formated_time('JP')}",
-        ])
         du1.text(dv_x, dy, text="Record / 游玩记录", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=ms.x(4)))
-        du1.text(dv_x, im_y1_5, text=record_info, fill='#FFF', anchor='lm', font=FONT.font('MIS_DB', size=ms.x(2.8)))
-    del du1  # 释放绘图单元资源
+        # 用户名
+        username_text = get_full_width_text(maiuser.get_username())
+        du1.text(dv_x, im_y1_5, text=username_text, fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=ms.x(3)))
+        line_height = FONT.font('MIS_DB', size=ms.x(3)).getbbox(username_text)[3]
+        records = [
+            f"[CN ({maiuser.cn_dxrating})] {maiuser.get_formated_time('CN')}",
+            f"[JP ({maiuser.jp_dxrating})] {maiuser.get_formated_time('JP')}"
+        ]
+        du1.text(dv_x, im_y1_5 + line_height * 1.2, text='\n'.join(records), fill='#FFF', anchor='la',
+                 font=FONT.font('JBM_MD', size=ms.x(2.8)))
+        del du1  # 释放绘图单元资源
 
     # Board 2: 别名信息
     if maidata.aliases:
@@ -1215,15 +1220,15 @@ if __name__ == "__main__":
     b35_entries = [(maidata, randint(2, 6)) for _ in range(35)]
     b15_entries = [(maidata2, randint(2, 6)) for _ in range(15)]
 
-    target = draw_b50(
-        b35_entries=b35_entries,
-        b15_entries=b15_entries,
-        dxrating=15409,
-        current_version=26,
-        server='JP',
-        user_name='测试用户',
-        line_width=5,
-        ms=MS(5), cn_level=1)
-    # target = draw_info_box(maidata, server='JP', ms=MS(5), cn_level=1)
+    # target = draw_b50(
+    #     b35_entries=b35_entries,
+    #     b15_entries=b15_entries,
+    #     dxrating=15409,
+    #     current_version=26,
+    #     server='JP',
+    #     user_name='测试用户',
+    #     line_width=5,
+    #     ms=MS(5), cn_level=1)
+    target = draw_info_box(maidata, server='JP', ms=MS(5), cn_level=1)
 
     target.show()

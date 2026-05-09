@@ -485,6 +485,9 @@ class MaiUser:
             'CN': self.cn_dxrating
         }.get(self.default_server, 0)
 
+    def get_username(self) -> str:
+        return self.username or "maimai"
+
     def get_update_time(self, server: SERVER_TAG | None = None) -> int:
         server = server or self.default_server
         return {
