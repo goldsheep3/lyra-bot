@@ -23,6 +23,7 @@ class FontManager:
     _font_dict = {
         'MIS_DB': "MiSans-Demibold.otf",
         'MIS_HE': "MiSans-Heavy.otf",
+        'JBM_MD': "JetBrainsMono-Medium.ttf",
         'JBM_BD': "JetBrainsMono-Bold.ttf",
         'JBM_EB': "JetBrainsMono-ExtraBold.ttf",
         'NCE_RG': 'NotoColorEmoji-Regular.ttf',

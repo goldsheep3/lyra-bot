@@ -31,4 +31,5 @@ else:
     matcher.LOW_MEMORY_MODE = cfg.LOW_MEMORY_MODE
     matcher.LOW_MEMORY_TIP = cfg.LOW_MEMORY_TIP
     matcher.DEVELOPER_TOKEN = cfg.DIVING_FISH_DEVELOPER_TOKEN
+    # 注入 hook 以支持 stream 获取文件
     napcat_stream.install_hook()

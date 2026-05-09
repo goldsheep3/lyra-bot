@@ -257,8 +257,9 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
         await matcher.finish(f"没有找到 id{shortid} 的乐曲数据qwq")
         return
     maidata = mdt.to_data(include_achs=True)
+    s = server if maidata.version_cn is not None else "JP"  # 如果乐曲没有国服版本，则展示日服数据
     
-    info_box = image_gen.draw_info_box(maidata, server, maiuser=maiuser, cn_level=1 if server == 'CN' else 0)
+    info_box = image_gen.draw_info_box(maidata, s, maiuser=maiuser, cn_level=1 if server == 'CN' else 0)
     info_box_bytes = image_gen.get_image_bytes(info_box)
     
     await matcher.finish(Message(f"{mdt.shortid}. {mdt.title}") + MessageSegment.image(info_box_bytes))
@@ -292,25 +293,27 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
     if len(mdt_list) == 1:
         mdt = mdt_list[0]
         maidata = mdt.to_data(include_achs=True)
-        info_box = image_gen.draw_info_box(maidata, server=server, maiuser=maiuser, cn_level=1 if server == 'CN' else 0)
+        s = server if maidata.version_cn is not None else "JP"  # 如果乐曲没有国服版本，则展示日服数据
+        info_box = image_gen.draw_info_box(maidata, server=s, maiuser=maiuser, cn_level=1 if server == 'CN' else 0)
         info_box_bytes = image_gen.get_image_bytes(info_box)
         await matcher.finish(Message(f"找到了乐曲 {mdt.shortid}. {mdt.title}") + MessageSegment.image(info_box_bytes))
     
-    elif len(mdt_list) > 4:
+    elif len(mdt_list) <= 4:
+        img_bytes_list = []
+        for mdt in mdt_list:
+            maidata = mdt.to_data(include_achs=True)
+            s = server if maidata.version_cn is not None else "JP"
+            info_box = image_gen.draw_info_box(maidata, server=s, maiuser=maiuser, cn_level=1 if server == 'CN' else 0)
+            img_bytes_list.append(image_gen.get_image_bytes(info_box))
+        await matcher.finish(Message(f"找到了 {len(mdt_list)} 首相应的乐曲！请查看以下乐曲！") + Message().join(img_bytes_list))
+
+    else:
         # TODO 以 b50_box 承载曲目信息
         img = image_gen.simple_maidata_box([mdt.to_data() for mdt in mdt_list])
         img_bytes = image_gen.get_image_bytes(img)
         await matcher.finish(
             Message(f"找到了 {len(mdt_list)} 首相应的乐曲！请查看以下是否有你的目标！") + MessageSegment.image(img_bytes))
         return
-
-    else:
-        img_bytes_list = []
-        for mdt in mdt_list:
-            maidata = mdt.to_data(include_achs=True)
-            info_box = image_gen.draw_info_box(maidata, server=server, maiuser=maiuser, cn_level=1 if server == 'CN' else 0)
-            img_bytes_list.append(image_gen.get_image_bytes(info_box))
-        await matcher.finish(Message(f"找到了 {len(mdt_list)} 首相应的乐曲！请查看以下乐曲！") + Message().join(img_bytes_list))
 
 
 @alias_setting.handle()
