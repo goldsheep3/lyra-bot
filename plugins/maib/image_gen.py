@@ -1,5 +1,6 @@
 import io
 import bisect
+import zipfile
 from pathlib import Path
 from enum import Enum
 from typing import Optional, Tuple, Literal, List, Iterator, Any
@@ -762,7 +763,8 @@ class ImageUnit:
         return img
 
     def mini_box(self, data: MaiData | None, diff_number: int, server: SERVER_TAG,
-                 ms: MS = _MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image | tuple[int, int]:
+                 ms: MS = _MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0,
+                 shared_zip: zipfile.ZipFile | None = None) -> Image.Image | tuple[int, int]:
         w, h, ow = 97, 36, 1  # w, h, outline_width
         width, height = w + ow * 2, h + ow * 2
         diff = Difficulty.get(diff_number)
@@ -784,9 +786,10 @@ class ImageUnit:
         badge = IMU.draw_badge(is_cabinet_dx=data.is_cabinet_dx, ms=ms, cn_level=cn_level)
         img.paste(badge, ms.xy(ow + 75, ow + 2), badge)
         # 曲绘
-        if data.image:
+        cover = data.get_image(shared_zip=shared_zip)
+        if cover:
             mask = IMU.get_mask(w=32, h=32, radius=1.5, ms=ms)
-            cover_img = data.image.resize(ms.xy(32, 32), Image.Resampling.LANCZOS)
+            cover_img = cover.resize(ms.xy(32, 32), Image.Resampling.LANCZOS)
             img.paste(cover_img, ms.xy(ow + 2, ow + 2), mask)
         # 达成率
         du.ach(ow + 35, ow + 9, diff, ach_percent=ach.achievement)
@@ -802,11 +805,12 @@ class ImageUnit:
 
     def b50_box(self, data: MaiData, diff_number: int, server: SERVER_TAG,
                 current_version: int, index: int, is_b15: Optional[bool] = None,
-                ms: MS = _MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image | None:
+                ms: MS = _MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0,
+                shared_zip: zipfile.ZipFile | None = None) -> Image.Image | None:
         chart = data.get_chart(diff_number)
         if not chart:
             return None
-        img = self.mini_box(data=data, diff_number=diff_number, server=server, ms=ms, cn_level=cn_level)
+        img = self.mini_box(data=data, diff_number=diff_number, server=server, ms=ms, cn_level=cn_level, shared_zip=shared_zip)
         if isinstance(img, tuple):
             return None
         du = DrawUnit(img, multiple=ms, cn_level=cn_level)
@@ -1128,15 +1132,43 @@ def draw_b50(b35_entries: list[tuple[MaiData, int]],
     )
 
     # Board 2 & 3: B35 和 B15 列表板块
-    b35_imgs = [IMU.b50_box(maidata, diff, server, current_version, i, False, ms, cn_level)
-                for i, (maidata, diff) in enumerate(b35_entries, start=1)]
-    b35_imgs = [img for img in b35_imgs if img is not None]  # 过滤掉 None 的图片
-    board_b35 = _image_grid_board(b35_imgs, cols=line_width, gap=ms.x(5), skip_first=line_width == 4, auto_close=True)
-    
-    b15_imgs = [IMU.b50_box(maidata, diff, server, current_version, i, True, ms, cn_level)
-                for i, (maidata, diff) in enumerate(b15_entries, start=1)]
-    b15_imgs = [img for img in b15_imgs if img is not None]
-    board_b15 = _image_grid_board(b15_imgs, cols=line_width, gap=ms.x(5), skip_first=line_width == 4, auto_close=True)
+    shared_zip_handles: dict[Path, zipfile.ZipFile] = {}
+    try:
+        for maidata, _ in (*b35_entries, *b15_entries):
+            zip_path = maidata.zip_path
+            if zip_path and zip_path not in shared_zip_handles:
+                shared_zip_handles[zip_path] = zipfile.ZipFile(zip_path, 'r')
+
+        b35_imgs = [IMU.b50_box(
+            maidata,
+            diff,
+            server,
+            current_version,
+            i,
+            False,
+            ms,
+            cn_level,
+            shared_zip=shared_zip_handles.get(maidata.zip_path) if maidata.zip_path else None,
+        ) for i, (maidata, diff) in enumerate(b35_entries, start=1)]
+        b35_imgs = [img for img in b35_imgs if img is not None]  # 过滤掉 None 的图片
+        board_b35 = _image_grid_board(b35_imgs, cols=line_width, gap=ms.x(5), skip_first=line_width == 4, auto_close=True)
+
+        b15_imgs = [IMU.b50_box(
+            maidata,
+            diff,
+            server,
+            current_version,
+            i,
+            True,
+            ms,
+            cn_level,
+            shared_zip=shared_zip_handles.get(maidata.zip_path) if maidata.zip_path else None,
+        ) for i, (maidata, diff) in enumerate(b15_entries, start=1)]
+        b15_imgs = [img for img in b15_imgs if img is not None]
+        board_b15 = _image_grid_board(b15_imgs, cols=line_width, gap=ms.x(5), skip_first=line_width == 4, auto_close=True)
+    finally:
+        for zip_handle in shared_zip_handles.values():
+            zip_handle.close()
 
     # --- Board 4: Footer ---
     board_last = IMU.copyright_bar(width=width, ms=ms, cn_level=cn_level)

@@ -320,8 +320,7 @@ class MaiData:
     @property
     def wholebpm(self) -> int: return self.bpm
 
-    @property
-    def image(self) -> Optional[Image.Image]:
+    def get_image(self, shared_zip: Optional[zipfile.ZipFile] = None) -> Optional[Image.Image]:
         """获取封面图片对象"""
         path_str = str(self.img_path)
 
@@ -338,6 +337,12 @@ class MaiData:
                 if not inner_path:
                     inner_path = 'bg.png'  # 默认文件名
                 try:
+                    if shared_zip is not None:
+                        with shared_zip.open(inner_path) as f:
+                            img = Image.open(f)
+                            img.load()  # with 作用域外，强加载
+                            self._cached_image = img
+                            return self._cached_image
                     with zipfile.ZipFile(zip_full_path, 'r') as z:
                         with z.open(inner_path) as f:
                             img = Image.open(f)
@@ -356,6 +361,11 @@ class MaiData:
             return self._cached_image
 
         return None
+
+    @property
+    def image(self) -> Optional[Image.Image]:
+        """获取封面图片对象"""
+        return self.get_image()
 
     @property
     def charts(self) -> dict[int, MaiChart]:
