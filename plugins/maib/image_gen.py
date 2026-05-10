@@ -688,21 +688,10 @@ class ImageUnit:
                   ms: MS = _MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
         """组件：谱面信息框"""
         w, h, ow = 108, 36, 1  # w, h, outline_width
-        width, height = w + ow * 2, h + ow * 2
         diff = Difficulty.get(chart.difficulty)
 
-        img = Image.new('RGBA', ms.xy(width, height), '#FFFFFF00')
+        img = IMU.chart_box_base(diff=diff, cabinet_dx=cabinet_dx, w=w, h=h, ow=ow, ms=ms, cn_level=cn_level).copy()
         du = DrawUnit(img, multiple=ms, cn_level=cn_level)
-
-        du.rounded_rect(ow, ow, w, h, radius=4, fill=diff.bg)
-        du.cut_line(ow, ow, w, h, radius=4, line_y=ow + 2, line_h=5, fill=diff.title_bg)
-        du.rounded_rect(ow, ow, w, h, radius=4, fill=None, outline=diff.frame, width=1)
-        # 难度、DX
-        difficulty = IMU.difficulty(diff=diff, ms=ms, cn_level=cn_level)
-        diff_height = ms.rev(difficulty.size[1])
-        img.paste(difficulty, ms.xy(ow + 2.5, ow + 4.3 - diff_height / 2), difficulty)
-        badge = IMU.draw_badge(is_cabinet_dx=cabinet_dx, ms=ms, cn_level=cn_level)
-        img.paste(badge, ms.xy(ow + 85, ow + 2), badge)
         # 等级 LV
         plus = round(chart.lv % 1 * 10) >= plus_level
         du.level(ow + 64, ow + 7.4, diff, chart.lv, plus=plus, ignore_decimal=is_utage)
@@ -732,21 +721,10 @@ class ImageUnit:
                        ms: MS = _MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
         """组件：谱面信息框 Lite"""
         w, h, ow = 108, 25, 1  # w, h, outline_width
-        width, height = w + ow * 2, h + ow * 2
         diff = Difficulty.get(chart.difficulty)
 
-        img = Image.new('RGBA', ms.xy(width, height), '#FFFFFF00')
+        img = IMU.chart_box_base(diff=diff, cabinet_dx=cabinet_dx, w=w, h=h, ow=ow, ms=ms, cn_level=cn_level).copy()
         du = DrawUnit(img, multiple=ms, cn_level=cn_level)
-
-        du.rounded_rect(ow, ow, w, h, radius=4, fill=diff.bg)
-        du.cut_line(ow, ow, w, h, radius=4, line_y=ow + 2, line_h=5, fill=diff.title_bg)
-        du.rounded_rect(ow, ow, w, h, radius=4, fill=None, outline=diff.frame, width=1)
-        # 难度、DX
-        difficulty = IMU.difficulty(diff=diff, ms=ms, cn_level=cn_level)
-        diff_height = ms.rev(difficulty.size[1])
-        img.paste(difficulty, ms.xy(ow + 2.5, ow + 4.3 - diff_height / 2), difficulty)
-        badge = IMU.draw_badge(is_cabinet_dx=cabinet_dx, ms=ms, cn_level=cn_level)
-        img.paste(badge, ms.xy(ow + 85, ow + 2), badge)
         # 等级 LV
         plus = round(chart.lv % 1 * 10) >= plus_level
         du.level(ow + 64, ow + 7.4, diff, chart.lv, plus=plus, ignore_decimal=is_utage)
@@ -762,6 +740,22 @@ class ImageUnit:
         img.paste(fs, ms.xy(ow + 3, ow + 17 - 3), fs)
         return img
 
+    @lru_cache(maxsize=32)
+    def chart_box_base(self, diff: Diff, cabinet_dx: bool, w: int, h: int, ow: int,
+                       ms: MS = _MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+        img = Image.new('RGBA', ms.xy(w + ow * 2, h + ow * 2), '#FFFFFF00')
+        du = DrawUnit(img, multiple=ms, cn_level=cn_level)
+
+        du.rounded_rect(ow, ow, w, h, radius=4, fill=diff.bg)
+        du.cut_line(ow, ow, w, h, radius=4, line_y=ow + 2, line_h=5, fill=diff.title_bg)
+        du.rounded_rect(ow, ow, w, h, radius=4, fill=None, outline=diff.frame, width=1)
+        difficulty = IMU.difficulty(diff=diff, ms=ms, cn_level=cn_level)
+        diff_height = ms.rev(difficulty.size[1])
+        img.paste(difficulty, ms.xy(ow + 2.5, ow + 4.3 - diff_height / 2), difficulty)
+        badge = IMU.draw_badge(is_cabinet_dx=cabinet_dx, ms=ms, cn_level=cn_level)
+        img.paste(badge, ms.xy(ow + 85, ow + 2), badge)
+        return img
+
     def mini_box(self, data: MaiData | None, diff_number: int, server: SERVER_TAG,
                  ms: MS = _MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0,
                  shared_zip: zipfile.ZipFile | None = None) -> Image.Image | tuple[int, int]:
@@ -769,22 +763,22 @@ class ImageUnit:
         width, height = w + ow * 2, h + ow * 2
         diff = Difficulty.get(diff_number)
 
-        img = Image.new('RGBA', ms.xy(width, height), '#FFFFFF00')
-        du = DrawUnit(img, multiple=ms, cn_level=cn_level)
-
         chart = data.get_chart(diff_number) if data else None
         if not chart or data is None:
             return width, height  # 视为占位，返回尺寸供布局使用
         ach = chart.get_ach(server=server)
 
-        du.rounded_rect(ow, ow, w, h, diff.bg, radius=2.5, outline=diff.frame)
-        du.cut_line(ow, ow, w, h, radius=0, line_y=ow + 2, line_h=5, fill=diff.title_bg)
-        du.rounded_rect(ow, ow, w, h, None, radius=2.5, outline=diff.title_bg, width=1)
-        # 标题栏文字
-        shortid_img = IMU.diff_text(diff=diff, text=f'#{data.shortid}', ms=ms, cn_level=cn_level)
-        img.paste(shortid_img, ms.xy(ow + 35, ow + 4.2 - ms.rev(shortid_img.size[1] / 2)), shortid_img)
-        badge = IMU.draw_badge(is_cabinet_dx=data.is_cabinet_dx, ms=ms, cn_level=cn_level)
-        img.paste(badge, ms.xy(ow + 75, ow + 2), badge)
+        img = IMU.mini_box_base(
+            diff=diff,
+            is_cabinet_dx=data.is_cabinet_dx,
+            shortid=data.shortid,
+            w=w,
+            h=h,
+            ow=ow,
+            ms=ms,
+            cn_level=cn_level,
+        ).copy()
+        du = DrawUnit(img, multiple=ms, cn_level=cn_level)
         # 曲绘
         cover = data.get_image(shared_zip=shared_zip)
         if cover:
@@ -801,6 +795,21 @@ class ImageUnit:
         fs = IMU.evaluate(Sync.get(ach.sync), mini=True, ms=ms, cn_level=cn_level)
         img.paste(fs, ms.xy(ow + 36, ow + 29), fs)
         # INFO: 留空 (x=53, y=25, w=42, h=5) 可供自定义
+        return img
+
+    @lru_cache(maxsize=12)
+    def mini_box_base(self, diff: Diff, is_cabinet_dx: bool, shortid: int, w: int, h: int, ow: int,
+                      ms: MS = _MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+        img = Image.new('RGBA', ms.xy(w + ow * 2, h + ow * 2), '#FFFFFF00')
+        du = DrawUnit(img, multiple=ms, cn_level=cn_level)
+
+        du.rounded_rect(ow, ow, w, h, diff.bg, radius=2.5, outline=diff.frame)
+        du.cut_line(ow, ow, w, h, radius=0, line_y=ow + 2, line_h=5, fill=diff.title_bg)
+        du.rounded_rect(ow, ow, w, h, None, radius=2.5, outline=diff.title_bg, width=1)
+        badge = IMU.draw_badge(is_cabinet_dx=is_cabinet_dx, ms=ms, cn_level=cn_level)
+        img.paste(badge, ms.xy(ow + 75, ow + 2), badge)
+        shortid_img = IMU.diff_text(diff=diff, text=f'#{shortid}', ms=ms, cn_level=cn_level)
+        img.paste(shortid_img, ms.xy(ow + 35, ow + 4.2 - ms.rev(shortid_img.size[1] / 2)), shortid_img)
         return img
 
     def b50_box(self, data: MaiData, diff_number: int, server: SERVER_TAG,
