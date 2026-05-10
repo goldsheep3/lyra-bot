@@ -833,6 +833,25 @@ async def set_username(user_id: int, new_username: str,
     if user:
         user.username = new_username
 
+
+@with_session
+async def get_last_sy_hash(user_id: int, *, session: AsyncSession) -> Optional[str]:
+    """获取用户上次水鱼 records 的哈希值。"""
+    user = await get_user_by_id(user_id=user_id, session=session)
+    if not user:
+        return None
+    return user.last_sy_hash
+
+
+@with_session
+async def set_last_sy_hash(user_id: int, sy_hash: str, *, session: AsyncSession):
+    """写入用户最新的水鱼 records 哈希值。"""
+    user = await get_user_by_id(user_id=user_id, session=session)
+    if not user:
+        user = MaiUser(user_id=user_id)
+        session.add(user)
+    user.last_sy_hash = sy_hash
+
 # --- 其他 ---
 
 # 通过 `mdt_list` 高效同步曲目列表

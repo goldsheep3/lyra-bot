@@ -1,8 +1,9 @@
 import base64
+import hashlib
 import re
 import time
 from pathlib import Path
-from typing import Optional, List, cast
+from typing import Optional, List, Any, cast
 
 import aiofiles
 import orjson
@@ -95,6 +96,18 @@ async def _finish_with_optional_image(matcher: Matcher, text: str, image_bytes: 
     except ActionFailed as exc:
         logger.warning(f"图片发送失败，已降级为纯文本: {exc}")
         await matcher.finish(fallback_text or text)
+
+
+def _stable_json_dumps(data: Any) -> bytes:
+    """稳定序列化：固定 key 顺序并去除空白，避免顺序差异导致 hash 变化。"""
+    return orjson.dumps(data, option=orjson.OPT_SORT_KEYS)
+
+
+def _build_sy_records_hash(records: list[dict[str, Any]]) -> str:
+    """为水鱼 records 生成稳定 MD5 指纹。"""
+    normalized_records = sorted(records, key=lambda item: _stable_json_dumps(item))
+    payload = _stable_json_dumps(normalized_records)
+    return hashlib.md5(payload).hexdigest()
 
 
 # =================================
@@ -425,11 +438,20 @@ async def get_sy_and_upload(user_id: int) -> list[dict] | None:
     # 获取水鱼数据
     data = await network.sy_dev_player_records(qq=user_id, developer_token=DEVELOPER_TOKEN)
     records = data.get('records', []) if data else []
+
+    # records 稳定哈希一致时，直接短路跳过上传流程
+    sy_hash = _build_sy_records_hash(records)
+    last_sy_hash = await services.get_last_sy_hash(user_id)
+    if last_sy_hash == sy_hash:
+        return None
+
     achs = utils.get_sy_records(records) if data else None
     # 批量上传到数据库
-    if not achs:
+    if data is None or achs is None:
         return None
+
     data_diffs = await services.upload_achievements_batch(user_id, achs)
+    await services.set_last_sy_hash(user_id, sy_hash)
     if not data_diffs:
         return None
 

@@ -213,6 +213,8 @@ class MaiUser(Model):
     # lyra-sync 字段: 在 sync_allow_time 有效期内，可以使用 sync-hash 验证身份并同步成绩
     sync_hash: Mapped[Optional[str]] = mapped_column(default=None)
     sync_allow_time: Mapped[Optional[int]] = mapped_column(default=None)
+    # 水鱼 records 指纹：用于短路跳过重复成绩上传
+    last_sy_hash: Mapped[Optional[str]] = mapped_column(default=None)
 
     def plate(self) -> tuple[int, int] | None:
         """返回牌子信息"""
