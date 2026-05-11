@@ -1000,15 +1000,14 @@ def draw_info_box(maidata: MaiData, server: SERVER_TAG, maiuser: MaiUser | None 
     if maiuser:
         du1.text(dv_x, dy, text="Record / 游玩记录", fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=ms.x(4)))
         # 用户名
-        username_text = get_full_width_text(maiuser.get_username())
-        du1.text(dv_x, im_y1_5, text=username_text, fill='#FFF', anchor='la', font=FONT.font('MIS_DB', size=ms.x(3)))
-        line_height = FONT.font('MIS_DB', size=ms.x(3)).getbbox(username_text)[3]
+        username_text = get_full_width_text(maiuser.get_username()) + '\n\n'
+        du1.text(dv_x, im_y1_5, text=username_text, fill='#FFF', anchor='lm', font=FONT.font('MIS_DB', size=ms.x(3)))
         records = [
-            f"[CN ({maiuser.cn_dxrating})] {maiuser.get_formated_time('CN')}",
-            f"[JP ({maiuser.jp_dxrating})] {maiuser.get_formated_time('JP')}"
+            '',
+            f"[CN({maiuser.cn_dxrating})] {maiuser.get_formated_time('CN').replace('0','O')}",
+            f"[JP({maiuser.jp_dxrating})] {maiuser.get_formated_time('JP').replace('0','O')}"
         ]
-        du1.text(dv_x, im_y1_5 + line_height * 1.2, text='\n'.join(records), fill='#FFF', anchor='la',
-                 font=FONT.font('JBM_MD', size=ms.x(2.8)))
+        du1.text(dv_x, im_y1_5, text='\n'.join(records), fill='#FFF', anchor='lm', font=FONT.font('JBM_BD', size=ms.x(2.2)))
         del du1  # 释放绘图单元资源
 
     # Board 2: 别名信息

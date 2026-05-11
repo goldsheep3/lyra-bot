@@ -1422,4 +1422,6 @@ async def upload_achievements_batch(user_id: int, ach_list: Sequence[utils.MaiCh
     for server in affected_servers:
         await refresh_user_dxrating_cache(user_id=user_id, server=server, session=session)
 
+    # TODO 这里需要更新对应maiuser的服务器数据更新时间
+
     return changes_log
