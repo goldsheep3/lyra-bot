@@ -102,7 +102,23 @@ ASSETS_PATH = PLUGIN_BASE_PATH / "assets"
 GENRES_YAML_PATH = ASSETS_PATH / "genres.yaml"
 GENRES_DATA = yaml.safe_load(GENRES_YAML_PATH.read_text(encoding="utf-8"))
 VERSIONS_YAML_PATH = ASSETS_PATH / "versions.yaml"
-VERSIONS_DATA = yaml.safe_load(VERSIONS_YAML_PATH.read_text(encoding="utf-8"))
+VERSIONS_META_DATA = yaml.safe_load(VERSIONS_YAML_PATH.read_text(encoding="utf-8")) or {}
+
+
+def _build_versions_data(meta_data: Mapping[int, object]) -> dict[int, str]:
+    """兼容旧逻辑的版本名称表。"""
+    versions_data: dict[int, str] = {}
+    for version_id, version_meta in meta_data.items():
+        if isinstance(version_meta, dict):
+            versions_data[version_id] = str(version_meta.get("name", ""))
+        else:
+            versions_data[version_id] = str(version_meta)
+    return versions_data
+
+
+VERSIONS_DATA = _build_versions_data(VERSIONS_META_DATA)
+PLATE_EXCLUDES_YAML_PATH = ASSETS_PATH / "plate_excludes.yaml"
+PLATE_EXCLUDES_DATA = yaml.safe_load(PLATE_EXCLUDES_YAML_PATH.read_text(encoding="utf-8")) or {}
 
 # DXRating 版本分界线
 BOUNDARIES_DX_RATING = [0, 1000, 2000, 5000, 7000, 10000, 12000, 13000, 14000, 14500, 15000]

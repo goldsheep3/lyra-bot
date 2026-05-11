@@ -33,35 +33,74 @@ def get_file_stat_identity(file_path: Path) -> str:
     return f"{stat.st_mtime}_{stat.st_size}"
 
 
+def _normalize_version_text(version_text: str) -> str:
+    """归一化版本文本，便于精确匹配。"""
+    return re.sub(r"\s+", "", version_text).casefold()
+
+
+def _build_version_id_map() -> dict[str, list[int]]:
+    """构建版本名称、简写名和牌名到版本 id 列表的映射。"""
+    version_id_map: dict[str, list[int]] = {}
+    for version_id, version_meta in VERSIONS_META_DATA.items():
+        if isinstance(version_meta, dict):
+            version_candidates = (
+                version_meta.get("name"),
+                version_meta.get("code"),
+                version_meta.get("plate_name"),
+            )
+        else:
+            version_candidates = (version_meta,)
+
+        for version_candidate in version_candidates:
+            if not version_candidate:
+                continue
+            normalized_text = _normalize_version_text(str(version_candidate))
+            version_id_map.setdefault(normalized_text, []).append(version_id)
+
+    return version_id_map
+
+
+VERSION_ID_MAP = _build_version_id_map()
+
+
+def get_version_ids(version_str: str) -> list[int]:
+    """通过版本全名、简写名或牌名获取对应的版本 id 列表。"""
+    normalized_text = _normalize_version_text(version_str)
+    if not normalized_text:
+        return []
+    return VERSION_ID_MAP.get(normalized_text, [])
+
+
 async def parse_version(version_str: str) -> int:
     """辅助函数：解析版本号"""
-    global VERSIONS_DATA
-
     v_str = version_str.lower().strip()
     if not v_str:
         return -1
-    rd = {v.lower().strip(): k for k, v in VERSIONS_DATA.items()}
-    # 1. 直接匹配
-    v = rd.get(v_str, None)
-    # 2. 尝试去掉前缀 "maimai "
-    if not v:
-        if v_str[:7] == "maimai ":
-            v_str = v_str[7:].strip()
-            v = rd.get(v_str, None)
-    # 3. 尝试替换 DX -> でらっくす
-    if not v:
-        if 'dx' in v_str:
-            v_str = v_str.replace('dx', 'でらっくす')
-            v = rd.get(v_str, None)
-    # 4. 尝试去掉前缀 "でらっくす "
-    if not v:
-        if v_str[:6] == "でらっくす ":
-            v_str = v_str[6:].strip()
-            v = rd.get(v_str, None)
-    if v is None:
+
+    version_candidates = [version_str]
+    if v_str[:7] == "maimai ":
+        version_candidates.append(v_str[7:].strip())
+    if 'dx' in v_str:
+        version_candidates.append(v_str.replace('dx', 'でらっくす'))
+    if v_str[:6] == "でらっくす ":
+        version_candidates.append(v_str[6:].strip())
+
+    checked_versions: set[str] = set()
+    for version_candidate in version_candidates:
+        normalized_candidate = _normalize_version_text(version_candidate)
+        if normalized_candidate in checked_versions:
+            continue
+        checked_versions.add(normalized_candidate)
+        version_ids = VERSION_ID_MAP.get(normalized_candidate, [])
+        if version_ids:
+            return version_ids[0]
+
+    if not checked_versions:
         logger.warning(f"无法解析版本号: {version_str}")
         return -1
-    return v
+
+    logger.warning(f"无法解析版本号: {version_str}")
+    return -1
 
 
 async def parse_diving_fish_version(version_str: str) -> int:

@@ -190,6 +190,23 @@ async def get_mdt_by_genre(genre: int, achs_userid: int | None = None, *, sessio
     result = await session.execute(statement)
     return result.scalars().all()
 
+
+def split_mdt_by_plate_excludes(mdts: Sequence[MaiData], server_tag: SERVER_TAG) -> tuple[list[MaiData], list[MaiData]]:
+    """按服务器牌子排除表拆分曲目列表。"""
+    excluded_shortids = set(PLATE_EXCLUDES_DATA.get(server_tag, []))
+    if not excluded_shortids:
+        return list(mdts), []
+
+    kept_mdts: list[MaiData] = []
+    excluded_mdts: list[MaiData] = []
+    for mdt in mdts:
+        if mdt.shortid in excluded_shortids:
+            excluded_mdts.append(mdt)
+        else:
+            kept_mdts.append(mdt)
+
+    return kept_mdts, excluded_mdts
+
 # 通过 等级(或范围) 获取 `MaiChart`（列表）
 @with_session
 async def get_mct_by_level(lv: float | tuple[float, float], server: SERVER_TAG, achs_userid: int | None = None, *,

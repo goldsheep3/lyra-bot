@@ -1,40 +1,139 @@
 # maimai
-0: "maimai"
-1: "maimai PLUS"
-2: "GreeN"
-3: "GreeN PLUS"
-4: "ORANGE"
-5: "ORANGE PLUS"
-6: "PiNK"
-7: "PiNK PLUS"
-8: "MURASAKi"
-9: "MURASAKi PLUS"
-10: "MiLK"
-11: "MiLK PLUS"
-12: "FiNALE"
+0:
+  name: "maimai"
+  code: mai
+  plate_name: 真
+1:
+  name: "maimai PLUS"
+  code: mai+
+  plate_name: 真
+2:
+  name: "GreeN"
+  code: green
+  plate_name: 超
+3:
+  name: "GreeN PLUS"
+  code: green+
+  plate_name: 檄
+4:
+  name: "ORANGE"
+  code: orange
+  plate_name: 橙
+5:
+  name: "ORANGE PLUS"
+  code: orange+
+  plate_name: 晓
+6:
+  name: "PiNK"
+  code: pink
+  plate_name: 桃
+7:
+  name: "PiNK PLUS"
+  code: pink+
+  plate_name: 樱
+8:
+  name: "MURASAKi"
+  code: murasaki
+  plate_name: 紫
+9:
+  name: "MURASAKi PLUS"
+  code: murasaki+
+  plate_name: 堇
+10:
+  name: "MiLK"
+  code: milk
+  plate_name: 白
+11:
+  name: "MiLK PLUS"
+  code: milk+
+  plate_name: 雪
+12:
+  name: "FiNALE"
+  code: finale
+  plate_name: 辉
 
 # DX (JP)
-13: "でらっくす"
-14: "でらっくす PLUS"
-15: "Splash"
-16: "Splash PLUS"
-17: "UNiVERSE"
-18: "UNiVERSE PLUS"
-19: "FESTiVAL"
-20: "FESTiVAL PLUS"
-21: "BUDDiES"
-22: "BUDDiES PLUS"
-23: "PRiSM"
-24: "PRiSM PLUS"
-25: "CIRCLE"
-26: "CIRCLE PLUS"
+13:
+  name: "でらっくす"
+  code: dx
+  plate_name: 熊
+14:
+  name: "でらっくす PLUS"
+  code: dx+
+  plate_name: 华
+15:
+  name: "Splash"
+  code: splash
+  plate_name: 爽
+16:
+  name: "Splash PLUS"
+  code: splash+
+  plate_name: 煌
+17:
+  name: "UNiVERSE"
+  code: uni
+  plate_name: 宙
+18:
+  name: "UNiVERSE PLUS"
+  code: uni+
+  plate_name: 星
+19:
+  name: "FESTiVAL"
+  code: fes
+  plate_name: 祭
+20:
+  name: "FESTiVAL PLUS"
+  code: fes+
+  plate_name: 祝
+21:
+  name: "BUDDiES"
+  code: bud
+  plate_name: 双
+22:
+  name: "BUDDiES PLUS"
+  code: bud+
+  plate_name: 宴
+23:
+  name: "PRiSM"
+  code: pri
+  plate_name: 镜
+24:
+  name: "PRiSM PLUS"
+  code: pri+
+  plate_name: 彩
+25:
+  name: "CIRCLE"
+  code: cir
+  plate_name: 丸
+26:
+  name: "CIRCLE PLUS"
+  code: cir+
+  plate_name: 
 # ...
 
 # DX (CN)
-2020: "舞萌DX"
-2021: "舞萌DX 2021"
-2022: "舞萌DX 2022"
-2023: "舞萌DX 2023"
-2024: "舞萌DX 2024"
-2025: "舞萌DX 2025"
+2020:
+  name: "舞萌DX"
+  code: dx2020
+  plate_name: 熊华
+2021:
+  name: "舞萌DX 2021"
+  code: dx2021
+  plate_name: 爽煌
+2022:
+  name: "舞萌DX 2022"
+  code: dx2022
+  plate_name: 宙星
+2023:
+  name: "舞萌DX 2023"
+  code: dx2023
+  plate_name: 祭祝
+2024:
+  name: "舞萌DX 2024"
+  code: dx2024
+  plate_name: 双宴
+2025:
+  name: "舞萌DX 2025"
+  code: dx2025
+  plate_name: 镜彩
 # ...
