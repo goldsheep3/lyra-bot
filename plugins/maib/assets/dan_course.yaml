@@ -1,0 +1,172 @@
+# 段位認定 数据表
+# 0 为无段位，1~10 为表段，11~20 为真段，21 和 22 为真皆传、里皆传
+
+# HP 规则
+hp_rules:
+  1:
+    name: "初段"
+    hp: 350
+    great: -0
+    good: -2
+    miss: -5
+    clear: +20
+  2:
+    name: "二段"
+    hp: 350
+    great: -0
+    good: -2
+    miss: -5
+    clear: +20
+  3:
+    name: "三段"
+    hp: 600
+    great: -1
+    good: -2
+    miss: -5
+    clear: +50
+  4:
+    name: "四段"
+    hp: 700
+    great: -2
+    good: -2
+    miss: -5
+    clear: +50
+  5:
+    name: "五段"
+    hp: 700
+    great: -2
+    good: -2
+    miss: -5
+    clear: +50
+  6:
+    name: "六段"
+    hp: 700
+    great: -2
+    good: -2
+    miss: -5
+    clear: +50
+  7:
+    name: "七段"
+    hp: 700
+    great: -2
+    good: -2
+    miss: -5
+    clear: +50
+  8:
+    name: "八段"
+    hp: 700
+    great: -2
+    good: -2
+    miss: -5
+    clear: +20
+  9:
+    name: "九段"
+    hp: 800
+    great: -2
+    good: -2
+    miss: -5
+    clear: +30
+  10:
+    name: "十段"
+    hp: 900
+    great: -2
+    good: -2
+    miss: -5
+    clear: +30
+  11:
+    name: "真初段"
+    hp: 50
+    great: -2
+    good: -3
+    miss: -5
+    clear: +10
+  12:
+    name: "真二段"
+    hp: 50
+    great: -2
+    good: -3
+    miss: -5
+    clear: +10
+  13:
+    name: "真三段"
+    hp: 50
+    great: -2
+    good: -3
+    miss: -5
+    clear: +10
+  14:
+    name: "真四段"
+    hp: 50
+    great: -2
+    good: -3
+    miss: -5
+    clear: +10
+  15:
+    name: "真五段"
+    hp: 50
+    great: -2
+    good: -3
+    miss: -5
+    clear: +10
+  16:
+    name: "真六段"
+    hp: 50
+    great: -2
+    good: -3
+    miss: -5
+    clear: +10
+  17:
+    name: "真七段"
+    hp: 50
+    great: -2
+    good: -3
+    miss: -5
+    clear: +10
+  18:
+    name: "真八段"
+    hp: 50
+    great: -2
+    good: -3
+    miss: -5
+    clear: +10
+  19:
+    name: "真九段"
+    hp: 50
+    great: -2
+    good: -3
+    miss: -5
+    clear: +10
+  20:
+    name: "真十段"
+    hp: 50
+    great: -2
+    good: -3
+    miss: -5
+    clear: +10
+  21:
+    name: "真皆伝"
+    hp: 50
+    great: -2
+    good: -3
+    miss: -5
+    clear: +5
+  22:
+    name: "裏皆伝"
+    hp: 10
+    great: -1
+    good: -3
+    miss: -10
+    clear: +0
+# 乐曲列表
+song_list:
+  # ...
+  26:  # cir+
+    17:  # 真七段
+      - shortid: 11232
+        diff: 6
+      - shortid: 288
+        diff: 5
+      - shortid: 11468
+        diff: 5
+      - shortid: 11413
+        diff: 5
