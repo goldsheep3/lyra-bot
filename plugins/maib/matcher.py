@@ -309,8 +309,11 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
         s = server if maidata.version_cn is not None else "JP"  # 如果乐曲没有国服版本，则展示日服数据
         info_box = image_gen.draw_info_box(maidata, server=s, maiuser=maiuser, cn_level=1 if s == 'CN' else 0)
         info_box_bytes = image_gen.get_image_bytes(info_box)
-        await matcher.finish(Message(f"找到了乐曲 {mdt.shortid}. {mdt.title}") + MessageSegment.image(info_box_bytes))
-    
+        await matcher.finish(Message([
+            MessageSegment.text(f"找到了乐曲 {mdt.shortid}. {mdt.title}"),
+            MessageSegment.image(info_box_bytes)
+        ]))
+
     elif len(mdt_list) <= 4:
         segments = [MessageSegment.text(f"找到了 {len(mdt_list)} 首相应的乐曲！请查看以下乐曲！")]
         for mdt in mdt_list:
