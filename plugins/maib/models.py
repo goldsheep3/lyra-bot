@@ -207,8 +207,16 @@ class MaiUser(Model):
 
     jp_update_time: Mapped[int] = mapped_column(default=0)
     jp_dxrating: Mapped[int] = mapped_column(default=0)
+    jp_dxrating_b35_first: Mapped[int] = mapped_column(default=0)
+    jp_dxrating_b35_last: Mapped[int] = mapped_column(default=0)
+    jp_dxrating_b15_first: Mapped[int] = mapped_column(default=0)
+    jp_dxrating_b15_last: Mapped[int] = mapped_column(default=0)
     cn_update_time: Mapped[int] = mapped_column(default=0)
     cn_dxrating: Mapped[int] = mapped_column(default=0)
+    cn_dxrating_b35_first: Mapped[int] = mapped_column(default=0)
+    cn_dxrating_b35_last: Mapped[int] = mapped_column(default=0)
+    cn_dxrating_b15_first: Mapped[int] = mapped_column(default=0)
+    cn_dxrating_b15_last: Mapped[int] = mapped_column(default=0)
 
     # lyra-sync 字段: 在 sync_allow_time 有效期内，可以使用 sync-hash 验证身份并同步成绩
     sync_hash: Mapped[Optional[str]] = mapped_column(default=None)
@@ -232,8 +240,16 @@ class MaiUser(Model):
             plate=self.plate(),
             jp_update_time=self.jp_update_time,
             jp_dxrating=self.jp_dxrating,
+            jp_dxrating_range=(
+                (self.jp_dxrating_b35_first, self.jp_dxrating_b35_last),
+                (self.jp_dxrating_b15_first, self.jp_dxrating_b15_last)
+            ),
             cn_update_time=self.cn_update_time,
-            cn_dxrating=self.cn_dxrating
+            cn_dxrating=self.cn_dxrating,
+            cn_dxrating_range=(
+                (self.cn_dxrating_b35_first, self.cn_dxrating_b35_last),
+                (self.cn_dxrating_b15_first, self.cn_dxrating_b15_last)
+            )
         )
 
 

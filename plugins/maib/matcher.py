@@ -7,6 +7,8 @@ from typing import Optional, List, Any, cast
 
 import aiofiles
 import orjson
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from . import utils, services, image_gen, bot_services, network
 from .napcat_stream import NapCatStreamFile
@@ -470,6 +472,7 @@ async def _(event: Event, matcher: Matcher):
     user_id = int(event.get_user_id())
     data_diffs = await get_sy_and_upload(user_id)
     if data_diffs:
+        await matcher.send("正在进行水鱼数据同步")
         summary_text, diff_img = build_achievements_report(data_diffs)
         if diff_img:
             img_bytes = image_gen.get_image_bytes(diff_img)
@@ -521,18 +524,25 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
         if data_diffs:
             if target_user_id == user_id:
                 # 如果查询目标是自己，同步数据给予提示
+                await matcher.send("发现数据更新，正在进行水鱼数据同步，稍等喵~\n由于当前代码质量偏低，更新速度可能较慢，请耐心等待（")
                 summary_text, diff_img = build_achievements_report(data_diffs)
                 if diff_img:
                     img_bytes = image_gen.get_image_bytes(diff_img)
                     await matcher.send(Message([
                         MessageSegment.text(f"{summary_text}\n"),
                         MessageSegment.image(img_bytes),
+                        MessageSegment.text("\n水鱼数据同步完成！开始生成 B50 图片~"),
                     ]))
                 else:
-                    await matcher.send(summary_text)
+                    await matcher.send(Message([
+                        MessageSegment.text(f"{summary_text}\n"),
+                        MessageSegment.text("\n水鱼数据同步完成！开始生成 B50 图片~"),
+                    ]))
             else:
                 # 如果查询目标是他人，不直接展示差异图，改为提示已同步
-                await matcher.send(f"已同步其水鱼数据，正在查询 B50 数据……")
+                await matcher.send("已经同步TA的水鱼数据，开始生成 B50 图片~")
+        else:
+            await matcher.send("B50 图片生成中，请稍等~")
 
     ver_jp, ver_cn = utils.get_current_versions()
     if server == 'ALL':
@@ -757,3 +767,68 @@ async def _(bot: Bot, event: PrivateMessageEvent, matcher: Matcher):
 @get_code.handle()
 async def _(matcher: Matcher):
     await matcher.finish("lyra-sync 服务器尚未开放，请等待 API 开放后再试一下~")
+
+
+# === TEMP ===
+
+temp_refresh = on_regex(r'sudo refresh', priority=100, block=True, temp=True)
+
+@temp_refresh.handle()
+async def _(matcher: Matcher):
+    await matcher.send("开始全量重算 DXRating，请稍等喵~")
+
+    jp_current_version, cn_current_version = utils.get_current_versions()
+    current_version_by_server: dict[SERVER_TAG, int] = {
+        "JP": jp_current_version,
+        "CN": cn_current_version,
+    }
+
+    affected_user_ids: dict[SERVER_TAG, set[int]] = {
+        "JP": set(),
+        "CN": set(),
+    }
+    total_count = 0
+
+    async with PluginRegistry.get_session() as session:
+        statement = select(MaiChartAch).options(selectinload(MaiChartAch.chart))  # type: ignore
+        result = await session.execute(statement)
+        achs = result.scalars().all()
+
+        if not achs:
+            await matcher.finish("没有找到任何 MaiChartAch 记录，已跳过重算。")
+            return
+
+        for ach in achs:
+            
+            chart = ach.chart  # type: ignore
+            if not chart:
+                continue
+
+            maichart = chart.to_data()
+            ach_data = ach.to_data()  # type: ignore
+            ach_data.user_id = ach.user_id
+            maichart.set_ach(ach_data)
+
+            current_version = current_version_by_server[ach.server]
+            ap_bonus = 1 if 2000 > current_version >= 25 else 0
+            ach.dxrating = maichart.get_dxrating(server=ach.server, ap_bonus=ap_bonus, user_id=ach.user_id)  # type: ignore
+
+            if ach.user_id is not None:
+                affected_user_ids[ach.server].add(ach.user_id)
+            total_count += 1
+
+        for server in ("JP", "CN"):
+            if affected_user_ids[server]:
+                await services.refresh_user_dxrating_cache_batch(
+                    user_ids=list(affected_user_ids[server]),
+                    server=server,
+                    session=session,
+                )
+
+        await session.commit()
+
+    await matcher.finish(
+        f"全量重算完成，共处理 {total_count} 条 MaiChartAch 记录，"
+        f"已刷新 {len(affected_user_ids['JP']) + len(affected_user_ids['CN'])} 个用户缓存。"
+    )
+    

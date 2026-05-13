@@ -1166,6 +1166,8 @@ async def _recalculate_single_mct_ach_dxrating(
 async def refresh_user_dxrating_cache(user_id: int, server: SERVER_TAG,
                                       *, session: AsyncSession):
     """重算单个用户在指定服务器（JP/CN）的 DXRating 汇总缓存。"""
+    
+    # TODO 计算 DXRating 总和时，额外考虑 models 新增的 b35 和 b15 的 first 和 last 字段，定义天花板和地板用于推分建议等功能
 
     cache_server = _normalize_server_for_user_cache(server)
     cut_version = _get_current_version_by_server(cache_server)

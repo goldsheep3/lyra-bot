@@ -523,8 +523,10 @@ class MaiUser:
 
     jp_update_time: int = 0
     jp_dxrating: int = 0
+    jp_dxrating_range: tuple[tuple[int, int], tuple[int, int]] = ((0, 0), (0, 0))  # ((B35 first/last), (B15 first/last) )  
     cn_update_time: int = 0
     cn_dxrating: int = 0
+    cn_dxrating_range: tuple[tuple[int, int], tuple[int, int]] = ((0, 0), (0, 0))  # ((B35 first/last), (B15 first/last) )  
 
     # 缓存
     jp_current_version: int = -1
@@ -536,6 +538,13 @@ class MaiUser:
             'JP': self.jp_dxrating,
             'CN': self.cn_dxrating
         }.get(self.default_server, 0)
+
+    def get_dxrating_range(self, server: SERVER_TAG | None = None) -> tuple[tuple[int, int], tuple[int, int]]:
+        server = server or self.default_server
+        return {
+            'JP': self.jp_dxrating_range,
+            'CN': self.cn_dxrating_range
+        }.get(server, ((0, 0), (0, 0)))
 
     def get_username(self) -> str:
         return self.username or "maimai"
