@@ -14,6 +14,7 @@ from . import utils, services, image_gen, bot_services, network
 from .napcat_stream import NapCatStreamFile
 from .report import build_achievements_report, build_import_report
 from .utils import MaiChart, MaiChartAch
+from .models import MaiChartAch as MaiChartAchModel
 from .constants import *
 from .bot_registry import PluginRegistry
 
@@ -771,6 +772,7 @@ async def _(matcher: Matcher):
 
 # === TEMP ===
 
+# 仅用于最近 DXRating 明显错误问题的修复尝试
 temp_refresh = on_regex(r'sudo refresh', priority=100, block=True, temp=True)
 
 @temp_refresh.handle()
@@ -790,7 +792,7 @@ async def _(matcher: Matcher):
     total_count = 0
 
     async with PluginRegistry.get_session() as session:
-        statement = select(MaiChartAch).options(selectinload(MaiChartAch.chart))  # type: ignore
+        statement = select(MaiChartAchModel).options(selectinload(MaiChartAchModel.chart))
         result = await session.execute(statement)
         achs = result.scalars().all()
 
@@ -800,18 +802,18 @@ async def _(matcher: Matcher):
 
         for ach in achs:
             
-            chart = ach.chart  # type: ignore
+            chart = ach.chart
             if not chart:
                 continue
 
             maichart = chart.to_data()
-            ach_data = ach.to_data()  # type: ignore
-            ach_data.user_id = ach.user_id
+            ach_data = ach.to_data()
+            ach_data.user_id = ach.user_id or 0
             maichart.set_ach(ach_data)
 
             current_version = current_version_by_server[ach.server]
             ap_bonus = 1 if 2000 > current_version >= 25 else 0
-            ach.dxrating = maichart.get_dxrating(server=ach.server, ap_bonus=ap_bonus, user_id=ach.user_id)  # type: ignore
+            ach.dxrating = maichart.get_dxrating(server=ach.server, ap_bonus=ap_bonus, user_id=ach.user_id)
 
             if ach.user_id is not None:
                 affected_user_ids[ach.server].add(ach.user_id)
