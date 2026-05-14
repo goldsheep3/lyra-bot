@@ -84,10 +84,10 @@ async def get_mdt_by_id(shortid: int, achs_userid: int | None = None, *, session
     result = await session.execute(statement)
     return result.scalar_one_or_none()
 
-# 通过 `曲名` 获取 `MaiData`（唯一）
+# 通过 `曲名` 获取 `MaiData`（列表）
 @with_session
-async def get_mdt_by_title(title: str, achs_userid: int | None = None, *, session: AsyncSession) -> Optional[MaiData]:
-    """通过 `曲名` 获取 `MaiData`（唯一）"""
+async def get_mdt_by_title(title: str, achs_userid: int | None = None, *, session: AsyncSession) -> Sequence[MaiData]:
+    """通过 `曲名` 获取 `MaiData`（列表）"""
     statement = (
         select(MaiData)
         .options(
@@ -100,7 +100,7 @@ async def get_mdt_by_title(title: str, achs_userid: int | None = None, *, sessio
         .distinct()
     )
     result = await session.execute(statement)
-    return result.scalar_one_or_none()
+    return result.scalars().all()
 
 # 通过 `曲名/别名` 获取 `MaiData`（列表）
 @with_session
@@ -932,11 +932,6 @@ async def sync_mdt_list(mdt_list: list[MaiData], *, session: AsyncSession):
                     existing.charts.append(new_mct)
 
 
-def _normalize_server_for_user_cache(server: SERVER_TAG) -> Literal["JP", "CN"]:
-    """将服务器标签归一到 `MaiUser` 缓存字段使用的 JP/CN。"""
-    return "CN" if server == "CN" else "JP"
-
-
 def _get_current_version_by_server(server: SERVER_TAG) -> int:
     """获取对应服务器的当前版本号"""
     jp_ver, cn_ver = utils.get_current_versions()
@@ -1169,8 +1164,8 @@ async def refresh_user_dxrating_cache(user_id: int, server: SERVER_TAG,
     
     # TODO 计算 DXRating 总和时，额外考虑 models 新增的 b35 和 b15 的 first 和 last 字段，定义天花板和地板用于推分建议等功能
 
-    cache_server = _normalize_server_for_user_cache(server)
-    cut_version = _get_current_version_by_server(cache_server)
+    cache_server = "CN" if server == "CN" else "JP"
+    cut_version = get_cut_version(server)
 
     b35, b15 = await get_mdts_for_b50(
         user_id=user_id,

@@ -672,7 +672,7 @@ async def _(bot: Bot, event: PrivateMessageEvent, matcher: Matcher):
     await matcher.send("检查到 lyra-maimai 数据导出！正在识别曲目并记录成绩...")
     user_id = int(event.get_user_id())
     ach_list = []
-    title_cache = {}  # 缓存标题查询结果
+    title_type_cache: dict[tuple[str, str], int | None] = {}
     unmatched_titles: list[str] = []
     invalid_diff_items: list[str] = []
     parse_failed_items: list[str] = []
@@ -687,46 +687,56 @@ async def _(bot: Bot, event: PrivateMessageEvent, matcher: Matcher):
             title = str(record.get("title", "")).strip() or "(无标题)"
             record_type = str(record.get("type", "sd")).lower() # 'sd' 或 'dx'
             
-            if title not in title_cache:
-                song = await services.get_mdt_by_title(title)
-                if not song:
-                    title_cache[title] = None
-                title_cache[title] = song.shortid if song else None
+            if (title, record_type) not in title_type_cache:
+                song_list = await services.get_mdt_by_title(title)
+                if len(song_list) == 0:
+                    # Not Found
+                    title_type_cache[(title, record_type)] = None
+                    logger.warning(f"无法找到曲目: {title}")
+                    append_unique(unmatched_titles, title)
+                    continue
+                elif len(song_list) == 1:
+                    # 有且只有一个
+                    title_type_cache[(title, record_type)] = song_list[0].shortid
+                else:
+                    # 有多个，包含sd/dx/utage等版本，尝试根据 type 进一步筛选
+                    filtered = []
+                    if record_type == "dx":
+                        filtered = [s for s in song_list if 100000 > s.shortid >= 10000]
+                    elif record_type in ("sd", "std"):
+                        filtered = [s for s in song_list if s.shortid < 10000]
 
-            base_id = title_cache[title]
-            if base_id is None:
-                logger.warning(f"无法找到曲目: {title}")
-                append_unique(unmatched_titles, title)
-                continue
-
-            # --- 关键：SD/DX ID 偏移逻辑 ---
-            if record_type == "dx":
-                # DX 曲目：如果是基础 ID (<10000)，则补足 10000
-                shortid = base_id + 10000 if base_id < 10000 else base_id
-            else:
-                # SD 曲目：如果是偏移 ID (>=10000)，则剔除 10000
-                shortid = base_id - 10000 if base_id >= 10000 else base_id
-
+                    if len(filtered) == 1:
+                        title_type_cache[(title, record_type)] = filtered[0].shortid
+                    else:
+                        title_type_cache[(title, record_type)] = None
+                        logger.warning(f"无法找到曲目: {title}，type: {record_type}")
+                        append_unique(unmatched_titles, f"{title}[{record_type.upper()}]")
+                        continue
+ 
             # 提取其他字段
             difficulty = DIFFS_MAP.get(record.get("diff", "").lower(), -1)
             if difficulty < 0:
                 append_unique(invalid_diff_items, f"{title}[{record.get('diff', '?')}]")
                 continue
 
-            ach_obj = MaiChartAch(
-                shortid=shortid,
-                difficulty=difficulty,
-                server=record.get("server", "JP"),
-                achievement=float(record.get("achievement", 0)),
-                dxscore=int(record.get("dxscore", 0)),
-                combo=DF_FC_MAP.get(record.get("combo", "").lower(), 0),
-                sync=DF_FS_MAP.get(record.get("sync", "").lower(), 0),
-                user_id=user_id
-            )
-            ach_list.append(ach_obj)
+            shortid = title_type_cache[(title, record_type)]
+            if shortid is not None:
+
+                ach_obj = MaiChartAch(
+                    shortid=shortid,
+                    difficulty=difficulty,
+                    server=record.get("server", "JP"),
+                    achievement=float(record.get("achievement", 0)),
+                    dxscore=int(record.get("dxscore", 0)),
+                    combo=DF_FC_MAP.get(record.get("combo", "").lower(), 0),
+                    sync=DF_FS_MAP.get(record.get("sync", "").lower(), 0),
+                    user_id=user_id
+                )
+                ach_list.append(ach_obj)
 
         except Exception as e:
-            logger.warning(f"单条记录处理失败: {e}")
+            logger.warning(f"记录处理失败: {e}")
             if isinstance(record, dict):
                 rec_title = str(record.get("title", "")).strip() or "(无标题)"
                 append_unique(parse_failed_items, rec_title)
