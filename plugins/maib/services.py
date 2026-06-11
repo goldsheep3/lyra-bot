@@ -48,23 +48,94 @@ BASE_STMT = (
     )
 
 # 模糊查询结果过多时的最大允许值，超过该值会抛出 ValueError 异常
-MAX_BLUR_SEARCH_RESULTS = 100
+MAX_BLUR_SEARCH_RESULTS = 30
 
+# === 业务逻辑：用户信息相关 ===
 
-# === 实际业务逻辑 ===
-# --- 查 (get) ---
-
-# 通过 `user_id` 获取 `MaiUser`（唯一）
-# 通常使用 `get_or_set_user_by_id` 替代，后者会在用户不存在时自动创建
 @with_session
-async def get_user_by_id(user_id: int, *, session: AsyncSession) -> Optional[MaiUser]:
+async def _get_user_by_id(user_id: int, *, session: AsyncSession) -> Optional[MaiUser]:
     """通过 `user_id` 获取 `MaiUser`（唯一）"""
+    # 通常通过 `get_or_create_user_by_id` 直接调用
     statement = (
         select(MaiUser)
         .where(MaiUser.user_id == user_id)
     )
     result = await session.execute(statement)
     return result.scalar_one_or_none()
+
+async def get_or_create_user_by_id(user_id: int) -> utils.MaiUser:
+    """通过 `user_id` 获取用户数据，支持不存在自动创建"""
+    # 该方法不接受外部 session，内部自行管理生命周期
+    async with PluginRegistry.get_session() as session:
+        user = await _get_user_by_id(user_id, session=session)
+        if user:
+            return user.to_data()
+
+        new_user = MaiUser(user_id=user_id)
+        session.add(new_user)
+        await session.commit()
+        await session.refresh(new_user)
+        return new_user.to_data()
+
+@with_session
+async def get_user_by_telegram_id(telegram_id: int, *, session: AsyncSession) -> Optional[MaiUser]:
+    """通过 `telegram_id` 获取 `MaiUser`（唯一）"""
+    statement = (
+        select(MaiUser)
+        .where(MaiUser.user_telegram_id == telegram_id)
+    )
+    result = await session.execute(statement)
+    return result.scalar_one_or_none()
+
+@with_session
+async def set_username(user_id: int, new_username: str, *, session: AsyncSession):
+    """通过 `user_id` 设置 `MaiUser` 的 `username`"""
+
+    statement = (
+        select(MaiUser)
+        .where(MaiUser.user_id == user_id)
+    )
+    result = await session.execute(statement)
+    user = result.scalar_one_or_none()
+    
+    if user:
+        user.username = new_username
+
+@with_session
+async def set_telegram_id(user_id: int, telegram_id: int, *, session: AsyncSession):
+    """通过 `user_id` 设置 `MaiUser` 的 `telegram_id`"""
+
+    statement = (
+        select(MaiUser)
+        .where(MaiUser.user_id == user_id)
+    )
+    result = await session.execute(statement)
+    user = result.scalar_one_or_none()
+    
+    if user:
+        user.user_telegram_id = telegram_id
+
+@with_session
+async def remove_telegram_id(user_id: int, *, session: AsyncSession):
+    """通过 `user_id` 移除 `MaiUser` 的 `telegram_id`"""
+
+    statement = (
+        select(MaiUser)
+        .where(MaiUser.user_id == user_id)
+    )
+    result = await session.execute(statement)
+    user = result.scalar_one_or_none()
+    
+    if user:
+        user.user_telegram_id = None
+
+
+
+
+# === 实际业务逻辑 ===
+# --- 查 (get) ---
+
+
 
 # 通过 `shortid` 获取 `MaiData`（唯一）
 @with_session
@@ -840,32 +911,10 @@ async def set_mct_ach(server: SERVER_TAG, ach: utils.MaiChartAch,
     return None
 
 
-# 设置 `MaiUser` 的 `username`
-@with_session
-async def set_username(user_id: int, new_username: str,
-                       *, session: AsyncSession):
-    """
-    设置 `MaiUser` 的 `username`
-    Args:
-      user_id: 用户 ID
-      new_username: 新用户名
-    """
-
-    statement = (
-        select(MaiUser)
-        .where(MaiUser.user_id == user_id)
-    )
-    result = await session.execute(statement)
-    user = result.scalar_one_or_none()
-    
-    if user:
-        user.username = new_username
-
-
 @with_session
 async def get_last_sy_hash(user_id: int, *, session: AsyncSession) -> Optional[str]:
     """获取用户上次水鱼 records 的哈希值。"""
-    user = await get_user_by_id(user_id=user_id, session=session)
+    user = await _get_user_by_id(user_id=user_id, session=session)
     if not user:
         return None
     return user.last_sy_hash
@@ -874,7 +923,7 @@ async def get_last_sy_hash(user_id: int, *, session: AsyncSession) -> Optional[s
 @with_session
 async def set_last_sy_hash(user_id: int, sy_hash: str, *, session: AsyncSession):
     """写入用户最新的水鱼 records 哈希值。"""
-    user = await get_user_by_id(user_id=user_id, session=session)
+    user = await _get_user_by_id(user_id=user_id, session=session)
     if not user:
         user = MaiUser(user_id=user_id)
         session.add(user)
@@ -1181,7 +1230,7 @@ async def refresh_user_dxrating_cache(user_id: int, server: SERVER_TAG,
     )
     latest_update_time = (await session.execute(latest_update_stmt)).scalar_one_or_none() or 0
 
-    user = await get_user_by_id(user_id=user_id, session=session)
+    user = await _get_user_by_id(user_id=user_id, session=session)
     if not user:
         user = MaiUser(user_id=user_id)
         session.add(user)
@@ -1293,21 +1342,6 @@ async def refresh_dxrating_cache_by_chart_user(shortid: int, difficulty: int, se
         current_version=current_version,
     )
     await refresh_user_dxrating_cache(user_id=user_id, server=server, session=session)
-
-
-async def get_or_set_user_by_id(user_id: int) -> utils.MaiUser:
-    """通过 `user_id` 获取用户数据，如果不存在则创建一个新的"""
-    # 该方法不接受外部 session，内部自行管理生命周期
-    async with PluginRegistry.get_session() as session:
-        user = await get_user_by_id(user_id, session=session)
-        if user:
-            return user.to_data()
-
-        new_user = MaiUser(user_id=user_id)
-        session.add(new_user)
-        await session.commit()
-        await session.refresh(new_user)
-        return new_user.to_data()
 
 
 @with_session

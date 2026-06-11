@@ -2,6 +2,7 @@ import base64
 import hashlib
 import re
 import time
+import random
 from pathlib import Path
 from typing import Optional, List, Any, cast
 
@@ -13,7 +14,7 @@ from sqlalchemy.orm import selectinload
 from . import utils, services, image_gen, bot_services, network
 from .napcat_stream import NapCatStreamFile
 from .report import build_achievements_report, build_import_report
-from .utils import MaiChart, MaiChartAch
+from .utils import MaiChart, MaiChartAch, link_cache, link_hash_index
 from .models import MaiChartAch as MaiChartAchModel
 from .constants import *
 from .bot_registry import PluginRegistry
@@ -22,6 +23,9 @@ from nonebot import logger, on_regex, on_message
 from nonebot.rule import Rule
 from nonebot.params import RegexGroup
 from nonebot.internal.matcher import Matcher
+# from nonebot.adapters import Bot, Event, Message, MessageSegment
+from nonebot.adapters.onebot.v11 import Event as OneBotV11Event
+from nonebot.adapters.telegram import Event as TGEvent
 from nonebot.adapters.onebot.v11 import Bot, Event, Message, MessageSegment, MessageEvent, PrivateMessageEvent
 from nonebot.adapters.onebot.v11.exception import ActionFailed
 
@@ -62,8 +66,34 @@ ra_calc = on_regex(r"^ra\s+(\S+)?\s+(\S+)", priority=5, block=True)
 file_receiver = on_message(priority=25, rule=is_private_file())
 # 获取 code
 get_code = on_regex(r"^获取code$", priority=5, block=True, rule=is_private_file())
+# link 查询与绑定
+link = on_regex(r"^(查询|获取|绑定|解除|解绑)?link(?:\s+(\S+))?$", priority=5, block=True)
+
+
+# --- reply dict ---
+
+_REPLY_DICT: dict[str, str | list[str]] = {
+    # link 查询与绑定
+    "link_query_disabled": "查询功能正在开发中，敬请期待！",
+    "link_only_qq": "此操作仅支持通过 QQ 进行",
+    "link_tip": "请在其他平台的 LyraBot 中输入以下命令完成绑定，该信息五分钟内有效。",
+    "link_invalid_hash": "提供的 hash 值无效或已过期",
+    "link_not_found": "未找到匹配的绑定信息",
+    "link_success": "绑定成功！",
+    "link_unlink_success": "解绑成功！",
+    "link_not_platform": "未知平台",
+}
+
 
 # --- tool functions ---
+
+def reply(key: str, **kwargs) -> str:
+    text_or_list = _REPLY_DICT.get(key, "")
+    if isinstance(text_or_list, list):
+        text = random.choice(text_or_list)
+    else:
+        text = text_or_list
+    return text.format(**kwargs)
 
 def to_int(val):
     try:
@@ -89,7 +119,6 @@ def get_args(args_text: str) -> tuple[int | None, SERVER_TAG | Literal['ALL'] | 
                 target_server = 'CN'
     return target_user_id, target_server
 
-
 async def _finish_with_optional_image(matcher: Matcher, text: str, image_bytes: bytes, *, fallback_text: str | None = None):
     try:
         await matcher.finish(Message([
@@ -100,11 +129,9 @@ async def _finish_with_optional_image(matcher: Matcher, text: str, image_bytes: 
         logger.warning(f"图片发送失败，已降级为纯文本: {exc}")
         await matcher.finish(fallback_text or text)
 
-
 def _stable_json_dumps(data: Any) -> bytes:
     """稳定序列化：固定 key 顺序并去除空白，避免顺序差异导致 hash 变化。"""
     return orjson.dumps(data, option=orjson.OPT_SORT_KEYS)
-
 
 def _build_sy_records_hash(records: list[dict[str, Any]]) -> str:
     """为水鱼 records 生成稳定 MD5 指纹。"""
@@ -116,6 +143,97 @@ def _build_sy_records_hash(records: list[dict[str, Any]]) -> str:
 # =================================
 # 业务逻辑
 # =================================
+
+@link.handle()
+async def _(event, groups: tuple = RegexGroup()):
+    """处理命令: link"""
+    action, args_text = groups
+    global link_cache, link_hash_index
+    
+    # 查询分支
+    if action == "查询":
+        await link.finish(reply("link_query_disabled"))
+        return
+    
+    # 获取/绑定分支
+    elif action in ("获取", "绑定"):
+        # 检查是否为 Onebot (QQ) 平台
+        if not isinstance(event, OneBotV11Event):
+            await link.finish(reply("link_only_qq"))
+            return
+        
+        # 生成随机 hash 并设置五分钟到期
+        import secrets
+        hash_value = secrets.token_hex(8)
+        expiration_time = int(time.time()) + 300
+        
+        # 存储到缓存中
+        user_id = int(event.get_user_id())
+        _ = await services.get_or_create_user_by_id(user_id)
+        link_cache[user_id] = (hash_value, expiration_time)
+        link_hash_index[hash_value] = user_id
+        
+        # 发送提示文案和绑定指令
+        await link.send(reply("link_tip"))
+        await link.finish(f"link {hash_value}")
+        return
+    
+    # 解除/解绑分支
+    elif action in ("解除", "解绑"):
+        if isinstance(event, OneBotV11Event):
+            # QQ 端解绑全部
+            user_id = int(event.get_user_id())
+            await services.remove_telegram_id(user_id)
+            await link.finish(reply("link_unlink_success"))
+            return
+        elif isinstance(event, TGEvent):
+            # TG 端解绑当前账号
+            telegram_id = int(event.get_user_id())
+            maiuser = await services.get_user_by_telegram_id(telegram_id)
+            if maiuser:
+                await services.remove_telegram_id(maiuser.user_id)
+            await link.finish(reply("link_unlink_success"))
+            return
+        await link.finish(reply("link_not_platform"))
+    
+    # 验证分支（action为空）
+    else:
+        if not args_text:
+            await link.finish(reply("link_invalid_hash"))
+            return
+        
+        provided_hash = args_text.strip()
+        
+        # 通过反向索引直接查找
+        if provided_hash not in link_hash_index:
+            await link.finish(reply("link_not_found"))
+            return
+        
+        user_id = link_hash_index[provided_hash]
+        _, expiration_time = link_cache[user_id]
+        
+        # 先检查时间是否过期
+        current_time = int(time.time())
+        if current_time > expiration_time:
+            del link_cache[user_id]
+            del link_hash_index[provided_hash]
+            await link.finish(reply("link_invalid_hash"))
+            return
+        
+        # 验证成功，执行绑定逻辑
+        if isinstance(event, TGEvent):
+            await services.set_telegram_id(user_id, telegram_id=int(event.get_user_id()))
+            
+            # 清理缓存
+            del link_cache[user_id]
+            del link_hash_index[provided_hash]
+            await link.finish(reply("link_success"))
+            return
+        
+        # 非支持平台（理论上不会到达）
+        await link.finish(reply("link_not_platform"))
+        return
+
 
 @adx_download.handle()
 async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup()): 
@@ -251,7 +369,7 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
     """处理命令: id11451 / info11451"""
     _, short_id, args = groups
     user_id = int(event.get_user_id())
-    maiuser = await services.get_or_set_user_by_id(user_id)
+    maiuser = await services.get_or_create_user_by_id(user_id)
     if not maiuser.username:
         maiuser.username = await get_username(event, bot)
     _, server = get_args(args)
@@ -288,7 +406,7 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
     blur_search = bool(all_tag and all_tag.strip() in ['?', '？'])
     keyword = keyword.strip(' ')
     user_id = int(event.get_user_id())
-    maiuser = await services.get_or_set_user_by_id(user_id)
+    maiuser = await services.get_or_create_user_by_id(user_id)
     if not maiuser.username:
         maiuser.username = await get_username(event, bot)
     server = maiuser.default_server
@@ -551,7 +669,7 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
         return
     current_version = ver_cn if server == 'CN' else ver_jp
 
-    target_maiuser = await services.get_or_set_user_by_id(target_user_id)
+    target_maiuser = await services.get_or_create_user_by_id(target_user_id)
     if not target_maiuser.username:
         target_maiuser.username = await get_username(event, bot, user_id=target_user_id)
     cut_version = services.get_cut_version(server)
@@ -843,4 +961,3 @@ async def _(matcher: Matcher):
         f"全量重算完成，共处理 {total_count} 条 MaiChartAch 记录，"
         f"已刷新 {len(affected_user_ids['JP']) + len(affected_user_ids['CN'])} 个用户缓存。"
     )
-    

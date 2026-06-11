@@ -13,6 +13,15 @@ from loguru import logger
 
 from .constants import *  # 导入常量表
 
+
+# Cache
+link_cache: dict[int, tuple[str, int]] = {
+    # user_id: (link_hash, expiration_timestamp)
+}
+link_hash_index: dict[str, int] = {
+    # hash -> user_id
+}
+
 def parse_status(target: str, mapping: Dict[str, int]) -> int:
     """通过映射表常量进行数值获取"""
     return mapping.get(target.lower(), 0)
@@ -140,6 +149,9 @@ async def parse_genre(genre_str: str, genre_dict_fixed: dict[str, int]) -> int:
         logger.warning(f"无法解析流派名: {genre_str}")
         return -1
     return g
+
+
+# ==============================================================
 
 @dataclass
 class MaiAlias:
@@ -515,6 +527,7 @@ class MaiData:
 @dataclass
 class MaiUser:
     user_id: int
+    user_telegram_id: Optional[int] = None
     username: str = ''
     default_server: SERVER_TAG = 'CN'
     # 牌子：元素1 和 JP 版本对应；元素2 的 1~4 分别表示 极 将 神 舞舞
@@ -585,6 +598,12 @@ class MaiUser:
             self.jp_current_version = version
         elif server == 'CN':
             self.cn_current_version = version
+
+    def set_telegram_id(self, telegram_id: int):
+        self.user_telegram_id = telegram_id
+
+    def remove_telegram_id(self):
+        self.user_telegram_id = None
 
 
 class SimaiNoteCount:

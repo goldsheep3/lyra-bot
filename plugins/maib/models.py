@@ -199,7 +199,8 @@ class MaiData(Model):
 class MaiUser(Model):
     __tablename__ = "maib_maiusers"
 
-    user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)  # QQ
+    user_telegram_id: Mapped[Optional[int]] = mapped_column(BigInteger, default=None, nullable=True, index=True, unique=True)  # Telegram ID
     username: Mapped[str] = mapped_column(default='')
     default_server: Mapped[SERVER_TAG] = mapped_column(default='CN')
     plate_version: Mapped[int | None] = mapped_column(default=None)  # 牌子信息
@@ -235,6 +236,7 @@ class MaiUser(Model):
         # lyra-sync 相关字段不包含在 utils.MaiUser
         return utils.MaiUser(
             user_id=self.user_id,
+            user_telegram_id=self.user_telegram_id,
             username=self.username,
             default_server=self.default_server,
             plate=self.plate(),
@@ -345,6 +347,7 @@ class MaiDataModel:
         """根据 utils.MaiUser 对象创建 MaiUser 模型实例"""
         return MaiUser(
             user_id=user.user_id,
+            user_telegram_id=user.user_telegram_id,
             username=user.username,
             default_server=user.default_server,
             plate_version=user.plate[0] if user.plate else None,
