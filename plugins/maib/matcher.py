@@ -234,7 +234,7 @@ async def _(event, groups: tuple = RegexGroup()):
         await link.finish(reply("link_not_platform"))
         return
 
-
+# TODO TG适配
 @adx_download.handle()
 async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup()): 
     """处理命令: 下载谱面11568"""
@@ -363,7 +363,7 @@ async def get_username(event, bot, user_id: int | None = None) -> str:
     return resolved_name
 
 
-
+# TODO TG适配
 @mai_info.handle()
 async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
     """处理命令: id11451 / info11451"""
@@ -398,7 +398,7 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
     
     await matcher.finish(Message(f"{mdt.shortid}. {mdt.title}") + MessageSegment.image(info_box_bytes))
 
-
+# TODO TG适配
 @mai_what_song.handle()
 async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
     """处理命令: xxx是什么歌"""
@@ -455,7 +455,7 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
         ]))
         return
 
-
+# TODO TG适配
 @alias_setting.handle()
 async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
     """处理命令: 添加别名 id11451 xxx / 删除别名 id11451 xxx"""
@@ -483,7 +483,7 @@ async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
     else:
         await matcher.finish("还不支持自主删除别名喔，请联系监护人处理~")
 
-
+# TODO TG适配
 @ra_calc.handle()
 async def _(matcher: Matcher, groups: tuple = RegexGroup()):
     """处理命令: ra 13.2 100.1000"""
@@ -584,7 +584,7 @@ async def get_sy_and_upload(user_id: int) -> list[dict] | None:
 
     return data_diffs
 
-
+# TODO TG适配
 @sync_sy.handle()
 async def _(event: Event, matcher: Matcher):
     """处理命令: sytb"""
@@ -605,7 +605,7 @@ async def _(event: Event, matcher: Matcher):
 
     await matcher.finish("已完成水鱼同步，似乎没有数据更新~")
 
-
+# TODO TG适配
 @b50.handle()
 async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
     """处理命令: xxxb50/xxxkkb xxx"""
@@ -718,7 +718,7 @@ async def _(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup
         MessageSegment.image(img_bytes),
     ]))
 
-
+# TODO TG适配
 @file_receiver.handle()
 async def _(bot: Bot, event: PrivateMessageEvent, matcher: Matcher):
 
@@ -892,72 +892,7 @@ async def _(bot: Bot, event: PrivateMessageEvent, matcher: Matcher):
 
     await matcher.finish(f"{summary_text}{warning_text}")
 
-
+# TODO TG适配
 @get_code.handle()
 async def _(matcher: Matcher):
     await matcher.finish("lyra-sync 服务器尚未开放，请等待 API 开放后再试一下~")
-
-
-# === TEMP ===
-
-# 仅用于最近 DXRating 明显错误问题的修复尝试
-temp_refresh = on_regex(r'sudo refresh', priority=100, block=True, temp=True)
-
-@temp_refresh.handle()
-async def _(matcher: Matcher):
-    await matcher.send("开始全量重算 DXRating，请稍等喵~")
-
-    jp_current_version, cn_current_version = utils.get_current_versions()
-    current_version_by_server: dict[SERVER_TAG, int] = {
-        "JP": jp_current_version,
-        "CN": cn_current_version,
-    }
-
-    affected_user_ids: dict[SERVER_TAG, set[int]] = {
-        "JP": set(),
-        "CN": set(),
-    }
-    total_count = 0
-
-    async with PluginRegistry.get_session() as session:
-        statement = select(MaiChartAchModel).options(selectinload(MaiChartAchModel.chart))
-        result = await session.execute(statement)
-        achs = result.scalars().all()
-
-        if not achs:
-            await matcher.finish("没有找到任何 MaiChartAch 记录，已跳过重算。")
-            return
-
-        for ach in achs:
-            
-            chart = ach.chart
-            if not chart:
-                continue
-
-            maichart = chart.to_data()
-            ach_data = ach.to_data()
-            ach_data.user_id = ach.user_id or 0
-            maichart.set_ach(ach_data)
-
-            current_version = current_version_by_server[ach.server]
-            ap_bonus = 1 if 2000 > current_version >= 25 else 0
-            ach.dxrating = maichart.get_dxrating(server=ach.server, ap_bonus=ap_bonus, user_id=ach.user_id)
-
-            if ach.user_id is not None:
-                affected_user_ids[ach.server].add(ach.user_id)
-            total_count += 1
-
-        for server in ("JP", "CN"):
-            if affected_user_ids[server]:
-                await services.refresh_user_dxrating_cache_batch(
-                    user_ids=list(affected_user_ids[server]),
-                    server=server,
-                    session=session,
-                )
-
-        await session.commit()
-
-    await matcher.finish(
-        f"全量重算完成，共处理 {total_count} 条 MaiChartAch 记录，"
-        f"已刷新 {len(affected_user_ids['JP']) + len(affected_user_ids['CN'])} 个用户缓存。"
-    )
