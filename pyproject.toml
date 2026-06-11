@@ -16,9 +16,10 @@ dependencies = [
     "mcrcon>=0.7.0",
     "nb-cli>=1.7.3",
     "nonebot-adapter-onebot>=2.4.6",
+    "nonebot-adapter-telegram>=0.1.0b20",
     "nonebot-plugin-datastore>=1.3.1",
     "nonebot-plugin-localstore>=0.7.4",
-    "nonebot2[fastapi]>=2.4.4",
+    "nonebot2[fastapi,httpx]>=2.5.0",
     "numpy>=2.4.2",
     "orjson>=3.11.7",
     "paramiko>=4.0.0",
@@ -43,3 +44,4 @@ nonebot-plugin-datastore = ["nonebot_plugin_datastore"]
 [tool.nonebot.adapters]
 "@local" = []
 nonebot-adapter-onebot = [{name = "OneBot V11", module_name = "nonebot.adapters.onebot.v11"}]
+nonebot-adapter-telegram = [{name = "Telegram", module_name = "nonebot.adapters.telegram"}]
