@@ -63,19 +63,19 @@ async def _get_user_by_id(user_id: int, *, session: AsyncSession) -> Optional[Ma
     result = await session.execute(statement)
     return result.scalar_one_or_none()
 
-async def get_or_create_user_by_id(user_id: int) -> utils.MaiUser:
+async def get_or_create_user_by_id(user_id: int) -> MaiUser:
     """通过 `user_id` 获取用户数据，支持不存在自动创建"""
     # 该方法不接受外部 session，内部自行管理生命周期
     async with PluginRegistry.get_session() as session:
         user = await _get_user_by_id(user_id, session=session)
         if user:
-            return user.to_data()
+            return user
 
         new_user = MaiUser(user_id=user_id)
         session.add(new_user)
         await session.commit()
         await session.refresh(new_user)
-        return new_user.to_data()
+        return new_user
 
 @with_session
 async def get_user_by_telegram_id(telegram_id: int, *, session: AsyncSession) -> Optional[MaiUser]:
