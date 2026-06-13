@@ -83,15 +83,25 @@ DF_FS_MAP = _get_map(DF_FS_DICT)
 
 # 难度解析映射
 DIFFS_DICT = dict(enumerate([
-    ("蓝", 'easy'),
-    ("绿", 'basic'),
-    ("黄", 'advanced'),
-    ("红", 'expert'),
-    ("紫", 'master'),
-    ("白", 'remaster', 're:master'),
-    ('宴', '宴会场', '宴·会·场', 'utage', 'u·ta·ge'),
+    ("蓝", 'EASY', 'easy'),
+    ("绿", 'BASIC', 'basic'),
+    ("黄", 'ADVANCED', 'advanced'),
+    ("红", 'EXPERT', 'expert'),
+    ("紫", 'MASTER', 'master'),
+    ("白", 'Re:MASTER', 'remaster', 're:master', 'REMASTER', 'ReMASTER', 'Re:MASTER'),
+    ('宴', 'U·TA·GE', '宴会场', '宴·会·场', 'utage', 'u·ta·ge'),
 ], start=1))
 DIFFS_MAP = _get_map(DIFFS_DICT)
+
+# 构建标签字典
+_COMBO_LABELS = {code: value[0].upper() for code, value in DF_FC_DICT.items()}
+_COMBO_LABELS[0] = ''
+
+_SYNC_LABELS = {code: value[0].upper() for code, value in DF_FS_DICT.items()}
+_SYNC_LABELS[0] = ''
+
+_DIFF_NAMES = ["EASY", "BASIC", "ADVANCED", "EXPERT", "MASTER", "Re:MASTER"]
+_DIFF_LABELS = {i: name for i, name in enumerate(_DIFF_NAMES, start=1)}
 
 # 服务器标识类型
 SERVER_TAG = Literal["JP", "CN"]

@@ -6,7 +6,7 @@ import zipfile
 from thefuzz import process
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Optional, List, Tuple, Literal
+from typing import Optional, Literal
 
 from PIL import Image
 from loguru import logger
@@ -22,7 +22,7 @@ link_hash_index: dict[str, int] = {
     # hash -> user_id
 }
 
-def parse_status(target: str, mapping: Dict[str, int]) -> int:
+def parse_status(target: str, mapping: dict[str, int]) -> int:
     """通过映射表常量进行数值获取"""
     return mapping.get(target.lower(), 0)
 
@@ -257,7 +257,7 @@ class MaiChart:
         )
 
     @property
-    def notes(self) -> Tuple[int, int, int, int, int]:
+    def notes(self) -> tuple[int, int, int, int, int]:
         """返回一个包含所有 Note 统计数据的元组"""
         return (
             self.note_count_tap,
@@ -365,7 +365,7 @@ class MaiData:
     # 0~6 分别对应 Easy, Basic, Advanced, Expert, Master, Re: Master, Utage
     _charts: list[MaiChart | None] = field(default_factory=lambda: [None] * 7)
 
-    aliases: List[MaiAlias] = field(default_factory=list)  # 歌曲别名列表
+    aliases: list[MaiAlias] = field(default_factory=list)  # 歌曲别名列表
 
     @property
     def is_cabinet_dx(self) -> bool:
@@ -515,7 +515,7 @@ class MaiData:
             # 5. 更新到内存对象中
             self.set_chart_ach(diff, ach)
 
-    def add_aliases(self, aliases: List[MaiAlias]):
+    def add_aliases(self, aliases: list[MaiAlias]):
         """添加多个别名"""
         existing_alias_names = {a.alias for a in self.aliases}
         for alias in aliases:
@@ -605,6 +605,7 @@ class MaiUser:
     def remove_telegram_id(self):
         self.user_telegram_id = None
 
+# ---
 
 class SimaiNoteCount:
     """

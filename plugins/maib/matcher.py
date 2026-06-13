@@ -13,7 +13,8 @@ from sqlalchemy.orm import selectinload
 
 from . import utils, services, image_gen, bot_services, network, models
 from .napcat_stream import NapCatStreamFile
-from .report import build_achievements_report, build_import_report
+# from .report import build_achievements_report, build_import_report
+from .report import MaiChartAchDiffReport, build_diff_report
 from .utils import MaiChart, MaiChartAch, link_cache, link_hash_index
 from .constants import *
 from .bot_registry import PluginRegistry
