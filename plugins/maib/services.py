@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import utils
 from .models import MaiData, MaiChart, MaiChartAch, MaiAlias, MaiUser, MaiDataModel, MaiIdCheck
+from .report import MaiChartAchDiff, MaiChartAchDiffReport
 from .bot_registry import PluginRegistry
 from .constants import *
 
@@ -1346,18 +1347,15 @@ async def refresh_dxrating_cache_by_chart_user(shortid: int, difficulty: int, se
 
 @with_session
 async def upload_achievements_batch(user_id: int, ach_list: Sequence[utils.MaiChartAch],
-                                    *, session: AsyncSession) -> list[dict[str, Any]]:
-    """
-    批量上传成绩并返回变更列表。
+                                    *, session: AsyncSession) -> MaiChartAchDiffReport:
+    """批量上传成绩并返回变更报告"""
+    # 初始化及空校验
+    report = MaiChartAchDiffReport()
     
-    优化策略：
-    - 批量计算 + 分批写入，减少 ORM 与数据库往返开销
-    - 并发冲突时避免全局 rollback，保证当前事务内已完成改动不被误撤销
-    """
     if not ach_list:
-        return []
-
-    # 1. 输入去重：同一 key 只保留更优成绩
+        return report
+    
+    # 预去重
     unique_incoming: dict[tuple[int, int, SERVER_TAG], utils.MaiChartAch] = {}
     for ach in ach_list:
         ach.user_id = user_id
@@ -1367,11 +1365,11 @@ async def upload_achievements_batch(user_id: int, ach_list: Sequence[utils.MaiCh
             unique_incoming[key] = ach
 
     if not unique_incoming:
-        return []
+        return report
 
     shortids = sorted({sid for sid, _, _ in unique_incoming.keys()})
 
-    # 2. 一次性加载谱面与用户已有成绩
+    # 数据获取：一次性查询所有相关谱面和成绩
     chart_stmt = (
         select(MaiChart)
         .options(selectinload(MaiChart.maidata))
@@ -1397,7 +1395,7 @@ async def upload_achievements_batch(user_id: int, ach_list: Sequence[utils.MaiCh
     to_update: list[dict[str, Any]] = []  # [{"key": (sid,diff,srv), "ach": MaiChartAch, "chart": MaiChart, "incoming": utils.MaiChartAch, ...}]
     to_insert: list[dict[str, Any]] = []  # [{"values": {...}, "chart": MaiChart, "incoming": utils.MaiChartAch, ...}]
 
-    # 3. 第一遍：分类、计算 DXRating、生成变更日志
+    # 分类、计算 DXRating、生成变更日志
     for (shortid, difficulty, server), incoming in unique_incoming.items():
         chart = chart_map.get((shortid, difficulty))
         if not chart:
@@ -1407,8 +1405,12 @@ async def upload_achievements_batch(user_id: int, ach_list: Sequence[utils.MaiCh
         ap_bonus = _get_ap_bonus_by_server(server)
 
         existing = existing_map.get((shortid, difficulty, server))
+        
+        # 获取曲目名称用于报告展示
+        title = chart.maidata.title if chart.maidata else f"id{shortid}"
+
         if existing:
-            # 更新场景
+            # --- 更新场景 ---
             old_ach = existing.to_data()
             if not _is_achievement_priority_better(incoming, old_ach):
                 continue
@@ -1427,23 +1429,12 @@ async def upload_achievements_batch(user_id: int, ach_list: Sequence[utils.MaiCh
             maichart.set_ach(merged)
             new_dxrating = maichart.get_dxrating(server=server, ap_bonus=ap_bonus, user_id=user_id)
 
-            old_payload = {
-                "achievement": existing.achievement,
-                "dxscore": existing.dxscore,
-                "dxrating": existing.dxrating,
-                "combo": existing.combo,
-                "sync": existing.sync,
-            }
-
-            new_payload = {
-                "achievement": merged.achievement,
-                "dxscore": merged.dxscore,
-                "dxrating": new_dxrating,
-                "combo": merged.combo,
-                "sync": merged.sync,
-            }
-
-            if old_payload != new_payload:
+            # 判断实际数据是否有变化（避免无意义的更新记录）
+            if (incoming.achievement > old_ach.achievement or 
+                incoming.dxscore > old_ach.dxscore or
+                incoming.combo > old_ach.combo or
+                incoming.sync > old_ach.sync):
+                
                 to_update.append({
                     "ach_obj": existing,
                     "new_dxrating": new_dxrating,
@@ -1453,40 +1444,55 @@ async def upload_achievements_batch(user_id: int, ach_list: Sequence[utils.MaiCh
                     "new_combo": merged.combo,
                     "new_sync": merged.sync,
                 })
-                unified_log = generate_change_log(chart, incoming, old_ach)
-                if unified_log:
-                    changes_log.append(unified_log)
+                
+                # 构建更新变更对象
+                diff = MaiChartAchDiff(
+                    shortid=shortid,
+                    title=title,
+                    difficulty=difficulty,
+                    server=server,
+                    new_ach=merged,
+                    old_ach=old_ach
+                )
+                report.updated_song.append(diff)
                 affected_servers.add(server)
-            continue
 
-        # 插入场景
-        maichart.set_ach(incoming)
-        new_dxrating = maichart.get_dxrating(server=server, ap_bonus=ap_bonus, user_id=user_id)
+        else:
+            # --- 插入场景 ---
+            maichart.set_ach(incoming)
+            new_dxrating = maichart.get_dxrating(server=server, ap_bonus=ap_bonus, user_id=user_id)
 
-        to_insert.append({
-            "chart_id": chart.id,
-            "values": {
-                "user_id": user_id,
-                "shortid": shortid,
+            to_insert.append({
                 "chart_id": chart.id,
-                "difficulty": difficulty,
-                "server": server,
-                "achievement": incoming.achievement,
-                "dxscore": incoming.dxscore,
-                "dxrating": new_dxrating,
-                "combo": incoming.combo,
-                "sync": incoming.sync,
-                "update_time": int(time.time()),
-            },
-            "chart": chart,
-            "incoming": incoming,
-        })
-        unified_log = generate_change_log(chart, incoming, None)
-        if unified_log:
-            changes_log.append(unified_log)
-        affected_servers.add(server)
+                "values": {
+                    "user_id": user_id,
+                    "shortid": shortid,
+                    "chart_id": chart.id,
+                    "difficulty": difficulty,
+                    "server": server,
+                    "achievement": incoming.achievement,
+                    "dxscore": incoming.dxscore,
+                    "dxrating": new_dxrating,
+                    "combo": incoming.combo,
+                    "sync": incoming.sync,
+                    "update_time": int(time.time()),
+                },
+                "chart": chart,
+                "incoming": incoming,
+            })
+            
+            # 构建新增变更对象
+            diff = MaiChartAchDiff(
+                shortid=shortid,
+                title=title,
+                difficulty=difficulty,
+                server=server,
+                new_ach=incoming,
+                old_ach=None
+            )
+            report.new_song.append(diff)
+            affected_servers.add(server)
 
-    # 4. 执行批量更新
     if to_update:
         for update_item in to_update:
             ach_obj = update_item["ach_obj"]
@@ -1497,18 +1503,15 @@ async def upload_achievements_batch(user_id: int, ach_list: Sequence[utils.MaiCh
             ach_obj.dxrating = update_item["new_dxrating"]
             ach_obj.update_time = update_item["new_update_time"]
 
-    # 确保 ORM 更新先落到会话待写缓冲，再执行后续插入逻辑。
     await session.flush()
 
-    # 5. 执行批量插入（并发安全，不使用全局 rollback）
+    # 执行批量插入
     if to_insert:
-        # 分批插入，避免单次查询过大
-        chunk_size = 512
+        chunk_size = 512  # 分批插入
         for i in range(0, len(to_insert), chunk_size):
             chunk = to_insert[i:i + chunk_size]
             chunk_values = [item["values"] for item in chunk]
 
-            # 先用最新数据库快照判定，避免依赖函数开头的 stale existing_map。
             chunk_shortids = sorted({v["shortid"] for v in chunk_values})
             latest_stmt = (
                 select(MaiChartAch)
@@ -1530,17 +1533,7 @@ async def upload_achievements_batch(user_id: int, ach_list: Sequence[utils.MaiCh
                     pending_insert.append(v)
                     continue
 
-                new_ach_data = utils.MaiChartAch(
-                    shortid=v["shortid"],
-                    difficulty=v["difficulty"],
-                    server=v["server"],
-                    achievement=v["achievement"],
-                    dxscore=v["dxscore"],
-                    combo=v["combo"],
-                    sync=v["sync"],
-                    update_time=v["update_time"],
-                    user_id=v["user_id"],
-                )
+                new_ach_data = utils.MaiChartAch(**v)
                 old_ach = existing.to_data()
                 if _is_achievement_priority_better(new_ach_data, old_ach):
                     existing.achievement = v["achievement"]
@@ -1556,13 +1549,11 @@ async def upload_achievements_batch(user_id: int, ach_list: Sequence[utils.MaiCh
             try:
                 await session.execute(insert(MaiChartAch).values(pending_insert))
             except IntegrityError:
-                # 仍然有并发插入竞争时，逐条用 savepoint 兜底，避免回滚整个事务。
                 for v in pending_insert:
                     try:
                         async with session.begin_nested():
                             await session.execute(insert(MaiChartAch).values(v))
                     except IntegrityError:
-                        # 同键在并发窗口内已被写入，转为更新逻辑。
                         conflict_stmt = (
                             select(MaiChartAch)
                             .where(
@@ -1576,17 +1567,7 @@ async def upload_achievements_batch(user_id: int, ach_list: Sequence[utils.MaiCh
                         if conflict_row is None:
                             raise
 
-                        new_ach_data = utils.MaiChartAch(
-                            shortid=v["shortid"],
-                            difficulty=v["difficulty"],
-                            server=v["server"],
-                            achievement=v["achievement"],
-                            dxscore=v["dxscore"],
-                            combo=v["combo"],
-                            sync=v["sync"],
-                            update_time=v["update_time"],
-                            user_id=v["user_id"],
-                        )
+                        new_ach_data = utils.MaiChartAch(**v)
                         old_ach = conflict_row.to_data()
                         if _is_achievement_priority_better(new_ach_data, old_ach):
                             conflict_row.achievement = v["achievement"]
@@ -1596,8 +1577,9 @@ async def upload_achievements_batch(user_id: int, ach_list: Sequence[utils.MaiCh
                             conflict_row.dxrating = v["dxrating"]
                             conflict_row.update_time = v["update_time"]
 
-    # 6. 重算用户缓存（按受影响服务器）
+    # 7. 重算用户缓存
     for server in affected_servers:
         await refresh_user_dxrating_cache(user_id=user_id, server=server, session=session)
 
-    return changes_log
+    # 返回新的报告对象
+    return report

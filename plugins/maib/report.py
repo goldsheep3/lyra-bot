@@ -27,10 +27,10 @@ class MaiChartAchDiff:
 class MaiChartAchDiffReport:
     """成绩变更报告"""
 
-    updated_song: list[MaiChartAchDiff]
-    new_song: list[MaiChartAchDiff]
-    no_data_song: list[tuple[int, str, int]]  # (曲目 ID, 曲目名, 难度) 列表，表示没有数据的谱面
-    other_error_song: list[dict]
+    updated_song: list[MaiChartAchDiff] = []
+    new_song: list[MaiChartAchDiff] = []
+    no_data_song: list[tuple[int, str, int]] = []  # (曲目 ID, 曲目名, 难度) 列表，表示没有数据的谱面
+    other_error_song: list[dict] = []
 
     @property
     def has_changes(self) -> bool:

@@ -97,8 +97,11 @@ _REPLY_DICT: dict[str, str | list[str]] = {
     "ad_error": "小梨在处理谱面文件时遇到了问题，请联系监护人确认喔qwq",
     "ad_private_success": "登登~请查收谱面 {song_name}！",
     "ad_group_success": "小梨已经将 {song_name} 的adx谱面传到群里啦！",
+    
+    # sytb
+    "sy_syncing": "小梨正在尝试从水鱼查分器获取你的最新成绩数据！",
+    "sy_no_updates": "检查过啦！小梨记录的成绩数据已经是最新的啦。",
 }
-
 
 # --- tool functions ---
 
@@ -715,50 +718,52 @@ async def _(bot: OneBotV11Bot, event: OneBotV11Event, matcher: Matcher, groups: 
 #         msg += "\n该 ra 不考虑 AP 的额外分数哦！"
 #     await matcher.finish(msg)
 
+# --- sytb ---
 
-# async def get_sy_and_upload(user_id: int) -> list[dict] | None:
-#     # 获取水鱼数据
-#     data = await network.sy_dev_player_records(qq=user_id, developer_token=DEVELOPER_TOKEN)
-#     records = data.get('records', []) if data else []
+async def get_sy_and_upload(user_id: int) -> MaiChartAchDiffReport:
+    # 获取水鱼数据
+    data = await network.sy_dev_player_records(qq=user_id, developer_token=DEVELOPER_TOKEN)
+    records = data.get('records', []) if data else []
 
-#     # records 稳定哈希一致时，直接短路跳过上传流程
-#     sy_hash = await _build_sy_records_hash(records)
-#     last_sy_hash = await services.get_last_sy_hash(user_id)
-#     if last_sy_hash == sy_hash:
-#         return None
+    # records 稳定哈希一致时，直接短路跳过上传流程
+    sy_hash = await _build_sy_records_hash(records)
+    last_sy_hash = await services.get_last_sy_hash(user_id)
+    if last_sy_hash == sy_hash:
+        return MaiChartAchDiffReport()
 
-#     achs = utils.get_sy_records(records) if data else None
-#     # 批量上传到数据库
-#     if data is None or achs is None:
-#         return None
+    achs = utils.get_sy_records(records) if data else None
+    # 批量上传到数据库
+    if data is None or achs is None:
+        return MaiChartAchDiffReport()
 
-#     data_diffs = await services.upload_achievements_batch(user_id, achs)
-#     await services.set_last_sy_hash(user_id, sy_hash)
-#     if not data_diffs:
-#         return None
+    report: MaiChartAchDiffReport = await services.upload_achievements_batch(user_id, achs)
 
-#     return data_diffs
+    await services.set_last_sy_hash(user_id, sy_hash)
+    return report
 
-# # TODO TG适配
-# @sync_sy.handle()
-# async def _(event: OneBotV11Event, matcher: Matcher):
-#     """处理命令: sytb"""
-#     user_id = int(event.get_user_id())
-#     data_diffs = await get_sy_and_upload(user_id)
-#     if data_diffs:
-#         await matcher.send("正在进行水鱼数据同步")
-#         summary_text, diff_img = build_achievements_report(data_diffs)
-#         if diff_img:
-#             img_bytes = image_gen.get_image_bytes(diff_img)
-#             await matcher.finish(Message([
-#                 MessageSegment.text(f"{summary_text}\n"),
-#                 MessageSegment.image(img_bytes),
-#             ]))
-#         else:
-#             await matcher.finish(summary_text)
-#         return
-
-#     await matcher.finish("已完成水鱼同步，似乎没有数据更新~")
+# TODO TG适配
+@sync_sy.handle()
+async def _(event: OneBotV11Event, matcher: Matcher):
+    """处理命令: sytb"""
+    user_id = int(event.get_user_id())
+    report = await get_sy_and_upload(user_id)
+    
+    # 修改点：使用 report.has_changes 判断
+    if report.has_changes:
+        await matcher.send(reply("sy_syncing"))
+        summary_text, diff_img = build_diff_report(report)
+        
+        msg_segments = [OneBotV11MessageSegment.text(f"{summary_text}\n")]
+        if diff_img:
+            img_bytes = image_gen.get_image_bytes(diff_img)
+            msg_segments.append(OneBotV11MessageSegment.image(img_bytes))
+            
+        await matcher.finish(OneBotV11Message(msg_segments))
+    
+    await matcher.finish(OneBotV11Message([
+        OneBotV11MessageSegment.at(user_id),
+        OneBotV11MessageSegment.text(' ' + reply("sy_no_updates"))
+    ]))
 
 # # TODO TG适配
 # @b50.handle()
