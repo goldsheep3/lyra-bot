@@ -42,6 +42,7 @@ from nonebot.adapters.telegram import (Bot as TGBot,
 from nonebot.adapters.telegram.message import (Entity as TGMessageEntity,
                                                File as TGMessageFile)
 
+from nonebot_plugin_localstore import get_plugin_data_dir
 
 # --- config variables ---
 
@@ -490,15 +491,15 @@ async def adx_download_handled(bot: Bot, event: Event, matcher: Matcher, groups:
     # 获取 MaiData
     mdt: Optional[models.MaiData] = await services.get_mdt_by_id(target_short_id)
     if not mdt:
-        await matcher.finish(reply("ad_no_maidata").format(short_id=target_short_id))
+        await matcher.finish(reply("ad_no_maidata", short_id=target_short_id))
         return
-    chart_file_path = Path(mdt.zip_path)
+    chart_file_path = get_plugin_data_dir() / mdt.zip_path
     if not chart_file_path.exists():
-        await matcher.finish(reply("ad_no_chart_file").format(short_id=target_short_id))
+        await matcher.finish(reply("ad_no_chart_file", short_id=target_short_id))
         return
 
     # 开始着手上传
-    await matcher.send(reply("ad_prepare").format(target_short_id=target_short_id))
+    await matcher.send(reply("ad_prepare", target_short_id=target_short_id))
     
     file_ext = "zip" if "zip" in archive_type else "adx"
     file_name = f"{target_short_id}.{file_ext}"
@@ -543,17 +544,20 @@ async def adx_download_handled(bot: Bot, event: Event, matcher: Matcher, groups:
             await matcher.finish(reply("ad_error"))
             return
     elif isinstance(event, TGEvent) and isinstance(bot, TGBot):
-        chat_id = event.get_session_id()
+        session_id = event.get_session_id()
+        chat_id = int(session_id.split("_")[-1])
 
-        if cached_file_id := mdt.tg_file_id_cache:
-            logger.debug(f"命中 Telegram file_id 缓存，正在触发秒传: {cached_file_id}")
+        if mdt.tg_file_id_cache and file_ext == "adx":
+            # tg 缓存只考虑 .adx 文件，zip 不常用因此不缓存
+            # 未来可能考虑数据库增加adx和zip的双重缓存
+            logger.debug(f"命中 Telegram file_id 缓存，正在触发秒传: {mdt.tg_file_id_cache}")
             try:
                 # 缓存命中，尝试直接发送文件
                 await bot.send_document(
                     chat_id=chat_id,
-                    document=cached_file_id
+                    document=mdt.tg_file_id_cache
                 )
-                await matcher.finish(reply("ad_private_success", song_name=title))
+                await matcher.send(reply("ad_private_success", song_name=title))
                 return
             except Exception as e:
                 # 极少情况下，TG 端的 file_id 可能会失效，需要重新上传
@@ -563,7 +567,7 @@ async def adx_download_handled(bot: Bot, event: Event, matcher: Matcher, groups:
         try:
             # 读取本地文件字节流
             if not chart_file_path.exists():
-                await matcher.finish(reply("ad_no_chart_file", short_id=target_short_id))
+                await matcher.send(reply("ad_no_chart_file", short_id=target_short_id))
                 return
                 
             bytes_data = chart_file_path.read_bytes()
@@ -574,17 +578,17 @@ async def adx_download_handled(bot: Bot, event: Event, matcher: Matcher, groups:
             
             # 回写缓存
             new_file_id = None
-            if tg_msg_obj and hasattr(tg_msg_obj, "document") and tg_msg_obj.document:
+            if tg_msg_obj and hasattr(tg_msg_obj, "document") and tg_msg_obj.document and file_ext == "adx":
                 new_file_id = tg_msg_obj.document.file_id
                 logger.debug(f"成功获取 file_id: {new_file_id}，正在写入缓存...")
                 await services.update_mdt_tg_file_id(target_short_id, new_file_id)
 
+            await matcher.send(reply("ad_tg_success", song_name=title))
+            return
         except Exception as e:
             logger.error(f"Telegram 谱面文件上传失败: {e}")
             await matcher.finish(reply("ad_error"))
             return
-
-        await matcher.finish(reply("ad_tg_success", song_name=title))
 
     # 兜底逻辑
     await matcher.finish(reply("ad_error"))

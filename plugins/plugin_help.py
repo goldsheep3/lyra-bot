@@ -64,10 +64,10 @@ async def _(event):
         platform_tip = "\n此外，LyraBot 音游相关功能集中在 maib 插件中，该插件需要绑定 QQ 账号，可以通过 /help maib 获取帮助信息。\n"
         
     await _start.finish("""
-欢迎使用 LyraBot ！{{special_message}}
+欢迎使用 LyraBot ！{special_message}
 
 小梨Bot（LyraBot）是一个基于 NoneBot2 的多功能机器人，提供了丰富的娱乐和音游相关实用功能。
 可以输入 /help 获取帮助信息。
-{{platform_tip}}
+{platform_tip}
 [WARNING] LyraBot 目前处于测试阶段，功能可能不稳定，欢迎反馈问题和建议！
 """.strip().format(special_message=choice(SPECIAL_MESSAGE), platform_tip=platform_tip))
