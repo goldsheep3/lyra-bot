@@ -356,6 +356,7 @@ class MaiData:
     img_path: Path  # 图片文件路径
     zip_path: Optional[Path] = None  # 如果存在的话，ADX 谱面 ZIP 文件路径
     _cached_image: Optional[Image.Image] = None  # 缓存的封面图片对象
+    tg_file_id_cache: Optional[str] = None  # Telegram 文件 ID 缓存
 
     # Utage 宴会场 专属字段
     is_utage: bool = False  # Utage: Utage 标志

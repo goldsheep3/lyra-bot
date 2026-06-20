@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from .constants import SERVER_TAG, DIFFS_DICT, DF_FC_DICT, DF_FS_DICT
@@ -27,10 +27,10 @@ class MaiChartAchDiff:
 class MaiChartAchDiffReport:
     """成绩变更报告"""
 
-    updated_song: list[MaiChartAchDiff] = []
-    new_song: list[MaiChartAchDiff] = []
-    no_data_song: list[tuple[int, str, int]] = []  # (曲目 ID, 曲目名, 难度) 列表，表示没有数据的谱面
-    other_error_song: list[dict] = []
+    updated_song: list[MaiChartAchDiff] = field(default_factory=list)
+    new_song: list[MaiChartAchDiff] = field(default_factory=list)
+    no_data_song: list[tuple[int, str, int]] = field(default_factory=list)  # (曲目 ID, 曲目名, 难度) 列表，表示没有数据的谱面
+    other_error_song: list[dict] = field(default_factory=list)
 
     @property
     def has_changes(self) -> bool:

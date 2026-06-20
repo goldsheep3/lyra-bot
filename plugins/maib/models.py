@@ -151,6 +151,7 @@ class MaiData(Model):
     # 文件与来源
     converter: Mapped[Optional[str]]
     zip_path: Mapped[str]
+    tg_file_id_cache: Mapped[Optional[str]] = mapped_column(default=None, nullable=True)  # Telegram 文件 ID 缓存
 
     # Utage 特有字段 (常规曲目设为 None)
     is_utage: Mapped[bool] = mapped_column(default=False, index=True)  
@@ -183,6 +184,7 @@ class MaiData(Model):
             converter=self.converter if self.converter else '',
             img_path=(zip_path / "bg.png") if zip_path else Path("bg.png"),
             zip_path=zip_path,
+            tg_file_id_cache=self.tg_file_id_cache,
             aliases=[alias.to_data() for alias in self.aliases],
             is_utage=self.is_utage,
             buddy=all((self.buddy, self.is_utage)),
@@ -287,6 +289,7 @@ class MaiDataModel:
             version_cn=maidata.version_cn,
             converter=maidata.converter,
             zip_path=str(maidata.zip_path) if maidata.zip_path else None,
+            tg_file_id_cache=maidata.tg_file_id_cache,
             is_utage=maidata.is_utage,
             utage_tag=maidata.utage_tag,
             buddy=maidata.buddy

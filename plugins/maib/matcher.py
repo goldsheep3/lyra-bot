@@ -25,16 +25,25 @@ from nonebot.params import RegexGroup
 from nonebot.internal.matcher import Matcher
 from nonebot.adapters import Bot, Event
 
-from nonebot.adapters.telegram import (Event as TGEvent)
+# -- platform adapter --
 from nonebot.adapters.onebot.v11 import (Bot as OneBotV11Bot,
                                          Event as OneBotV11Event,
                                          Message as OneBotV11Message,
                                          MessageSegment as OneBotV11MessageSegment,
                                          MessageEvent as OneBotV11MessageEvent,
                                          GroupMessageEvent as OneBotV11GroupMessageEvent,
-                                         PrivateMessageEvent as OneBotV11PrivateMessageEvent)
+                                         PrivateMessageEvent as OneBotV11PrivateMessageEvent,)
 from nonebot.adapters.onebot.v11.exception import ActionFailed
 
+from nonebot.adapters.telegram import (Bot as TGBot,
+                                       Event as TGEvent,
+                                       Message as TGMessage,
+                                       MessageSegment as TGMessageSegment)
+from nonebot.adapters.telegram.message import (Entity as TGMessageEntity,
+                                               File as TGMessageFile)
+
+
+# --- config variables ---
 
 LOW_MEMORY_MODE: bool = False  # 低内存模式，会阻止 B50 等大型图片合成
 LOW_MEMORY_TIP: str | None = None
@@ -89,7 +98,9 @@ _REPLY_DICT: dict[str, str | list[str]] = {
     "link_success": "绑定成功！",
     "link_unlink_success": "解绑成功！",
     "link_not_platform": "未知平台",
-    # adx-download
+    "link_not_linked": "你似乎还没有绑定 QQ 号~请使用「绑定link」尝试绑定",
+    "link_onebot_no_bind": "你可以直接操作的（）QQ 之间不能绑定的",
+    # adx_download (ad)
     "ad_no_maidata": "没有找到id为{short_id}的谱面的数据！可能还没被收录，请联系监护人确认喔qwq",
     "ad_bad_id": "请提供正确的乐曲 ID 哦qwq",
     "ad_no_chart_file": "谱面文件不存在！可能还没被收录，请联系监护人确认喔qwq",
@@ -97,10 +108,20 @@ _REPLY_DICT: dict[str, str | list[str]] = {
     "ad_error": "小梨在处理谱面文件时遇到了问题，请联系监护人确认喔qwq",
     "ad_private_success": "登登~请查收谱面 {song_name}！",
     "ad_group_success": "小梨已经将 {song_name} 的adx谱面传到群里啦！",
+    # mai_info
+    "mai_info_no_shortid": "请提供正确的乐曲 ID 哦qwq",
+    "mai_info_no_maidata": "没有找到 id{short_id} 的乐曲数据qwq",
+    
     
     # sytb
     "sy_syncing": "小梨正在尝试从水鱼查分器获取你的最新成绩数据！",
     "sy_no_updates": "检查过啦！小梨记录的成绩数据已经是最新的啦。",
+    "platform_not_supported": "意外错误(Platform Not Supported)，请联系监护人确认喔qwq",
+    # Exception Tip
+    "error_invalid_user_id": "无法解析 str 格式的 user_id: {raw_uid}",
+    "error_user_not_found": "未找到绑定的 QQ 账号，请先使用 link 功能绑定 QQ 号",
+    "error_unexpected": "不支持的平台类型",
+    "error": "小梨遇到了意外的错误，请联系监护人确认喔qwq",
 }
 
 # --- tool functions ---
@@ -114,7 +135,46 @@ def reply(key: str, **kwargs) -> str:
         text = text_or_list
     return text.format(**kwargs)
 
-# TODO 待重构
+async def build_msg(matcher: Matcher, event: Event, msg_segments: list[tuple[str, Any]], tag: Literal['send', 'finish'] = 'send') -> None:
+    """根据事件类型构建并发送消息对象"""
+    
+    if isinstance(event, OneBotV11Event):
+        onebotv11_msg = OneBotV11Message()
+        for type_, content in msg_segments:
+            if type_ == "text":
+                onebotv11_msg += OneBotV11MessageSegment.text(content)
+            elif type_ == "image":
+                onebotv11_msg += OneBotV11MessageSegment.image(content)
+            elif type_ == "at":
+                # QQ 端如果传入了元组 (username, user_id)，只取 user_id
+                uid = content[1] if isinstance(content, tuple) else content
+                onebotv11_msg += OneBotV11MessageSegment.at(uid) + ' '
+            else:
+                continue
+                
+        if not onebotv11_msg:
+            return
+        func = matcher.send if tag == 'send' else matcher.finish
+        await func(onebotv11_msg)
+
+    elif isinstance(event, TGEvent):
+        tg_msg = TGMessage()
+        for type_, content in msg_segments:
+            if type_ == "text":
+                tg_msg += TGMessageEntity.text(content)
+            elif type_ == "image":
+                tg_msg += TGMessageFile.photo(content)
+            elif type_ == "at" and isinstance(content, tuple) and len(content) == 2:
+                username, tg_user_id = content
+                tg_msg += TGMessageEntity.text_link(f"{username}", f"tg://user?id={tg_user_id}") + ' '
+            else:
+                continue
+                
+        if not tg_msg:
+            return
+        func = matcher.send if tag == 'send' else matcher.finish
+        await func(tg_msg)
+
 def get_args(args_text: str) -> tuple[int | None, SERVER_TAG | Literal['ALL'] | None]:
     """服务器数据 args 拆分"""
     target_user_id, target_server = None, None
@@ -146,7 +206,7 @@ async def _build_sy_records_hash(records: list[dict[str, Any]]) -> str:
 
 # --- 准业务逻辑 ---
 
-async def get_maiuser(bot: Bot, event: Event, user_id: int | None = None) -> utils.MaiUser:
+async def get_maiuser(event: Event, user_id: int | None = None) -> utils.MaiUser:
     """根据数据获取 MaiUser 对象"""
     if user_id is None:
         # 从 event 中获取
@@ -155,41 +215,25 @@ async def get_maiuser(bot: Bot, event: Event, user_id: int | None = None) -> uti
             user_id = int(raw_uid)
         except ValueError as e:
             # user_id 为 str 格式
-            raise ValueError(f"无法解析 str 格式的 user_id: {raw_uid}") from e
+            raise ValueError(reply("error_invalid_user_id", raw_uid=raw_uid)) from e
 
     if isinstance(event, OneBotV11Event):
         mu = await services.get_or_create_user_by_id(user_id)
     elif isinstance(event, TGEvent):
         mu = await services.get_user_by_telegram_id(user_id)
+        if mu is None:
+            raise ValueError(reply("error_user_not_found"))
     else:
         # platform event
-        raise ValueError(f"不支持的事件类型: {type(event)}")
+        raise ValueError(reply("error_unexpected"))
 
     if not mu.username:
-        username: Optional[str] = None
-        if isinstance(event, OneBotV11Event):
-            try:
-                if group_id := getattr(event, "group_id", None):
-                    member_info = await bot.get_group_member_info(group_id=int(group_id), user_id=user_id)
-                    username = member_info.get("card", None) or member_info.get("nickname", None)
-                    username = str(username).strip() if username is not None else None
-                if username is None:
-                    user_info = await bot.get_stranger_info(user_id=user_id)
-                    username = user_info.get("nickname", None)
-                    username = str(username).strip() if username is not None else None
-            except Exception:
-                username = None
-            
-            username = username if username else str(user_id)
-        elif isinstance(event, TGEvent):
-            # TODO 补充 TG 逻辑
-            username = str(user_id)
-        else:
-            # platform event
-            raise ValueError(f"不支持的事件类型: {type(event)}")
-        # 更新数据库中的 username 字段
+        qq = mu.user_id
+        # 获取水鱼用户名并更新数据库
+        data = cast(dict, await network.sy_dev_player_records(qq=qq, developer_token=DEVELOPER_TOKEN))
+        username = data.get("nickname", "maimai")
+        await services.set_username(qq, username)
         mu.username = username
-        await services.set_username(user_id, username)
     
     return mu.to_data()
 
@@ -257,7 +301,7 @@ async def read_json(bot: OneBotV11Bot, file_info: dict, file_id: str) -> Optiona
 # --- link ---
 
 @link.handle()
-async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
+async def link_handled(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
     """处理命令: link"""
     action, args_text = groups
     global link_cache, link_hash_index
@@ -337,7 +381,11 @@ async def _(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
         _, expiration_time = link_cache[user_id]
         
         # 验证成功，执行绑定逻辑
-        if isinstance(event, TGEvent):
+        if isinstance(event, OneBotV11Event):
+            # 但 OneBotV11 不需要绑定 qq
+            await matcher.finish(reply("link_onebot_no_bind"))
+            return
+        elif isinstance(event, TGEvent):
             await services.set_telegram_id(user_id, telegram_id=int(event.get_user_id()))
             
             # 清理缓存
@@ -406,7 +454,7 @@ async def _cleanup_expired_group_files(bot: OneBotV11Bot, group_id: int, folder_
             break
 
 @adx_download.handle()
-async def _(bot: OneBotV11Bot, event: OneBotV11Event, matcher: Matcher, groups: tuple = RegexGroup()): 
+async def adx_download_handled(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup()): 
     """处理命令: 下载谱面11568"""
     raw_short_id, archive_type = groups
     archive_type = archive_type.strip().lower()
@@ -420,10 +468,15 @@ async def _(bot: OneBotV11Bot, event: OneBotV11Event, matcher: Matcher, groups: 
                 match = re.search(r"(\d+)", replied_text)
                 if match:
                     target_short_id = int(match.group(1))
-                    logger.debug(f"从回复消息中提取到 short_id: {target_short_id}")
+                    logger.debug(f"从 OneBotV11 回复消息中提取到 short_id: {target_short_id}")
         elif isinstance(event, TGEvent):
-            # TODO 从 Telegram 回复中提取
-            pass
+            # 从 Telegram 回复中提取 short_id
+            if reply_to_message := getattr(event, "reply_to_message", None):
+                replied_text = str(getattr(reply_to_message, "text", "")) or str(getattr(reply_to_message, "caption", ""))
+                match = re.search(r"(\d+)", replied_text)
+                if match:
+                    target_short_id = int(match.group(1))
+                    logger.debug(f"从 TG 回复消息中提取到 short_id: {target_short_id}")
 
     if target_short_id is None:
         # 仍然未找到 ID，视为误触
@@ -450,7 +503,7 @@ async def _(bot: OneBotV11Bot, event: OneBotV11Event, matcher: Matcher, groups: 
     file_name = f"{target_short_id}.{file_ext}"
     title = mdt.title
 
-    if isinstance(event, OneBotV11Event):
+    if isinstance(event, OneBotV11Event) and isinstance(bot, OneBotV11Bot):
         # OneBotV11
         if isinstance(event, OneBotV11GroupMessageEvent):
             # 群消息
@@ -488,73 +541,50 @@ async def _(bot: OneBotV11Bot, event: OneBotV11Event, matcher: Matcher, groups: 
             # 其他类型消息，理论上不应触发该命令
             await matcher.finish(reply("ad_error"))
             return
-    elif isinstance(event, TGEvent):
-        # Telegram
-        pass
+    elif isinstance(event, TGEvent) and isinstance(bot, TGBot):
+        # TODO Telegram
+        await matcher.finish('Telegram 平台暂不支持该功能哦~')
 
     # 兜底逻辑
     await matcher.finish(reply("ad_error"))
     return
 
-# # --- ... ---
+# --- mai_info ---
 
-# async def get_username(event, bot, user_id: int | None = None) -> str:
-#     resolved_name = ""
-#     group_id = getattr(event, "group_id", None)
-#     user_id = user_id or int(event.get_user_id())
+@mai_info.handle()
+async def mai_info_handled(event: Event, matcher: Matcher, groups: tuple = RegexGroup()):
+    """处理命令: id11451 / info11451"""
+    _, short_id, args = groups
+    # shortid 判断
+    if not short_id.isdigit():
+        await matcher.finish(reply("mai_info_no_shortid"))
+        return
+    shortid = int(short_id)
 
-#     if group_id:
-#         try:
-#             member_info = await bot.get_group_member_info(group_id=int(group_id), user_id=user_id)
-#             resolved_name = str(member_info.get("card") or member_info.get("nickname") or "").strip()
-#         except Exception:
-#             pass
-
-#     if not resolved_name:
-#         try:
-#             user_info = await bot.get_stranger_info(user_id=user_id)
-#             resolved_name = str(user_info.get("nickname") or "").strip()
-#         except Exception:
-#             pass
-
-#     return resolved_name
-
-
-# # TODO TG适配
-# @mai_info.handle()
-# async def _(bot: OneBotV11Bot, event: OneBotV11Event, matcher: Matcher, groups: tuple = RegexGroup()):
-#     """处理命令: id11451 / info11451"""
-#     _, short_id, args = groups
-#     user_id = int(event.get_user_id())
-#     maiuser = await services.get_or_create_user_by_id(user_id)
-#     if not maiuser.username:
-#         maiuser.username = await get_username(event, bot)
-#     _, server = get_args(args)
-#     # 暂不支持 ALL
-#     server = server if (server != 'ALL' and server is not None) else maiuser.default_server
-#     # 2 days 水鱼过期检查
-#     if server == 'CN' and (time.time() - maiuser.get_update_time(server=server) > 2 * 24 * 3600):
-#         pass
-#         # await matcher.send(Message(
-#         #     f"检测到国服数据过期，已同步最新的国服数据：") + MessageSegment.image(diff_bytes)
-#         # )
+    try:
+        maiuser = await get_maiuser(event)
+    except ValueError as e:
+        await matcher.finish(str(e))
+        return
+    qq = int(maiuser.user_id)
     
-#     # shortid 判断
-#     if not short_id.isdigit():
-#         await matcher.finish("请提供正确的乐曲 ID 哦qwq")
-#         return
-#     shortid = int(short_id)
-#     # 查询乐曲信息
-#     if (mdt := await services.get_mdt_by_id(shortid, user_id)) is None:
-#         await matcher.finish(f"没有找到 id{shortid} 的乐曲数据qwq")
-#         return
-#     maidata = mdt.to_data(include_achs=True)
-#     s = server if maidata.version_cn is not None else "JP"  # 如果乐曲没有国服版本，则展示日服数据
+    _, server = get_args(args)
+    server = server if (server != 'ALL' and server is not None) else maiuser.default_server  # 暂不支持 ALL
+    # 查询乐曲信息
+    if (mdt := await services.get_mdt_by_id(shortid, qq)) is None:
+        await matcher.finish(reply("mai_info_no_maidata", short_id=shortid))
+        return
+    maidata = mdt.to_data(include_achs=True)
+    s = server if maidata.version_cn is not None else "JP"  # 如果乐曲没有国服版本，则展示日服数据
     
-#     info_box = image_gen.draw_info_box(maidata, s, maiuser=maiuser, cn_level=1 if s == 'CN' else 0)
-#     info_box_bytes = image_gen.get_image_bytes(info_box)
+    info_box = image_gen.draw_info_box(maidata, s, maiuser=maiuser, cn_level=1 if s == 'CN' else 0)
+    info_box_bytes = image_gen.get_image_bytes(info_box)
     
-#     await matcher.finish(Message(f"{mdt.shortid}. {mdt.title}") + MessageSegment.image(info_box_bytes))
+    payload = [
+        ("text", f"{mdt.shortid}. {mdt.title}"),
+        ("image", info_box_bytes)
+    ]
+    await build_msg(matcher, event, payload, tag='finish')
 
 # # TODO TG适配
 # @mai_what_song.handle()
@@ -723,7 +753,7 @@ async def _(bot: OneBotV11Bot, event: OneBotV11Event, matcher: Matcher, groups: 
 async def get_sy_and_upload(user_id: int) -> MaiChartAchDiffReport:
     # 获取水鱼数据
     data = await network.sy_dev_player_records(qq=user_id, developer_token=DEVELOPER_TOKEN)
-    records = data.get('records', []) if data else []
+    records = data.pop('records', []) if data else []
 
     # records 稳定哈希一致时，直接短路跳过上传流程
     sy_hash = await _build_sy_records_hash(records)
@@ -741,29 +771,35 @@ async def get_sy_and_upload(user_id: int) -> MaiChartAchDiffReport:
     await services.set_last_sy_hash(user_id, sy_hash)
     return report
 
-# TODO TG适配
+
 @sync_sy.handle()
-async def _(event: OneBotV11Event, matcher: Matcher):
-    """处理命令: sytb"""
-    user_id = int(event.get_user_id())
-    report = await get_sy_and_upload(user_id)
-    
-    # 修改点：使用 report.has_changes 判断
+async def _(event: Event, matcher: Matcher):
+    """处理命令: sytb (水鱼同步)"""
+    try:
+        user_id = int(event.get_user_id())
+        maiuser: utils.MaiUser = await get_maiuser(event, user_id=user_id)
+    except Exception as e:
+        await matcher.finish(str(e))
+        return
+
+    # 更新水鱼数据并生成差异报告
+    report = await get_sy_and_upload(maiuser.user_id)
+    payload: list = [
+        ("at", (maiuser.username, user_id)),
+    ]
+
     if report.has_changes:
         await matcher.send(reply("sy_syncing"))
         summary_text, diff_img = build_diff_report(report)
         
-        msg_segments = [OneBotV11MessageSegment.text(f"{summary_text}\n")]
+        payload.append(("text", f"{summary_text}\n"))
         if diff_img:
-            img_bytes = image_gen.get_image_bytes(diff_img)
-            msg_segments.append(OneBotV11MessageSegment.image(img_bytes))
-            
-        await matcher.finish(OneBotV11Message(msg_segments))
-    
-    await matcher.finish(OneBotV11Message([
-        OneBotV11MessageSegment.at(user_id),
-        OneBotV11MessageSegment.text(' ' + reply("sy_no_updates"))
-    ]))
+            payload.append(("image", image_gen.get_image_bytes(diff_img)))
+    else:
+        payload.append(("text", reply("sy_no_updates")))
+
+    await build_msg(matcher, event, payload, tag='finish')
+
 
 # # TODO TG适配
 # @b50.handle()
