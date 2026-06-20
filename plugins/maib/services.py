@@ -1005,9 +1005,12 @@ def _get_ap_bonus_by_server(server: SERVER_TAG) -> int:
     return 1 if 2000 > current_version >= 25 else 0
 
 
-def get_cut_version(server: SERVER_TAG) -> int:
+def get_cut_version(server_or_version: SERVER_TAG | int) -> int:
     """获取 B50 分段所需的 cut_version。"""
-    version = _get_current_version_by_server(server)
+    if isinstance(server_or_version, int):
+        version = server_or_version
+    else:
+        version = _get_current_version_by_server(server_or_version)
     # PRiSM PLUS 开始, b15 扩展到两个版本，因此 cut_version 回退 1 版本以确保扩展
     if 2000 > version >= 24:
         version -= 1
