@@ -131,6 +131,17 @@ async def remove_telegram_id(user_id: int, *, session: AsyncSession):
         user.user_telegram_id = None
 
 
+# tg
+
+@with_session
+async def update_mdt_tg_file_id(shortid: int, tg_file_id: str, *, session: AsyncSession):
+    """通过 `shortid` 更新 `MaiData` 的 `tg_file_id_cache`"""
+    statement = (
+        update(MaiData)
+        .where(MaiData.shortid == shortid)
+        .values(tg_file_id_cache=tg_file_id)
+    )
+    await session.execute(statement)
 
 
 # === 实际业务逻辑 ===

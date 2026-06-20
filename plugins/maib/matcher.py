@@ -108,6 +108,7 @@ _REPLY_DICT: dict[str, str | list[str]] = {
     "ad_error": "小梨在处理谱面文件时遇到了问题，请联系监护人确认喔qwq",
     "ad_private_success": "登登~请查收谱面 {song_name}！",
     "ad_group_success": "小梨已经将 {song_name} 的adx谱面传到群里啦！",
+    "ad_tg_success": "wu~小梨已经将 {song_name} 的谱面发来啦！",
     # mai_info
     "mai_info_no_shortid": "请提供正确的乐曲 ID 哦qwq",
     "mai_info_no_maidata": "没有找到 id{short_id} 的乐曲数据qwq",
@@ -542,8 +543,48 @@ async def adx_download_handled(bot: Bot, event: Event, matcher: Matcher, groups:
             await matcher.finish(reply("ad_error"))
             return
     elif isinstance(event, TGEvent) and isinstance(bot, TGBot):
-        # TODO Telegram
-        await matcher.finish('Telegram 平台暂不支持该功能哦~')
+        chat_id = event.get_session_id()
+
+        if cached_file_id := mdt.tg_file_id_cache:
+            logger.debug(f"命中 Telegram file_id 缓存，正在触发秒传: {cached_file_id}")
+            try:
+                # 缓存命中，尝试直接发送文件
+                await bot.send_document(
+                    chat_id=chat_id,
+                    document=cached_file_id
+                )
+                await matcher.finish(reply("ad_private_success", song_name=title))
+                return
+            except Exception as e:
+                # 极少情况下，TG 端的 file_id 可能会失效，需要重新上传
+                logger.warning(f"缓存的 file_id 失效，将尝试重新上传: {e}")
+
+        # 文件上传逻辑
+        try:
+            # 读取本地文件字节流
+            if not chart_file_path.exists():
+                await matcher.finish(reply("ad_no_chart_file", short_id=target_short_id))
+                return
+                
+            bytes_data = chart_file_path.read_bytes()
+            tg_msg_obj = await bot.send_document(
+                chat_id=chat_id,
+                document=(file_name, bytes_data)
+            )
+            
+            # 回写缓存
+            new_file_id = None
+            if tg_msg_obj and hasattr(tg_msg_obj, "document") and tg_msg_obj.document:
+                new_file_id = tg_msg_obj.document.file_id
+                logger.debug(f"成功获取 file_id: {new_file_id}，正在写入缓存...")
+                await services.update_mdt_tg_file_id(target_short_id, new_file_id)
+
+        except Exception as e:
+            logger.error(f"Telegram 谱面文件上传失败: {e}")
+            await matcher.finish(reply("ad_error"))
+            return
+
+        await matcher.finish(reply("ad_tg_success", song_name=title))
 
     # 兜底逻辑
     await matcher.finish(reply("ad_error"))
