@@ -85,13 +85,17 @@ VERSION_ID_MAP = _build_version_id_map()
 async def parse_version(version_str: str, parse_cn: bool = False) -> int:
     """辅助函数：解析版本号"""
     normalized_text = _normalize_version_text(version_str)
-    version_ids = VERSION_ID_MAP.get(normalized_text, -1)
-    if version_ids == -1:
+    version_id = VERSION_ID_MAP.get(normalized_text, -1)
+    if version_id == -1:
         logger.warning(f"无法解析版本号: {version_str}")
-    if parse_cn and version_ids > 12:
+    if parse_cn and version_id > 12:
         # 国服版本号算法逻辑
-        version_ids = (version_ids - 13) // 2 + 2020
-    return version_ids
+        version_id = (version_id - 13) // 2 + 2020
+        if version_id >= 24:
+            # DX2026 为 PRISM_PLUS
+            # 暂时先如此处理，毕竟不确定sbga和wl要怎么算2027
+            version_id += 1
+    return version_id
 
 async def parse_genre(genre_str: str, genre_dict_fixed: dict[str, int]) -> int:
     """辅助函数：解析流派名"""
