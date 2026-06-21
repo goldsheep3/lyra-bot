@@ -1226,8 +1226,6 @@ async def refresh_user_dxrating_cache(user_id: int, server: SERVER_TAG,
                                       *, session: AsyncSession):
     """重算单个用户在指定服务器（JP/CN）的 DXRating 汇总缓存。"""
     
-    # TODO 计算 DXRating 总和时，额外考虑 models 新增的 b35 和 b15 的 first 和 last 字段，定义天花板和地板用于推分建议等功能
-
     cache_server = "CN" if server == "CN" else "JP"
     cut_version = get_cut_version(server)
 
@@ -1238,6 +1236,13 @@ async def refresh_user_dxrating_cache(user_id: int, server: SERVER_TAG,
         session=session,
     )
     total_dxrating = sum(a.dxrating for a in b35) + sum(a.dxrating for a in b15)
+
+    # ---- 提取 B35 和 B15 的首尾 rating 边界 ----
+    # 降序排列下：[0] 为最高分(first)，[-1] 为最低门槛(last)
+    b35_first = b35[0].dxrating if b35 else 0
+    b35_last = b35[-1].dxrating if b35 else 0
+    b15_first = b15[0].dxrating if b15 else 0
+    b15_last = b15[-1].dxrating if b15 else 0
 
     latest_update_stmt = (
         select(func.max(MaiChartAch.update_time))
@@ -1250,13 +1255,21 @@ async def refresh_user_dxrating_cache(user_id: int, server: SERVER_TAG,
         user = MaiUser(user_id=user_id)
         session.add(user)
 
+    # ---- 写入对应服务器的 rating 总和与边界缓存 ----
     if cache_server == "CN":
         user.cn_dxrating = total_dxrating
         user.cn_update_time = latest_update_time
+        user.cn_dxrating_b35_first = b35_first
+        user.cn_dxrating_b35_last = b35_last
+        user.cn_dxrating_b15_first = b15_first
+        user.cn_dxrating_b15_last = b15_last
     else:
         user.jp_dxrating = total_dxrating
         user.jp_update_time = latest_update_time
-
+        user.jp_dxrating_b35_first = b35_first
+        user.jp_dxrating_b35_last = b35_last
+        user.jp_dxrating_b15_first = b15_first
+        user.jp_dxrating_b15_last = b15_last
 
 @with_session
 async def refresh_user_dxrating_cache_batch(user_ids: Sequence[int], server: SERVER_TAG,

@@ -27,7 +27,7 @@ LyraHELP | maib (小梨音游核心)
 【lyra-sync】
 1. 私聊发送 JSON 文件
    通过 lyra-sync 获取 JSON 后，私聊发送进行解析
-2. 私聊发送「获取code」
+2. 私聊发送「获取同步码」
    获取 lyra-sync 的同步 code
 
 【lyra-link】

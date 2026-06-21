@@ -15,7 +15,7 @@ from . import utils, services, image_gen, bot_services, network, models
 from .napcat_stream import NapCatStreamFile
 # from .report import build_achievements_report, build_import_report
 from .report import MaiChartAchDiffReport, build_diff_report
-from .utils import MaiChart, MaiChartAch, link_cache, link_hash_index
+from .utils import MaiChart, MaiChartAch, link_cache, link_hash_index, NoLinkQQError
 from .constants import *
 from .bot_registry import PluginRegistry
 
@@ -38,7 +38,8 @@ from nonebot.adapters.onebot.v11.exception import ActionFailed
 from nonebot.adapters.telegram import (Bot as TGBot,
                                        Event as TGEvent,
                                        Message as TGMessage,
-                                       MessageSegment as TGMessageSegment)
+                                       MessageSegment as TGMessageSegment,)
+from nonebot.adapters.telegram.event import PrivateMessageEvent as TGPrivateMessageEvent
 from nonebot.adapters.telegram.message import (Entity as TGMessageEntity,
                                                File as TGMessageFile)
 
@@ -79,10 +80,10 @@ sytb = on_regex(r'^sytb$', priority=5, block=True)
 b50 = on_regex(r'^(b50|kkb)\s*(.*)$', priority=1, block=True)
 # ra 计算
 ra_calc = on_regex(r"^ra\s+(\S+)?\s+(\S+)", priority=5, block=True)
-# # 上传 JSON 配置数据
-# file_receiver = on_message(priority=25, rule=is_private_file())
-# 获取 code
-get_code = on_regex(r"^获取code$", priority=5, block=True)
+# 上传 JSON 配置数据
+file_receiver = on_message(priority=25)
+# 获取同步码
+get_sync_code = on_regex(r"^获取同步码$", priority=5, block=True)
 # link 查询与绑定
 link = on_regex(r"^(查询|获取|绑定|解除|解绑)?link(?:\s+(\S+))?$", priority=5, block=True)
 
@@ -101,6 +102,7 @@ _REPLY_DICT: dict[str, str | list[str]] = {
     "link_not_platform": "未知平台",
     "link_not_linked": "你似乎还没有绑定 QQ 号~请使用「绑定link」尝试绑定",
     "link_onebot_no_bind": "你可以直接操作的（）QQ 之间不能绑定的",
+    "link_get_more_info": "你还没有绑定 QQ 号，绑定后可以同步游玩数据哦！",
     # adx_download (ad)
     "ad_no_maidata": "没有找到id为{short_id}的谱面的数据！可能还没被收录，请联系监护人确认喔qwq",
     "ad_bad_id": "请提供正确的乐曲 ID 哦qwq",
@@ -145,7 +147,9 @@ _REPLY_DICT: dict[str, str | list[str]] = {
 
 def reply(key: str, **kwargs) -> str:
     """快捷回复及格式化函数"""
-    text_or_list = _REPLY_DICT.get(key, "")
+    text_or_list = _REPLY_DICT.get(key, None)
+    if text_or_list is None:
+        text_or_list = _REPLY_DICT.get("error", "未知错误")
     if isinstance(text_or_list, list):
         text = random.choice(text_or_list)
     else:
@@ -239,7 +243,7 @@ async def get_maiuser(event: Event, user_id: int | None = None) -> utils.MaiUser
     elif isinstance(event, TGEvent):
         mu = await services.get_user_by_telegram_id(user_id)
         if mu is None:
-            raise ValueError(reply("error_user_not_found"))
+            raise NoLinkQQError(reply("error_user_not_found"))
     else:
         # platform event
         raise ValueError(reply("error_unexpected"))
@@ -267,9 +271,9 @@ async def get_maidata_with_ach(short_id: int, target_server: SERVER_TAG, user_id
     # MaiData, 实际使用的服务器标签
     return maidata, actual_server
 
-# ---
+# --- Json Parser ---
 
-async def read_json(bot: OneBotV11Bot, file_info: dict, file_id: str) -> Optional[Any]:
+async def onebotv11_read_json(bot: OneBotV11Bot, file_info: dict, file_id: str) -> Optional[Any]:
     """NapCat OneBotV11 JSON 文件解析"""
     file_base64 = file_info.get("base64")
     file_path_str = file_info.get("file")
@@ -310,6 +314,19 @@ async def read_json(bot: OneBotV11Bot, file_info: dict, file_id: str) -> Optiona
             logger.debug(f"流式接管失败: {e}")
 
     return None
+
+async def tg_read_json(bot: TGBot, file_id: str) -> Optional[Any]:
+    """Telegram JSON 文件解析"""
+    try:
+        tg_file_info = await bot.get_file(file_id=file_id)
+        if tg_file_info.file_path:
+            token = bot.bot_config.token  
+            file_url = f"https://api.telegram.org/file/bot{token}/{tg_file_info.file_path}"
+            return await network.request_json(file_url)
+    except Exception as e:
+        logger.error(f"Telegram 远程文件解析失败: {e}")
+    return None
+
 
 # =================================
 # 业务逻辑
@@ -623,13 +640,20 @@ async def mai_info_handled(event: Event, matcher: Matcher, groups: tuple = Regex
 
     try:
         maiuser = await get_maiuser(event)
+        qq = int(maiuser.user_id)
+        default_server = maiuser.default_server
+    except NoLinkQQError as e:
+        # 未绑定 QQ
+        maiuser = None
+        qq = None
+        default_server = 'JP'  # 没有绑定 QQ 的用户默认展示日服数据
     except ValueError as e:
         await matcher.finish(str(e))
         return
-    qq = int(maiuser.user_id)
     
     _, server = get_args(args)
-    server = server if (server != 'ALL' and server is not None) else maiuser.default_server  # 暂不支持 ALL
+    
+    server = server if (server != 'ALL' and server is not None) else default_server  # 暂不支持 ALL
     # 查询乐曲信息
     if (mdt := await services.get_mdt_by_id(shortid, qq)) is None:
         await matcher.finish(reply("mai_info_no_maidata", short_id=shortid))
@@ -644,6 +668,8 @@ async def mai_info_handled(event: Event, matcher: Matcher, groups: tuple = Regex
         ("text", f"{mdt.shortid}. {mdt.title}"),
         ("image", info_box_bytes)
     ]
+    if qq is None:
+        payload.append(("text", reply("link_get_more_info")))
     await build_msg(matcher, event, payload, tag='finish')
 
 @mai_what_song.handle()
@@ -655,11 +681,16 @@ async def mai_what_song_handled(event: Event, matcher: Matcher, groups: tuple = 
 
     try:
         maiuser = await get_maiuser(event)
+        qq = int(maiuser.user_id)
+        server = maiuser.default_server
+    except NoLinkQQError as e:
+        # 未绑定 QQ
+        maiuser = None
+        qq = None
+        server = 'JP'  # 没有绑定 QQ 的用户默认展示日服数据
     except ValueError as e:
         await matcher.finish(str(e))
         return
-    qq = int(maiuser.user_id)
-    server = maiuser.default_server
 
     try:
         # 搜索歌曲
@@ -670,7 +701,7 @@ async def mai_what_song_handled(event: Event, matcher: Matcher, groups: tuple = 
         return
     
     # 过滤宴会场 (shortid >= 100000)
-    mdt_list = [mdt for mdt in mdt_list if mdt.shortid < 100000]
+    # mdt_list = [mdt for mdt in mdt_list if mdt.shortid < 100000]
     if not mdt_list:
         await matcher.finish(reply("mws_found_no_results", keyword=keyword))
         return
@@ -976,6 +1007,9 @@ async def b50_handled(event: Event, matcher: Matcher, groups: tuple = RegexGroup
                 await build_msg(matcher, event, payload, tag='send')
         except Exception as e:
             logger.warning(f"强制刷新水鱼数据失败: {e}")
+        
+        # 由于进行了更新，刷新 MaiUser 数据
+        target_maiuser = (await services.get_or_create_user_by_id(target_qq)).to_data()
     else:
         await build_msg(matcher, event, payload, tag='send')
 
@@ -1006,7 +1040,6 @@ async def b50_handled(event: Event, matcher: Matcher, groups: tuple = RegexGroup
         await build_msg(matcher, event, [("text", reply("b50_no_jp_data"))], tag='send')
 
     # 绘制 b50
-    # TODO 这里要先计算一下新的 dxrating，防止缓存问题，同时要记得更新缓存
     dxrating = target_maiuser.cn_dxrating if server == 'CN' else target_maiuser.jp_dxrating
     update_time = target_maiuser.get_formated_time(server)
 
@@ -1029,181 +1062,165 @@ async def b50_handled(event: Event, matcher: Matcher, groups: tuple = RegexGroup
     await build_msg(matcher, event, final_payload, tag='finish')
 
 
-# # TODO TG适配
-# # @file_receiver.handle()
-# async def _(bot: OneBotV11Bot, event: OneBotV11PrivateMessageEvent, matcher: Matcher):
-
-#     # 获取文件
-#     file_seg = event.get_message()["file"][0]
-#     file_id = file_seg.data.get("file_id")
-#     file_name = file_seg.data.get("file", "")
-#     if not file_name.endswith(".json"):
-#         return
-
-#     file_info = await bot.get_file(file_id=file_id)
-#     file_path = Path(file_info.get("file", "")) if file_info.get("file") else None
-#     file_url = file_info.get("url", None)
-#     file_base64 = file_info.get("base64", None)
+# TODO TG适配
+@file_receiver.handle()
+async def file_receiver_handled(bot: Bot, event: Event, matcher: Matcher):
     
-#     file_data = None
-#     # 1. base64 直接读取
-#     if file_base64:
-#         try:
-#             if "," in file_base64:
-#                 file_base64 = file_base64.split(",")[1]
-#             content = base64.b64decode(file_base64)
-#             file_data = orjson.loads(content)
-#         except:
-#             logger.warning("base64 解码失败，尝试其他方式读取文件")
-#     # 2. 本地路径读取
-#     if not file_data and file_path and file_path.exists():
-#         try:
-#             async with aiofiles.open(file_path, "rb") as f:
-#                 content = await f.read()
-#                 file_data = orjson.loads(content)
-#             logger.info(f"成功从本地路径读取文件: {file_path}")
-#         except Exception as e:
-#             logger.warning(f"本地读取失败，尝试其他方式读取文件: {e}")
-#     # 3. URL 下载读取
-#     if not file_data and file_url:
-#         if file_url.startswith("http"):
-#             try:
-#                 file_data = await network.request_json(file_url)
-#             except Exception as e:
-#                 logger.error(f"网络请求失败: {e}")
-#         else:
-#             logger.warning(f"URL 协议错误: {file_url}")
-#     # 4. NapCat 流式接管
-#     if not file_data and file_id:
-#         try:
-#             async with NapCatStreamFile(bot, file_id) as stream_path:
-#                 async with aiofiles.open(stream_path, "rb") as f:
-#                     content = await f.read()
-#                 file_data = orjson.loads(content)
-#             logger.info(f"成功从 NapCat 流式接管读取文件: {file_id}")
-#         except Exception as e:
-#             logger.warning(f"流式接管失败: {e}")
-#     # E. 失败
-#     if not file_data:
-#         await matcher.finish("读取或解析文件失败，请重试。")
+    file_name: str = ""
+    file_data: Optional[Any] = None
 
-#     # 校验数据格式
-#     if not all([
-#         isinstance(file_data, list),  # 数据必须是列表
-#         len(file_data) > 0,  # 列表不能为空
-#         "sheetId" in file_data[0],  # 必须包含 sheetId 字段
-#         '__dxrt__' in file_data[0].get("sheetId")  # sheetId 中必须包含 __dxrt__ 字样
-#     ]):
-#         # 格式不正确，静默失败（可能是其他插件识别的文件，不进行失败提醒）
-#         return
+    # ---- 跨平台解析 JSON 数据 ----
+    if isinstance(event, OneBotV11PrivateMessageEvent) and isinstance(bot, OneBotV11Bot):
+        try:
+            onebotv11_file_seg = event.get_message()["file"][0]
+            onebotv11_file_id = cast(str, onebotv11_file_seg.data.get("file_id"))
+            file_name = onebotv11_file_seg.data.get("file", "")
+        except (KeyError, IndexError):
+            return
 
-#     # 落到数据解析
-#     await matcher.send("检查到 lyra-maimai 数据导出！正在识别曲目并记录成绩...")
-#     user_id = int(event.get_user_id())
-#     ach_list = []
-#     title_type_cache: dict[tuple[str, str], int | None] = {}
-#     unmatched_titles: list[str] = []
-#     invalid_diff_items: list[str] = []
-#     parse_failed_items: list[str] = []
+        if not file_name.endswith(".json"):
+            return
 
-#     def append_unique(items: list[str], value: str):
-#         value = value.strip()
-#         if value and value not in items:
-#             items.append(value)
+        file_info = await bot.get_file(file_id=onebotv11_file_id)
+        file_data = await onebotv11_read_json(bot, file_info, onebotv11_file_id)
+
+    elif isinstance(event, TGPrivateMessageEvent) and isinstance(bot, TGBot):
+        tg_msg = event.telegram_model.message
+        if not (tg_msg and tg_msg.document):
+            return
+
+        file_name = tg_msg.document.file_name or ""
+        if not file_name.endswith(".json"):
+            return
+
+        file_data = await tg_read_json(bot, tg_msg.document.file_id)
+        
+        
     
-#     for record in file_data:
-#         try:
-#             title = str(record.get("title", "")).strip() or "(无标题)"
-#             record_type = str(record.get("type", "sd")).lower() # 'sd' 或 'dx'
+    else:
+        # 群消息或其他类型等消息，不做解析，静默退出
+        return
+    
+    # 校验 file_name 和 file_data
+    
+    # 1. 数据必须是列表
+    if not isinstance(file_data, list):
+        return
+    # 2. 列表不能为空
+    if len(file_data) == 0:
+        return
+    # 3. 列表中必须包含 sheetId 字段
+    if "sheetId" not in file_data[0]:
+        return
+    # 4. sheetId 中必须包含 __dxrt__ 字样
+    if "__dxrt__" not in file_data[0].get("sheetId", ""):
+        return
+
+    # 落到数据解析
+    await matcher.send("检查到 lyra-maimai 数据导出！正在识别曲目并记录成绩...")
+    
+    maiuser = await get_maiuser(event)
+    user_id = maiuser.user_id
+    
+    ach_list = []
+    title_type_cache: dict[tuple[str, str], int | None] = {}
+    unmatched_titles: list[str] = []
+    invalid_diff_items: list[str] = []
+    parse_failed_items: list[str] = []
+
+    def append_unique(items: list[str], value: str):
+        value = value.strip()
+        if value and value not in items:
+            items.append(value)
+    
+    for record in file_data:
+        try:
+            title = str(record.get("title", "")).strip() or "Unknown"
+            record_type = str(record.get("type", "sd")).lower() # 'sd' 或 'dx'
             
-#             if (title, record_type) not in title_type_cache:
-#                 song_list = await services.get_mdt_by_title(title)
-#                 if len(song_list) == 0:
-#                     # Not Found
-#                     title_type_cache[(title, record_type)] = None
-#                     logger.warning(f"无法找到曲目: {title}")
-#                     append_unique(unmatched_titles, title)
-#                     continue
-#                 elif len(song_list) == 1:
-#                     # 有且只有一个
-#                     title_type_cache[(title, record_type)] = song_list[0].shortid
-#                 else:
-#                     # 有多个，包含sd/dx/utage等版本，尝试根据 type 进一步筛选
-#                     filtered = []
-#                     if record_type == "dx":
-#                         filtered = [s for s in song_list if 100000 > s.shortid >= 10000]
-#                     elif record_type in ("sd", "std"):
-#                         filtered = [s for s in song_list if s.shortid < 10000]
+            if (title, record_type) not in title_type_cache:
+                song_list = await services.get_mdt_by_title(title)
+                if len(song_list) == 0:
+                    title_type_cache[(title, record_type)] = None
+                    logger.warning(f"无法找到曲目: {title}")
+                    append_unique(unmatched_titles, title)
+                    continue
+                elif len(song_list) == 1:
+                    title_type_cache[(title, record_type)] = song_list[0].shortid
+                else:
+                    filtered = []
+                    if record_type == "dx":
+                        filtered = [s for s in song_list if 100000 > s.shortid >= 10000]
+                    elif record_type in ("sd", "std"):
+                        filtered = [s for s in song_list if s.shortid < 10000]
 
-#                     if len(filtered) == 1:
-#                         title_type_cache[(title, record_type)] = filtered[0].shortid
-#                     else:
-#                         title_type_cache[(title, record_type)] = None
-#                         logger.warning(f"无法找到曲目: {title}，type: {record_type}")
-#                         append_unique(unmatched_titles, f"{title}[{record_type.upper()}]")
-#                         continue
+                    if len(filtered) == 1:
+                        title_type_cache[(title, record_type)] = filtered[0].shortid
+                    else:
+                        title_type_cache[(title, record_type)] = None
+                        logger.warning(f"无法找到曲目: {title}，type: {record_type}")
+                        append_unique(unmatched_titles, f"{title}[{record_type.upper()}]")
+                        continue
  
-#             # 提取其他字段
-#             difficulty = DIFFS_MAP.get(record.get("diff", "").lower(), -1)
-#             if difficulty < 0:
-#                 append_unique(invalid_diff_items, f"{title}[{record.get('diff', '?')}]")
-#                 continue
+            # 提取其他字段
+            difficulty = DIFFS_MAP.get(record.get("diff", "").lower(), -1)
+            if difficulty < 0:
+                append_unique(invalid_diff_items, f"{title}[{record.get('diff', '?')}]")
+                continue
 
-#             shortid = title_type_cache[(title, record_type)]
-#             if shortid is not None:
+            shortid = title_type_cache[(title, record_type)]
+            if shortid is not None:
+                ach_obj = MaiChartAch(
+                    shortid=shortid,
+                    difficulty=difficulty,
+                    server=record.get("server", "JP"),
+                    achievement=float(record.get("achievement", 0)),
+                    dxscore=int(record.get("dxscore", 0)),
+                    combo=DF_FC_MAP.get(record.get("combo", "").lower(), 0),
+                    sync=DF_FS_MAP.get(record.get("sync", "").lower(), 0),
+                    user_id=user_id
+                )
+                ach_list.append(ach_obj)
 
-#                 ach_obj = MaiChartAch(
-#                     shortid=shortid,
-#                     difficulty=difficulty,
-#                     server=record.get("server", "JP"),
-#                     achievement=float(record.get("achievement", 0)),
-#                     dxscore=int(record.get("dxscore", 0)),
-#                     combo=DF_FC_MAP.get(record.get("combo", "").lower(), 0),
-#                     sync=DF_FS_MAP.get(record.get("sync", "").lower(), 0),
-#                     user_id=user_id
-#                 )
-#                 ach_list.append(ach_obj)
+        except Exception as e:
+            logger.warning(f"记录处理失败: {e}")
+            if isinstance(record, dict):
+                rec_title = str(record.get("title", "")).strip() or "(无标题)"
+                append_unique(parse_failed_items, rec_title)
+            continue
 
-#         except Exception as e:
-#             logger.warning(f"记录处理失败: {e}")
-#             if isinstance(record, dict):
-#                 rec_title = str(record.get("title", "")).strip() or "(无标题)"
-#                 append_unique(parse_failed_items, rec_title)
-#             continue
+    if not ach_list:
+        from .report import MaiChartAchDiffReport
+        report = MaiChartAchDiffReport()
+    else:
+        try:
+            report = await services.upload_achievements_batch(user_id, ach_list)
+        except Exception as e:
+            logger.error(f"数据库写入崩溃: {e}")
+            await matcher.finish("同步到数据库时出错了……请联系监护人确认情况哦qwq")
+            return
 
-#     # 4. 批量上传与报告生成
-#     data_diffs: list[dict] | None = None
-#     if ach_list:
-#         try:
-#             data_diffs = await services.upload_achievements_batch(user_id, ach_list)
-#         except Exception as e:
-#             logger.error(f"数据库写入崩溃: {e}")
-#             await matcher.finish("同步到数据库时出错了……请联系监护人确认情况哦qwq")
-#             return
+    # 将清洗循环中抓出来的脏数据塞入 report 对象中，实现全量漏报统计
+    for title in unmatched_titles:
+        report.no_data_song.append((0, title, -1))
+    for title_diff in invalid_diff_items:
+        report.other_error_song.append({"type": "invalid_diff", "msg": title_diff})
+    for title_failed in parse_failed_items:
+        report.other_error_song.append({"type": "parse_failed", "msg": title_failed})
 
-#     # TODO 造成过 Exception: nonebot.adapters.onebot.v11.exception.ActionFailed
-#     # ActionFailed(status='failed', retcode=1200, data=None, message='EventChecker Failed: NTEvent serviceAndMethod:NodeIKernelMsgService/sendMsg ListenerName:NodeIKernelMsgListener/onMsgInfoListUpdate EventRet:\n{\n    "result": -1,\n    "errMsg": "rich media transfer failed"\n}\n', wording='EventChecker Failed: NTEvent serviceAndMethod:NodeIKernelMsgService/sendMsg ListenerName:NodeIKernelMsgListener/onMsgInfoListUpdate EventRet:\n{\n    "result": -1,\n    "errMsg": "rich media transfer failed"\n}\n', echo='9', stream='normal-action')
-#     summary_text, warning_text, detail_img = build_import_report(
-#         data_diffs,
-#         file_count=len(file_data),
-#         parsed_count=len(ach_list),
-#         unmatched_titles=unmatched_titles,
-#         invalid_diff_items=invalid_diff_items,
-#         parse_failed_items=parse_failed_items,
-#     )
+    summary_text, diff_img = build_diff_report(
+        report,
+        file_count=len(file_data),
+        parsed_count=len(ach_list)
+    )
 
-#     # if detail_img:
-#     #     img_bytes = image_gen.get_image_bytes(detail_img)
-#     #     await _finish_with_optional_image(
-#     #         matcher,
-#     #         f"{summary_text}\n\n以下是本次成绩变更明细：\n{warning_text}",
-#     #         img_bytes,
-#     #         fallback_text=f"{summary_text}{warning_text}",
-#     #     )
+    # 构造跨平台兼容的统一消息负载
+    payload: list[tuple[str, Any]] = [("text", summary_text)]
+    if diff_img:
+        payload.append(("image", image_gen.get_image_bytes(diff_img)))
 
-#     await matcher.finish(f"{summary_text}{warning_text}")
+    await build_msg(matcher, event, payload, tag='finish')
 
-# # TODO TG适配
-# @get_code.handle()
-# async def _(matcher: Matcher):
-#     await matcher.finish("lyra-sync 服务器尚未开放，请等待 API 开放后再试一下~")
+@get_sync_code.handle()
+async def _(matcher: Matcher):
+    await matcher.finish("lyra-sync 服务器尚未开放，请等待 API 开放后再试一下~")
