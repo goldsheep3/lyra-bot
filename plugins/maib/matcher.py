@@ -1062,7 +1062,6 @@ async def b50_handled(event: Event, matcher: Matcher, groups: tuple = RegexGroup
     await build_msg(matcher, event, final_payload, tag='finish')
 
 
-# TODO TG适配
 @file_receiver.handle()
 async def file_receiver_handled(bot: Bot, event: Event, matcher: Matcher):
     

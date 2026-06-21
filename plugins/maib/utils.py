@@ -89,12 +89,13 @@ async def parse_version(version_str: str, parse_cn: bool = False) -> int:
     if version_id == -1:
         logger.warning(f"无法解析版本号: {version_str}")
     if parse_cn and version_id > 12:
-        # 国服版本号算法逻辑
-        version_id = (version_id - 13) // 2 + 2020
-        if version_id >= 24:
+        if version_id < 24:
+            # 国服版本号算法逻辑
+            version_id = (version_id - 13) // 2 + 2020
+        else:
             # DX2026 为 PRISM_PLUS
             # 暂时先如此处理，毕竟不确定sbga和wl要怎么算2027
-            version_id += 1
+            version_id = (version_id - 13) // 2 + 2020 + 1
     return version_id
 
 async def parse_genre(genre_str: str, genre_dict_fixed: dict[str, int]) -> int:
