@@ -151,6 +151,7 @@ class MaiData(Model):
     # 文件与来源
     converter: Mapped[Optional[str]]
     zip_path: Mapped[str]
+    tg_file_id_cache: Mapped[Optional[str]] = mapped_column(default=None, nullable=True)  # Telegram 文件 ID 缓存
 
     # Utage 特有字段 (常规曲目设为 None)
     is_utage: Mapped[bool] = mapped_column(default=False, index=True)  
@@ -183,6 +184,7 @@ class MaiData(Model):
             converter=self.converter if self.converter else '',
             img_path=(zip_path / "bg.png") if zip_path else Path("bg.png"),
             zip_path=zip_path,
+            tg_file_id_cache=self.tg_file_id_cache,
             aliases=[alias.to_data() for alias in self.aliases],
             is_utage=self.is_utage,
             buddy=all((self.buddy, self.is_utage)),
@@ -199,7 +201,8 @@ class MaiData(Model):
 class MaiUser(Model):
     __tablename__ = "maib_maiusers"
 
-    user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)  # QQ
+    user_telegram_id: Mapped[Optional[int]] = mapped_column(BigInteger, default=None, nullable=True, index=True, unique=True)  # Telegram ID
     username: Mapped[str] = mapped_column(default='')
     default_server: Mapped[SERVER_TAG] = mapped_column(default='CN')
     plate_version: Mapped[int | None] = mapped_column(default=None)  # 牌子信息
@@ -235,6 +238,7 @@ class MaiUser(Model):
         # lyra-sync 相关字段不包含在 utils.MaiUser
         return utils.MaiUser(
             user_id=self.user_id,
+            user_telegram_id=self.user_telegram_id,
             username=self.username,
             default_server=self.default_server,
             plate=self.plate(),
@@ -285,6 +289,7 @@ class MaiDataModel:
             version_cn=maidata.version_cn,
             converter=maidata.converter,
             zip_path=str(maidata.zip_path) if maidata.zip_path else None,
+            tg_file_id_cache=maidata.tg_file_id_cache,
             is_utage=maidata.is_utage,
             utage_tag=maidata.utage_tag,
             buddy=maidata.buddy
@@ -345,6 +350,7 @@ class MaiDataModel:
         """根据 utils.MaiUser 对象创建 MaiUser 模型实例"""
         return MaiUser(
             user_id=user.user_id,
+            user_telegram_id=user.user_telegram_id,
             username=user.username,
             default_server=user.default_server,
             plate_version=user.plate[0] if user.plate else None,

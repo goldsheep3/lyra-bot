@@ -248,7 +248,7 @@ async def maintenance_task():
                 sid = int(sy_item.get("id", 0))
                 # 转换版本号
                 raw_ver = sy_item.get("basic_info", {}).get("from", "")
-                ver_int = await utils.parse_diving_fish_version(raw_ver)
+                ver_int = await utils.parse_version(raw_ver, parse_cn=True)
                 version_update_list.append((sid, ver_int))
 
                 # 转换定数列表 (ds)

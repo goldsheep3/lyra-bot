@@ -6,14 +6,28 @@ import zipfile
 from thefuzz import process
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Optional, List, Tuple, Literal
+from typing import Optional, Literal
 
 from PIL import Image
 from loguru import logger
 
 from .constants import *  # 导入常量表
 
-def parse_status(target: str, mapping: Dict[str, int]) -> int:
+# Custom Exceptions
+class NoLinkQQError(ValueError):
+    """未绑定 QQ 号错误"""
+    pass
+
+
+# Cache
+link_cache: dict[int, tuple[str, int]] = {
+    # user_id: (link_hash, expiration_timestamp)
+}
+link_hash_index: dict[str, int] = {
+    # hash -> user_id
+}
+
+def parse_status(target: str, mapping: dict[str, int]) -> int:
     """通过映射表常量进行数值获取"""
     return mapping.get(target.lower(), 0)
 
@@ -29,92 +43,55 @@ def get_current_versions():
 def get_file_stat_identity(file_path: Path) -> str:
     """获取文件的特征标识（修改时间 + 文件大小）"""
     stat = file_path.stat()
-    # 使用 修改时间_文件大小 作为唯一标识
     return f"{stat.st_mtime}_{stat.st_size}"
 
-
 def _normalize_version_text(version_text: str) -> str:
-    """归一化版本文本，便于精确匹配。"""
-    return re.sub(r"\s+", "", version_text).casefold()
+    """版本文本归一化"""
+    text = str(version_text).lower().strip()  # 统一小写并去除首尾空白
+    has_dx = "dx" in text or "でらっくす" in text
+    
+    text = text.replace("でらっくす", "dx")  # 将日文 でらっくす 替换为 dx
+    text = text.replace("+", "plus")  # 将 + 替换为 plus
+    text = re.sub(r"\s+", "", text)  # 移除所有空白字符
+    # 裁剪前缀
+    if text.startswith("maimaidx"):
+        text = text[8:].strip()
+    elif text.startswith("maimai"):
+        text = text[6:].strip()
+    elif text.startswith("dx"):
+        text = text[2:].strip()
+    # 处理特例：如果被切成了空字符串（说明输入只有 maimai 或 dx 前缀本身）
+    if not text:
+        text = "dx" if has_dx else "maimai"
+        
+    return text
 
-
-def _build_version_id_map() -> dict[str, list[int]]:
-    """构建版本名称、简写名和牌名到版本 id 列表的映射。"""
-    version_id_map: dict[str, list[int]] = {}
+def _build_version_id_map() -> dict[str, int]:
+    """构建版本映射"""
+    version_id_map: dict[str, int] = {}
+    
     for version_id, version_meta in VERSIONS_META_DATA.items():
-        if isinstance(version_meta, dict):
-            version_candidates = (
-                version_meta.get("name"),
-                version_meta.get("code"),
-                version_meta.get("plate_name"),
-            )
-        else:
-            version_candidates = (version_meta,)
-
-        for version_candidate in version_candidates:
-            if not version_candidate:
-                continue
-            normalized_text = _normalize_version_text(str(version_candidate))
-            version_id_map.setdefault(normalized_text, []).append(version_id)
-
+        version_name: str = version_meta.get("name")
+        normalized_text = _normalize_version_text(version_name)
+        if not normalized_text:
+            continue
+        version_id_map[normalized_text] = version_id
+    
     return version_id_map
 
-
+# 预先生成版本字典
 VERSION_ID_MAP = _build_version_id_map()
 
-
-def get_version_ids(version_str: str) -> list[int]:
-    """通过版本全名、简写名或牌名获取对应的版本 id 列表。"""
-    normalized_text = _normalize_version_text(version_str)
-    if not normalized_text:
-        return []
-    return VERSION_ID_MAP.get(normalized_text, [])
-
-
-async def parse_version(version_str: str) -> int:
+async def parse_version(version_str: str, parse_cn: bool = False) -> int:
     """辅助函数：解析版本号"""
-    v_str = version_str.lower().strip()
-    if not v_str:
-        return -1
-
-    version_candidates = [version_str]
-    if v_str[:7] == "maimai ":
-        version_candidates.append(v_str[7:].strip())
-    if 'dx' in v_str:
-        version_candidates.append(v_str.replace('dx', 'でらっくす'))
-    if v_str[:6] == "でらっくす ":
-        version_candidates.append(v_str[6:].strip())
-
-    checked_versions: set[str] = set()
-    for version_candidate in version_candidates:
-        normalized_candidate = _normalize_version_text(version_candidate)
-        if normalized_candidate in checked_versions:
-            continue
-        checked_versions.add(normalized_candidate)
-        version_ids = VERSION_ID_MAP.get(normalized_candidate, [])
-        if version_ids:
-            return version_ids[0]
-
-    if not checked_versions:
+    normalized_text = _normalize_version_text(version_str)
+    version_ids = VERSION_ID_MAP.get(normalized_text, -1)
+    if version_ids == -1:
         logger.warning(f"无法解析版本号: {version_str}")
-        return -1
-
-    logger.warning(f"无法解析版本号: {version_str}")
-    return -1
-
-
-async def parse_diving_fish_version(version_str: str) -> int:
-    """辅助函数：解析国服版本号"""
-    v_jp_result = await parse_version(version_str)
-    if v_jp_result <= 12:
-        # 旧框版本，一致
-        return v_jp_result
-    else:
-        # 新框版本，转化
-        # 版本号为 maib 自主定义，兼容水鱼版本号输出格式，不受官方版本号影响
-        v = (v_jp_result - 13) // 2 + 2020
-        return v
-
+    if parse_cn and version_ids > 12:
+        # 国服版本号算法逻辑
+        version_ids = (version_ids - 13) // 2 + 2020
+    return version_ids
 
 async def parse_genre(genre_str: str, genre_dict_fixed: dict[str, int]) -> int:
     """辅助函数：解析流派名"""
@@ -140,6 +117,9 @@ async def parse_genre(genre_str: str, genre_dict_fixed: dict[str, int]) -> int:
         logger.warning(f"无法解析流派名: {genre_str}")
         return -1
     return g
+
+
+# ==============================================================
 
 @dataclass
 class MaiAlias:
@@ -245,7 +225,7 @@ class MaiChart:
         )
 
     @property
-    def notes(self) -> Tuple[int, int, int, int, int]:
+    def notes(self) -> tuple[int, int, int, int, int]:
         """返回一个包含所有 Note 统计数据的元组"""
         return (
             self.note_count_tap,
@@ -344,6 +324,7 @@ class MaiData:
     img_path: Path  # 图片文件路径
     zip_path: Optional[Path] = None  # 如果存在的话，ADX 谱面 ZIP 文件路径
     _cached_image: Optional[Image.Image] = None  # 缓存的封面图片对象
+    tg_file_id_cache: Optional[str] = None  # Telegram 文件 ID 缓存
 
     # Utage 宴会场 专属字段
     is_utage: bool = False  # Utage: Utage 标志
@@ -353,7 +334,7 @@ class MaiData:
     # 0~6 分别对应 Easy, Basic, Advanced, Expert, Master, Re: Master, Utage
     _charts: list[MaiChart | None] = field(default_factory=lambda: [None] * 7)
 
-    aliases: List[MaiAlias] = field(default_factory=list)  # 歌曲别名列表
+    aliases: list[MaiAlias] = field(default_factory=list)  # 歌曲别名列表
 
     @property
     def is_cabinet_dx(self) -> bool:
@@ -503,7 +484,7 @@ class MaiData:
             # 5. 更新到内存对象中
             self.set_chart_ach(diff, ach)
 
-    def add_aliases(self, aliases: List[MaiAlias]):
+    def add_aliases(self, aliases: list[MaiAlias]):
         """添加多个别名"""
         existing_alias_names = {a.alias for a in self.aliases}
         for alias in aliases:
@@ -515,6 +496,7 @@ class MaiData:
 @dataclass
 class MaiUser:
     user_id: int
+    user_telegram_id: Optional[int] = None
     username: str = ''
     default_server: SERVER_TAG = 'CN'
     # 牌子：元素1 和 JP 版本对应；元素2 的 1~4 分别表示 极 将 神 舞舞
@@ -586,6 +568,13 @@ class MaiUser:
         elif server == 'CN':
             self.cn_current_version = version
 
+    def set_telegram_id(self, telegram_id: int):
+        self.user_telegram_id = telegram_id
+
+    def remove_telegram_id(self):
+        self.user_telegram_id = None
+
+# ---
 
 class SimaiNoteCount:
     """

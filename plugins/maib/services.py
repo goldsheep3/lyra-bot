@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import utils
 from .models import MaiData, MaiChart, MaiChartAch, MaiAlias, MaiUser, MaiDataModel, MaiIdCheck
+from .report import MaiChartAchDiff, MaiChartAchDiffReport
 from .bot_registry import PluginRegistry
 from .constants import *
 
@@ -48,23 +49,105 @@ BASE_STMT = (
     )
 
 # 模糊查询结果过多时的最大允许值，超过该值会抛出 ValueError 异常
-MAX_BLUR_SEARCH_RESULTS = 100
+MAX_BLUR_SEARCH_RESULTS = 30
 
+# === 业务逻辑：用户信息相关 ===
 
-# === 实际业务逻辑 ===
-# --- 查 (get) ---
-
-# 通过 `user_id` 获取 `MaiUser`（唯一）
-# 通常使用 `get_or_set_user_by_id` 替代，后者会在用户不存在时自动创建
 @with_session
-async def get_user_by_id(user_id: int, *, session: AsyncSession) -> Optional[MaiUser]:
+async def _get_user_by_id(user_id: int, *, session: AsyncSession) -> Optional[MaiUser]:
     """通过 `user_id` 获取 `MaiUser`（唯一）"""
+    # 通常通过 `get_or_create_user_by_id` 直接调用
     statement = (
         select(MaiUser)
         .where(MaiUser.user_id == user_id)
     )
     result = await session.execute(statement)
     return result.scalar_one_or_none()
+
+async def get_or_create_user_by_id(user_id: int) -> MaiUser:
+    """通过 `user_id` 获取用户数据，支持不存在自动创建"""
+    # 该方法不接受外部 session，内部自行管理生命周期
+    async with PluginRegistry.get_session() as session:
+        user = await _get_user_by_id(user_id, session=session)
+        if user:
+            return user
+
+        new_user = MaiUser(user_id=user_id)
+        session.add(new_user)
+        await session.commit()
+        await session.refresh(new_user)
+        return new_user
+
+@with_session
+async def get_user_by_telegram_id(telegram_id: int, *, session: AsyncSession) -> Optional[MaiUser]:
+    """通过 `telegram_id` 获取 `MaiUser`（唯一）"""
+    statement = (
+        select(MaiUser)
+        .where(MaiUser.user_telegram_id == telegram_id)
+    )
+    result = await session.execute(statement)
+    return result.scalar_one_or_none()
+
+@with_session
+async def set_username(user_id: int, new_username: str, *, session: AsyncSession):
+    """通过 `user_id` 设置 `MaiUser` 的 `username`"""
+
+    statement = (
+        select(MaiUser)
+        .where(MaiUser.user_id == user_id)
+    )
+    result = await session.execute(statement)
+    user = result.scalar_one_or_none()
+    
+    if user:
+        user.username = new_username
+
+@with_session
+async def set_telegram_id(user_id: int, telegram_id: int, *, session: AsyncSession):
+    """通过 `user_id` 设置 `MaiUser` 的 `telegram_id`"""
+
+    statement = (
+        select(MaiUser)
+        .where(MaiUser.user_id == user_id)
+    )
+    result = await session.execute(statement)
+    user = result.scalar_one_or_none()
+    
+    if user:
+        user.user_telegram_id = telegram_id
+
+@with_session
+async def remove_telegram_id(user_id: int, *, session: AsyncSession):
+    """通过 `user_id` 移除 `MaiUser` 的 `telegram_id`"""
+
+    statement = (
+        select(MaiUser)
+        .where(MaiUser.user_id == user_id)
+    )
+    result = await session.execute(statement)
+    user = result.scalar_one_or_none()
+    
+    if user:
+        user.user_telegram_id = None
+
+
+# tg
+
+@with_session
+async def update_mdt_tg_file_id(shortid: int, tg_file_id: str, *, session: AsyncSession):
+    """通过 `shortid` 更新 `MaiData` 的 `tg_file_id_cache`"""
+    statement = (
+        update(MaiData)
+        .where(MaiData.shortid == shortid)
+        .values(tg_file_id_cache=tg_file_id)
+    )
+    await session.execute(statement)
+
+
+# === 实际业务逻辑 ===
+# --- 查 (get) ---
+
+
 
 # 通过 `shortid` 获取 `MaiData`（唯一）
 @with_session
@@ -840,32 +923,10 @@ async def set_mct_ach(server: SERVER_TAG, ach: utils.MaiChartAch,
     return None
 
 
-# 设置 `MaiUser` 的 `username`
-@with_session
-async def set_username(user_id: int, new_username: str,
-                       *, session: AsyncSession):
-    """
-    设置 `MaiUser` 的 `username`
-    Args:
-      user_id: 用户 ID
-      new_username: 新用户名
-    """
-
-    statement = (
-        select(MaiUser)
-        .where(MaiUser.user_id == user_id)
-    )
-    result = await session.execute(statement)
-    user = result.scalar_one_or_none()
-    
-    if user:
-        user.username = new_username
-
-
 @with_session
 async def get_last_sy_hash(user_id: int, *, session: AsyncSession) -> Optional[str]:
     """获取用户上次水鱼 records 的哈希值。"""
-    user = await get_user_by_id(user_id=user_id, session=session)
+    user = await _get_user_by_id(user_id=user_id, session=session)
     if not user:
         return None
     return user.last_sy_hash
@@ -874,7 +935,7 @@ async def get_last_sy_hash(user_id: int, *, session: AsyncSession) -> Optional[s
 @with_session
 async def set_last_sy_hash(user_id: int, sy_hash: str, *, session: AsyncSession):
     """写入用户最新的水鱼 records 哈希值。"""
-    user = await get_user_by_id(user_id=user_id, session=session)
+    user = await _get_user_by_id(user_id=user_id, session=session)
     if not user:
         user = MaiUser(user_id=user_id)
         session.add(user)
@@ -944,9 +1005,12 @@ def _get_ap_bonus_by_server(server: SERVER_TAG) -> int:
     return 1 if 2000 > current_version >= 25 else 0
 
 
-def get_cut_version(server: SERVER_TAG) -> int:
+def get_cut_version(server_or_version: SERVER_TAG | int) -> int:
     """获取 B50 分段所需的 cut_version。"""
-    version = _get_current_version_by_server(server)
+    if isinstance(server_or_version, int):
+        version = server_or_version
+    else:
+        version = _get_current_version_by_server(server_or_version)
     # PRiSM PLUS 开始, b15 扩展到两个版本，因此 cut_version 回退 1 版本以确保扩展
     if 2000 > version >= 24:
         version -= 1
@@ -1162,8 +1226,6 @@ async def refresh_user_dxrating_cache(user_id: int, server: SERVER_TAG,
                                       *, session: AsyncSession):
     """重算单个用户在指定服务器（JP/CN）的 DXRating 汇总缓存。"""
     
-    # TODO 计算 DXRating 总和时，额外考虑 models 新增的 b35 和 b15 的 first 和 last 字段，定义天花板和地板用于推分建议等功能
-
     cache_server = "CN" if server == "CN" else "JP"
     cut_version = get_cut_version(server)
 
@@ -1175,24 +1237,39 @@ async def refresh_user_dxrating_cache(user_id: int, server: SERVER_TAG,
     )
     total_dxrating = sum(a.dxrating for a in b35) + sum(a.dxrating for a in b15)
 
+    # ---- 提取 B35 和 B15 的首尾 rating 边界 ----
+    # 降序排列下：[0] 为最高分(first)，[-1] 为最低门槛(last)
+    b35_first = b35[0].dxrating if b35 else 0
+    b35_last = b35[-1].dxrating if b35 else 0
+    b15_first = b15[0].dxrating if b15 else 0
+    b15_last = b15[-1].dxrating if b15 else 0
+
     latest_update_stmt = (
         select(func.max(MaiChartAch.update_time))
         .where(MaiChartAch.user_id == user_id, MaiChartAch.server == cache_server)
     )
     latest_update_time = (await session.execute(latest_update_stmt)).scalar_one_or_none() or 0
 
-    user = await get_user_by_id(user_id=user_id, session=session)
+    user = await _get_user_by_id(user_id=user_id, session=session)
     if not user:
         user = MaiUser(user_id=user_id)
         session.add(user)
 
+    # ---- 写入对应服务器的 rating 总和与边界缓存 ----
     if cache_server == "CN":
         user.cn_dxrating = total_dxrating
         user.cn_update_time = latest_update_time
+        user.cn_dxrating_b35_first = b35_first
+        user.cn_dxrating_b35_last = b35_last
+        user.cn_dxrating_b15_first = b15_first
+        user.cn_dxrating_b15_last = b15_last
     else:
         user.jp_dxrating = total_dxrating
         user.jp_update_time = latest_update_time
-
+        user.jp_dxrating_b35_first = b35_first
+        user.jp_dxrating_b35_last = b35_last
+        user.jp_dxrating_b15_first = b15_first
+        user.jp_dxrating_b15_last = b15_last
 
 @with_session
 async def refresh_user_dxrating_cache_batch(user_ids: Sequence[int], server: SERVER_TAG,
@@ -1295,35 +1372,17 @@ async def refresh_dxrating_cache_by_chart_user(shortid: int, difficulty: int, se
     await refresh_user_dxrating_cache(user_id=user_id, server=server, session=session)
 
 
-async def get_or_set_user_by_id(user_id: int) -> utils.MaiUser:
-    """通过 `user_id` 获取用户数据，如果不存在则创建一个新的"""
-    # 该方法不接受外部 session，内部自行管理生命周期
-    async with PluginRegistry.get_session() as session:
-        user = await get_user_by_id(user_id, session=session)
-        if user:
-            return user.to_data()
-
-        new_user = MaiUser(user_id=user_id)
-        session.add(new_user)
-        await session.commit()
-        await session.refresh(new_user)
-        return new_user.to_data()
-
-
 @with_session
 async def upload_achievements_batch(user_id: int, ach_list: Sequence[utils.MaiChartAch],
-                                    *, session: AsyncSession) -> list[dict[str, Any]]:
-    """
-    批量上传成绩并返回变更列表。
+                                    *, session: AsyncSession) -> MaiChartAchDiffReport:
+    """批量上传成绩并返回变更报告"""
+    # 初始化及空校验
+    report = MaiChartAchDiffReport()
     
-    优化策略：
-    - 批量计算 + 分批写入，减少 ORM 与数据库往返开销
-    - 并发冲突时避免全局 rollback，保证当前事务内已完成改动不被误撤销
-    """
     if not ach_list:
-        return []
-
-    # 1. 输入去重：同一 key 只保留更优成绩
+        return report
+    
+    # 预去重
     unique_incoming: dict[tuple[int, int, SERVER_TAG], utils.MaiChartAch] = {}
     for ach in ach_list:
         ach.user_id = user_id
@@ -1333,11 +1392,11 @@ async def upload_achievements_batch(user_id: int, ach_list: Sequence[utils.MaiCh
             unique_incoming[key] = ach
 
     if not unique_incoming:
-        return []
+        return report
 
     shortids = sorted({sid for sid, _, _ in unique_incoming.keys()})
 
-    # 2. 一次性加载谱面与用户已有成绩
+    # 数据获取：一次性查询所有相关谱面和成绩
     chart_stmt = (
         select(MaiChart)
         .options(selectinload(MaiChart.maidata))
@@ -1363,7 +1422,7 @@ async def upload_achievements_batch(user_id: int, ach_list: Sequence[utils.MaiCh
     to_update: list[dict[str, Any]] = []  # [{"key": (sid,diff,srv), "ach": MaiChartAch, "chart": MaiChart, "incoming": utils.MaiChartAch, ...}]
     to_insert: list[dict[str, Any]] = []  # [{"values": {...}, "chart": MaiChart, "incoming": utils.MaiChartAch, ...}]
 
-    # 3. 第一遍：分类、计算 DXRating、生成变更日志
+    # 分类、计算 DXRating、生成变更日志
     for (shortid, difficulty, server), incoming in unique_incoming.items():
         chart = chart_map.get((shortid, difficulty))
         if not chart:
@@ -1373,8 +1432,12 @@ async def upload_achievements_batch(user_id: int, ach_list: Sequence[utils.MaiCh
         ap_bonus = _get_ap_bonus_by_server(server)
 
         existing = existing_map.get((shortid, difficulty, server))
+        
+        # 获取曲目名称用于报告展示
+        title = chart.maidata.title if chart.maidata else f"id{shortid}"
+
         if existing:
-            # 更新场景
+            # --- 更新场景 ---
             old_ach = existing.to_data()
             if not _is_achievement_priority_better(incoming, old_ach):
                 continue
@@ -1393,23 +1456,12 @@ async def upload_achievements_batch(user_id: int, ach_list: Sequence[utils.MaiCh
             maichart.set_ach(merged)
             new_dxrating = maichart.get_dxrating(server=server, ap_bonus=ap_bonus, user_id=user_id)
 
-            old_payload = {
-                "achievement": existing.achievement,
-                "dxscore": existing.dxscore,
-                "dxrating": existing.dxrating,
-                "combo": existing.combo,
-                "sync": existing.sync,
-            }
-
-            new_payload = {
-                "achievement": merged.achievement,
-                "dxscore": merged.dxscore,
-                "dxrating": new_dxrating,
-                "combo": merged.combo,
-                "sync": merged.sync,
-            }
-
-            if old_payload != new_payload:
+            # 判断实际数据是否有变化（避免无意义的更新记录）
+            if (incoming.achievement > old_ach.achievement or 
+                incoming.dxscore > old_ach.dxscore or
+                incoming.combo > old_ach.combo or
+                incoming.sync > old_ach.sync):
+                
                 to_update.append({
                     "ach_obj": existing,
                     "new_dxrating": new_dxrating,
@@ -1419,40 +1471,55 @@ async def upload_achievements_batch(user_id: int, ach_list: Sequence[utils.MaiCh
                     "new_combo": merged.combo,
                     "new_sync": merged.sync,
                 })
-                unified_log = generate_change_log(chart, incoming, old_ach)
-                if unified_log:
-                    changes_log.append(unified_log)
+                
+                # 构建更新变更对象
+                diff = MaiChartAchDiff(
+                    shortid=shortid,
+                    title=title,
+                    difficulty=difficulty,
+                    server=server,
+                    new_ach=merged,
+                    old_ach=old_ach
+                )
+                report.updated_song.append(diff)
                 affected_servers.add(server)
-            continue
 
-        # 插入场景
-        maichart.set_ach(incoming)
-        new_dxrating = maichart.get_dxrating(server=server, ap_bonus=ap_bonus, user_id=user_id)
+        else:
+            # --- 插入场景 ---
+            maichart.set_ach(incoming)
+            new_dxrating = maichart.get_dxrating(server=server, ap_bonus=ap_bonus, user_id=user_id)
 
-        to_insert.append({
-            "chart_id": chart.id,
-            "values": {
-                "user_id": user_id,
-                "shortid": shortid,
+            to_insert.append({
                 "chart_id": chart.id,
-                "difficulty": difficulty,
-                "server": server,
-                "achievement": incoming.achievement,
-                "dxscore": incoming.dxscore,
-                "dxrating": new_dxrating,
-                "combo": incoming.combo,
-                "sync": incoming.sync,
-                "update_time": int(time.time()),
-            },
-            "chart": chart,
-            "incoming": incoming,
-        })
-        unified_log = generate_change_log(chart, incoming, None)
-        if unified_log:
-            changes_log.append(unified_log)
-        affected_servers.add(server)
+                "values": {
+                    "user_id": user_id,
+                    "shortid": shortid,
+                    "chart_id": chart.id,
+                    "difficulty": difficulty,
+                    "server": server,
+                    "achievement": incoming.achievement,
+                    "dxscore": incoming.dxscore,
+                    "dxrating": new_dxrating,
+                    "combo": incoming.combo,
+                    "sync": incoming.sync,
+                    "update_time": int(time.time()),
+                },
+                "chart": chart,
+                "incoming": incoming,
+            })
+            
+            # 构建新增变更对象
+            diff = MaiChartAchDiff(
+                shortid=shortid,
+                title=title,
+                difficulty=difficulty,
+                server=server,
+                new_ach=incoming,
+                old_ach=None
+            )
+            report.new_song.append(diff)
+            affected_servers.add(server)
 
-    # 4. 执行批量更新
     if to_update:
         for update_item in to_update:
             ach_obj = update_item["ach_obj"]
@@ -1463,18 +1530,15 @@ async def upload_achievements_batch(user_id: int, ach_list: Sequence[utils.MaiCh
             ach_obj.dxrating = update_item["new_dxrating"]
             ach_obj.update_time = update_item["new_update_time"]
 
-    # 确保 ORM 更新先落到会话待写缓冲，再执行后续插入逻辑。
     await session.flush()
 
-    # 5. 执行批量插入（并发安全，不使用全局 rollback）
+    # 执行批量插入
     if to_insert:
-        # 分批插入，避免单次查询过大
-        chunk_size = 512
+        chunk_size = 512  # 分批插入
         for i in range(0, len(to_insert), chunk_size):
             chunk = to_insert[i:i + chunk_size]
             chunk_values = [item["values"] for item in chunk]
 
-            # 先用最新数据库快照判定，避免依赖函数开头的 stale existing_map。
             chunk_shortids = sorted({v["shortid"] for v in chunk_values})
             latest_stmt = (
                 select(MaiChartAch)
@@ -1496,17 +1560,7 @@ async def upload_achievements_batch(user_id: int, ach_list: Sequence[utils.MaiCh
                     pending_insert.append(v)
                     continue
 
-                new_ach_data = utils.MaiChartAch(
-                    shortid=v["shortid"],
-                    difficulty=v["difficulty"],
-                    server=v["server"],
-                    achievement=v["achievement"],
-                    dxscore=v["dxscore"],
-                    combo=v["combo"],
-                    sync=v["sync"],
-                    update_time=v["update_time"],
-                    user_id=v["user_id"],
-                )
+                new_ach_data = utils.MaiChartAch(**v)
                 old_ach = existing.to_data()
                 if _is_achievement_priority_better(new_ach_data, old_ach):
                     existing.achievement = v["achievement"]
@@ -1522,13 +1576,11 @@ async def upload_achievements_batch(user_id: int, ach_list: Sequence[utils.MaiCh
             try:
                 await session.execute(insert(MaiChartAch).values(pending_insert))
             except IntegrityError:
-                # 仍然有并发插入竞争时，逐条用 savepoint 兜底，避免回滚整个事务。
                 for v in pending_insert:
                     try:
                         async with session.begin_nested():
                             await session.execute(insert(MaiChartAch).values(v))
                     except IntegrityError:
-                        # 同键在并发窗口内已被写入，转为更新逻辑。
                         conflict_stmt = (
                             select(MaiChartAch)
                             .where(
@@ -1542,17 +1594,7 @@ async def upload_achievements_batch(user_id: int, ach_list: Sequence[utils.MaiCh
                         if conflict_row is None:
                             raise
 
-                        new_ach_data = utils.MaiChartAch(
-                            shortid=v["shortid"],
-                            difficulty=v["difficulty"],
-                            server=v["server"],
-                            achievement=v["achievement"],
-                            dxscore=v["dxscore"],
-                            combo=v["combo"],
-                            sync=v["sync"],
-                            update_time=v["update_time"],
-                            user_id=v["user_id"],
-                        )
+                        new_ach_data = utils.MaiChartAch(**v)
                         old_ach = conflict_row.to_data()
                         if _is_achievement_priority_better(new_ach_data, old_ach):
                             conflict_row.achievement = v["achievement"]
@@ -1562,8 +1604,9 @@ async def upload_achievements_batch(user_id: int, ach_list: Sequence[utils.MaiCh
                             conflict_row.dxrating = v["dxrating"]
                             conflict_row.update_time = v["update_time"]
 
-    # 6. 重算用户缓存（按受影响服务器）
+    # 7. 重算用户缓存
     for server in affected_servers:
         await refresh_user_dxrating_cache(user_id=user_id, server=server, session=session)
 
-    return changes_log
+    # 返回新的报告对象
+    return report

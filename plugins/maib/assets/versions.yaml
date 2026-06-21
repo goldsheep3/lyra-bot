@@ -135,5 +135,9 @@
 2025:
   name: "舞萌DX 2025"
   code: dx2025
-  plate_name: 镜彩
+  plate_name: 镜
+2026:
+  name: "舞萌DX 2026"
+  code: dx2026
+  plate_name: 彩
 # ...
