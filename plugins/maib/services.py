@@ -1394,6 +1394,7 @@ async def upload_achievements_batch(user_id: int, ach_list: Sequence[utils.MaiCh
     if not unique_incoming:
         return report
 
+    incoming_servers = {server for _, _, server in unique_incoming.keys()}
     shortids = sorted({sid for sid, _, _ in unique_incoming.keys()})
 
     # 数据获取：一次性查询所有相关谱面和成绩
@@ -1415,7 +1416,6 @@ async def upload_achievements_batch(user_id: int, ach_list: Sequence[utils.MaiCh
     existing_achs = (await session.execute(exist_stmt)).scalars().all()
     existing_map = {(a.shortid, a.difficulty, a.server): a for a in existing_achs}
 
-    changes_log: list[dict[str, Any]] = []
     affected_servers: set[SERVER_TAG] = set()
     
     # 分离待更新和待插入的数据
@@ -1605,7 +1605,7 @@ async def upload_achievements_batch(user_id: int, ach_list: Sequence[utils.MaiCh
                             conflict_row.update_time = v["update_time"]
 
     # 7. 重算用户缓存
-    for server in affected_servers:
+    for server in incoming_servers:
         await refresh_user_dxrating_cache(user_id=user_id, server=server, session=session)
 
     # 返回新的报告对象

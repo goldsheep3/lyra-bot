@@ -61,7 +61,7 @@ class MaiChartAch(Model):
 
     chart: Mapped["MaiChart"] = relationship(back_populates="achs", lazy="selectin")
 
-    def update(self, other: 'MaiChartAch | utils.MaiChartAch'):
+    def update(self, other: MaiChartAch | utils.MaiChartAch):
         """更新成绩"""
         if self.achievement < other.achievement:
             self.achievement = other.achievement

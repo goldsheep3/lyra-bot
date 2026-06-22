@@ -123,6 +123,23 @@ async def parse_genre(genre_str: str, genre_dict_fixed: dict[str, int]) -> int:
         return -1
     return g
 
+def get_ap_bouns_value(server: SERVER_TAG) -> int:
+    """根据最新版本获取 AP+ 奖励分数"""
+    ver_jp, ver_cn = get_current_versions()
+    current_version = ver_cn if server == "CN" else ver_jp
+    if 2000 > current_version >= 25:
+        return 1
+    return 0
+
+def get_dxrating(achievement: float, level: float, ap_bonus: int = 0) -> int:
+    """根据成就率和定数计算 DX Rating"""
+    factor = next((f for threshold, f in RATE_FACTOR_TABLE if achievement >= threshold), 0.0)
+    achievement = 100.5 if achievement >= 100.5 else achievement  # SSS+ 即为最高分数
+    ra = int(level * achievement * factor)
+    if ap_bonus > 0:
+        ra += ap_bonus
+    return ra
+
 
 # ==============================================================
 
@@ -280,18 +297,9 @@ class MaiChart:
 
     def get_dxrating(self, server: SERVER_TAG = "JP", ap_bonus: int = 0, user_id: int | None = None) -> int:
         """获取谱面 DX Rating"""
-        ach = self.get_ach(server=server, user_id=user_id)
-        if not ach or ach.achievement < 0:
-            return 0
-        factor = next((f for threshold, f in RATE_FACTOR_TABLE if ach.achievement >= threshold), 0.0)
-        achievement = 100.5 if ach.achievement >= 100.5 else ach.achievement  # SSS+ 即为最高分数
-        level = self.lv_cn if server == "CN" else self.lv
-        if not level:
-            return 0
-        ra = int(level * achievement * factor)
-        if ach.combo >= 3:
-            ra += ap_bonus
-        return ra
+        achievement = self.get_ach(server, user_id).achievement
+        level = self.lv_cn if server == "CN" and self.lv_cn is not None else self.lv
+        return get_dxrating(achievement=achievement, level=level, ap_bonus=ap_bonus)
 
     def set_notes_with_tuple(self, notes: tuple[int, int, int, int, int]):
         """设置 Note 统计数据"""
@@ -691,19 +699,19 @@ class SimaiNoteCount:
 
 
 def parse_dxrating_filename(dxrating: int, cirp_frame: bool = True) -> str:
-        """根据当前 DX Rating 获取对应的外框文件名"""
-        # 1. 确定使用的边界和前缀
-        bounds = BOUNDARIES_DX_RATING_NEW if cirp_frame else BOUNDARIES_DX_RATING
-        
-        # 定位索引
-        idx = max(0, bisect.bisect_right(bounds, dxrating) - 1)
-        
-        if idx < 8:
-            # 金框之前不区分
-            return f"JP_{idx}.png"
-        if cirp_frame:
-            return f"JP_CIRP_{idx}.png"
+    """根据当前 DX Rating 获取对应的外框文件名"""
+    # 1. 确定使用的边界和前缀
+    bounds = BOUNDARIES_DX_RATING_NEW if cirp_frame else BOUNDARIES_DX_RATING
+    
+    # 定位索引
+    idx = max(0, bisect.bisect_right(bounds, dxrating) - 1)
+    
+    if idx < 8:
+        # 金框之前不区分
         return f"JP_{idx}.png"
+    if cirp_frame:
+        return f"JP_CIRP_{idx}.png"
+    return f"JP_{idx}.png"
 
 
 def get_sy_records(records: list[dict]) -> list[MaiChartAch]:

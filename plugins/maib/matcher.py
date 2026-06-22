@@ -1019,7 +1019,10 @@ async def b50_handled(event: Event, matcher: Matcher, groups: tuple = RegexGroup
     current_version = ver_cn if server == 'CN' else ver_jp  # 目前不兼容 ALL 混合模式
     cut_version = services.get_cut_version(current_version)
     
+    b35_achs: list[models.MaiChartAch]
+    b15_achs: list[models.MaiChartAch]
     b35_achs, b15_achs = await services.get_mdts_for_b50(target_qq, server, cut_version)
+    dxrating = sum([mca.dxrating for mca in (b35_achs + b15_achs)])
 
     # 清洗谱面数据，构建绘图数据结构
     def _build_entries(achs: list[models.MaiChartAch]) -> list[tuple[utils.MaiData, int]]:
@@ -1040,9 +1043,6 @@ async def b50_handled(event: Event, matcher: Matcher, groups: tuple = RegexGroup
         await build_msg(matcher, event, [("text", reply("b50_no_jp_data"))], tag='send')
 
     # 绘制 b50
-    dxrating = target_maiuser.cn_dxrating if server == 'CN' else target_maiuser.jp_dxrating
-    update_time = target_maiuser.get_formated_time(server)
-
     img = image_gen.draw_b50(
         b35_entries, b15_entries,
         current_version=current_version,
@@ -1050,7 +1050,7 @@ async def b50_handled(event: Event, matcher: Matcher, groups: tuple = RegexGroup
         user_name=target_maiuser.username,
         user_avatar=avatar,
         dxrating=dxrating,
-        update_time=update_time,
+        update_time=target_maiuser.get_formated_time(server),
         cn_level=1 if server == 'CN' else 0
     )
     img_bytes = image_gen.get_image_bytes(img)
