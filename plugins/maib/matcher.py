@@ -52,16 +52,6 @@ LOW_MEMORY_TIP: str | None = None
 DEVELOPER_TOKEN: Optional[str] = None
 
 
-# --- rule ---
-
-# 规则：必须是私聊事件，且消息段中包含 file
-# # TODO TG 适配
-# def is_private_file():
-#     async def _check(event: MessageEvent) -> bool:
-#         return isinstance(event, PrivateMessageEvent) and \
-#                any(seg.type == "file" for seg in event.get_message())
-#     return Rule(_check)
-
 # --- matcher ---
 
 # 下载谱面
@@ -559,6 +549,7 @@ async def adx_download_handled(bot: Bot, event: Event, matcher: Matcher, groups:
             await matcher.send(reply("ad_group_success", song_name=title))
             # 清理逻辑
             await _cleanup_expired_group_files(bot, group_id, folder_id)
+            return
             
         elif isinstance(event, OneBotV11PrivateMessageEvent):
             # 私聊消息
@@ -569,7 +560,9 @@ async def adx_download_handled(bot: Bot, event: Event, matcher: Matcher, groups:
                 logger.error(f"上传失败: {e}")
                 await matcher.finish(reply("ad_error"))
                 return
-            await matcher.finish(reply("ad_private_success", song_name=title))
+            else:
+                await matcher.finish(reply("ad_private_success", song_name=title))
+                return
             
         else:
             # 其他类型消息，理论上不应触发该命令
@@ -589,7 +582,7 @@ async def adx_download_handled(bot: Bot, event: Event, matcher: Matcher, groups:
                     chat_id=chat_id,
                     document=mdt.tg_file_id_cache
                 )
-                await matcher.send(reply("ad_private_success", song_name=title))
+                await matcher.finish(reply("ad_private_success", song_name=title))
                 return
             except Exception as e:
                 # 极少情况下，TG 端的 file_id 可能会失效，需要重新上传
@@ -615,16 +608,15 @@ async def adx_download_handled(bot: Bot, event: Event, matcher: Matcher, groups:
                 logger.debug(f"成功获取 file_id: {new_file_id}，正在写入缓存...")
                 await services.update_mdt_tg_file_id(target_short_id, new_file_id)
 
-            await matcher.send(reply("ad_tg_success", song_name=title))
+            await matcher.finish(reply("ad_tg_success", song_name=title))
             return
         except Exception as e:
             logger.error(f"Telegram 谱面文件上传失败: {e}")
             await matcher.finish(reply("ad_error"))
             return
 
-    # 兜底逻辑
-    await matcher.finish(reply("ad_error"))
-    return
+    logger.warning(f"未处理的事件类型: {type(event)} 或 bot 类型: {type(bot)}")
+    return  # 兜底 return
 
 # --- mai_info ---
 
