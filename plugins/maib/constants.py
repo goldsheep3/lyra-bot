@@ -1,7 +1,7 @@
 # 常量集合
 import yaml
 from pathlib import Path
-from typing import Literal, TypeVar, Mapping, Iterable
+from typing import Literal, TypeVar, Mapping, Iterable, cast
 
 
 _T = TypeVar("_T")
@@ -110,9 +110,9 @@ SERVER_TAG = Literal["JP", "CN"]
 PLUGIN_BASE_PATH = Path(__file__).parent
 ASSETS_PATH = PLUGIN_BASE_PATH / "assets"
 GENRES_YAML_PATH = ASSETS_PATH / "genres.yaml"
-GENRES_DATA = yaml.safe_load(GENRES_YAML_PATH.read_text(encoding="utf-8"))
+GENRES_DATA = cast(dict[int, dict[str, str]], yaml.safe_load(GENRES_YAML_PATH.read_text(encoding="utf-8")))
 VERSIONS_YAML_PATH = ASSETS_PATH / "versions.yaml"
-VERSIONS_META_DATA = yaml.safe_load(VERSIONS_YAML_PATH.read_text(encoding="utf-8")) or {}
+VERSIONS_META_DATA = cast(dict[int, dict[str, str]], yaml.safe_load(VERSIONS_YAML_PATH.read_text(encoding="utf-8")) or {})
 
 
 def _build_versions_data(meta_data: Mapping[int, object]) -> dict[int, str]:

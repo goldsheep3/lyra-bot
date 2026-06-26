@@ -27,9 +27,9 @@ else:
     )
     from . import matcher, models, utils, plugin_help, fetch, napcat_stream
     # 将配置项传递给 matcher 模块
-    cfg = get_plugin_config(Config)
-    matcher.LOW_MEMORY_MODE = cfg.LOW_MEMORY_MODE
-    matcher.LOW_MEMORY_TIP = cfg.LOW_MEMORY_TIP
-    matcher.DEVELOPER_TOKEN = cfg.DIVING_FISH_DEVELOPER_TOKEN
+    config = get_plugin_config(Config)
+    matcher.LOW_MEMORY_MODE = config.LOW_MEMORY_MODE
+    matcher.LOW_MEMORY_TIP = config.LOW_MEMORY_TIP
+    matcher.DEVELOPER_TOKEN = config.DIVING_FISH_DEVELOPER_TOKEN
     # 注入 hook 以支持 stream 获取文件
     napcat_stream.install_hook()

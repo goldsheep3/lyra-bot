@@ -1,9 +1,11 @@
 from dataclasses import dataclass, field
 from typing import Optional
 
+from PIL import Image
+
 from .constants import SERVER_TAG, DIFFS_DICT, DF_FC_DICT, DF_FS_DICT
 from .utils import MaiChartAch
-from .image_gen import Image, simple_list
+from .image_gen import simple_list
 
 
 def _format_label(code: int, mapping: dict[int, tuple[str, ...]], index: int = 0) -> str:
