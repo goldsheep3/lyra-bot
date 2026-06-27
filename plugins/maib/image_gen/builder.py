@@ -26,7 +26,7 @@ from .models import (
     COLOR_THEME,
     NO_COLOR,
 )
-from .resources import AssetsManager, FontManager
+from .resources import AssetsManager, FontManager, FontCode
 from .utils import MS, _MS_DEFAULT, bcm, get_full_width_text
 
 # 这些对象由 image_gen.__init__ 初始化后回填到包级命名空间。
@@ -112,7 +112,7 @@ def _user_header_board(
     if dxra_frame := ASSETS.dxrating_image(dxra_frame_filename, size=ms.xy(70, 14)):
         board_title.paste(dxra_frame, ms.xy(dx_ra_x, dx_ra_y), dxra_frame)
 
-    ra_font = FONT.font("MIS_DB", size=ms.x(8))
+    ra_font = FONT.font(FontCode.MiSans_Demibold, size=ms.x(8))
     for i, digit in enumerate(str(dxrating)[::-1]):
         dx = 57.5 - 5.5 * i
         du1.text(
@@ -126,10 +126,10 @@ def _user_header_board(
         )
 
     du1.rounded_rect(36, 15, 100, 17, fill="#333", radius=2)
-    du1.text(36, 23.5, text=" " + get_full_width_text(user_name), fill="#FFF", anchor="lm", font=FONT.font("MIS_DB", size=ms.x(10)))
+    du1.text(36, 23.5, text=" " + get_full_width_text(user_name), fill="#FFF", anchor="lm", font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(10)))
 
     record_info = f"Updated: [{server}] {update_time}"
-    du1.text(inner_width - 2, 2, text=record_info, fill="#FFF", anchor="ra", font=FONT.font("MIS_DB", size=ms.x(5)))
+    du1.text(inner_width - 2, 2, text=record_info, fill="#FFF", anchor="ra", font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(5)))
 
     return board_title
 
@@ -155,55 +155,55 @@ def draw_info_box(
     du1.rounded_rect(1, 1, cover_width, cover_width, radius=5, fill=None, outline="#FFF", width=1)
 
     dx = cover_width + 5
-    du1.text(dx, 0, text=maidata.title, fill="#FFF", anchor="la", font=FONT.font("MIS_HE", size=ms.x(11)))
-    du1.text(dx, 14, text=maidata.artist, fill="#FFF", anchor="la", font=FONT.font("MIS_DB", size=ms.x(5)))
-    du1.text(dx, 23, text=f"ID {maidata.shortid}", fill="#FFF", anchor="la", font=FONT.font("MIS_DB", size=ms.x(6)))
-    du1.text(dx + 30, 23, text=f"BPM {maidata.bpm}", fill="#FFF", anchor="la", font=FONT.font("MIS_DB", size=ms.x(6)))
-    du1.text(dx + 60, 23, text=f"谱面来源: {maidata.converter}", fill="#FFF", anchor="la", font=FONT.font("MIS_DB", size=ms.x(6)))
+    du1.text(dx, 0, text=maidata.title, fill="#FFF", anchor="la", font=FONT.font(FontCode.MiSans_Heavy, size=ms.x(11)))
+    du1.text(dx, 14, text=maidata.artist, fill="#FFF", anchor="la", font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(5)))
+    du1.text(dx, 23, text=f"ID {maidata.shortid}", fill="#FFF", anchor="la", font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(6)))
+    du1.text(dx + 30, 23, text=f"BPM {maidata.bpm}", fill="#FFF", anchor="la", font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(6)))
+    du1.text(dx + 60, 23, text=f"谱面来源: {maidata.converter}", fill="#FFF", anchor="la", font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(6)))
 
     margin = 5
     dy = 32
     im_y1, im_y1_5 = dy + 3, dy + 12
     genre_x, jpv_x, cnv_x, dv_x = dx, dx + 34 + margin, dx + 68 + margin * 2, dx + 102 + margin * 3
-    du1.text(genre_x, dy, text="流派", fill="#FFF", anchor="la", font=FONT.font("MIS_DB", size=ms.x(4)))
+    du1.text(genre_x, dy, text="流派", fill="#FFF", anchor="la", font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(4)))
     if maidata.genre:
         genre_text, genre_fill = get_genre(maidata.genre, cn_level=cn_level)
-        du1.text(genre_x + 17, im_y1_5, text=genre_text, fill=genre_fill, anchor="mm", font=FONT.font("MIS_DB", size=ms.x(5)), shadow=(1.2, "#FFF"))
+        du1.text(genre_x + 17, im_y1_5, text=genre_text, fill=genre_fill, anchor="mm", font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(5)), shadow=(1.2, "#FFF"))
 
-    du1.text(jpv_x, dy, text="JP", fill="#FFF", anchor="la", font=FONT.font("MIS_DB", size=ms.x(4)))
+    du1.text(jpv_x, dy, text="JP", fill="#FFF", anchor="la", font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(4)))
     if maidata.version:
         if ver_jp := ASSETS.version_image(maidata.version, size=ms.xy(34, 16)):
             board1.paste(ver_jp, ms.xy(jpv_x, im_y1), ver_jp)
         else:
             text = VERSIONS_DATA.get(maidata.version, str(maidata.version)).replace(" ", "\n")
-            du1.text(jpv_x + 17, im_y1_5, text=text, fill="#FFF", anchor="mm", font=FONT.font("MIS_DB", size=ms.x(5)))
+            du1.text(jpv_x + 17, im_y1_5, text=text, fill="#FFF", anchor="mm", font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(5)))
 
-    du1.text(cnv_x, dy, text="CN", fill="#FFF", anchor="la", font=FONT.font("MIS_DB", size=ms.x(4)))
+    du1.text(cnv_x, dy, text="CN", fill="#FFF", anchor="la", font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(4)))
     if maidata.version_cn:
         if ver_cn := ASSETS.version_image(maidata.version_cn, size=ms.xy(34, 16)):
             board1.paste(ver_cn, ms.xy(cnv_x, im_y1), ver_cn)
         else:
             text = VERSIONS_DATA.get(maidata.version_cn, str(maidata.version_cn)).replace(" ", "\n")
-            du1.text(cnv_x + 17, im_y1_5, text=text, fill="#FFF", anchor="mm", font=FONT.font("MIS_DB", size=ms.x(5)))
+            du1.text(cnv_x + 17, im_y1_5, text=text, fill="#FFF", anchor="mm", font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(5)))
     else:
-        du1.text(cnv_x + 17, im_y1_5, text="X\n", fill="#F00", anchor="mm", font=FONT.font("MIS_DB", size=ms.x(4)), stroke=(0.8, "#FFF"))
-        du1.text(cnv_x + 17, im_y1_5, text="\n国服无此乐曲", fill="#FFF", anchor="mm", font=FONT.font("MIS_DB", size=ms.x(4)))
+        du1.text(cnv_x + 17, im_y1_5, text="X\n", fill="#F00", anchor="mm", font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(4)), stroke=(0.8, "#FFF"))
+        du1.text(cnv_x + 17, im_y1_5, text="\n国服无此乐曲", fill="#FFF", anchor="mm", font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(4)))
 
     if maiuser:
-        du1.text(dv_x, dy, text="Record / 游玩记录", fill="#FFF", anchor="la", font=FONT.font("MIS_DB", size=ms.x(4)))
+        du1.text(dv_x, dy, text="Record / 游玩记录", fill="#FFF", anchor="la", font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(4)))
         username_text = get_full_width_text(maiuser.get_username()) + "\n\n"
-        du1.text(dv_x, im_y1_5, text=username_text, fill="#FFF", anchor="lm", font=FONT.font("MIS_DB", size=ms.x(3)))
+        du1.text(dv_x, im_y1_5, text=username_text, fill="#FFF", anchor="lm", font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(3)))
         records = [
             "",
             f"[CN({maiuser.cn_dxrating})] {maiuser.get_formated_time('CN').replace('0','O')}",
             f"[JP({maiuser.jp_dxrating})] {maiuser.get_formated_time('JP').replace('0','O')}",
         ]
-        du1.text(dv_x, im_y1_5, text="\n".join(records), fill="#FFF", anchor="lm", font=FONT.font("JBM_BD", size=ms.x(2.2)))
+        du1.text(dv_x, im_y1_5, text="\n".join(records), fill="#FFF", anchor="lm", font=FONT.font(FontCode.JBMono_Bold, size=ms.x(2.2)))
         del du1
 
     if maidata.aliases:
         font_size = 4
-        font = FONT.font("MIS_DB", size=ms.x(font_size))
+        font = FONT.font(FontCode.MiSans_Demibold, size=ms.x(font_size))
         alias_width_list = [(alias.alias, font.getlength(alias.alias)) for alias in maidata.aliases]
         alias_cut: list[tuple[list[str], float]] = [([], 0)]
         for alias, alias_width in alias_width_list:
@@ -373,7 +373,7 @@ def draw_b50(
 
 def simple_list(text: str) -> Image.Image:
     """生成一个简单的文本列表图。"""
-    font = FONT.font("MIS_DB", size=16)
+    font = FONT.font(FontCode.MiSans_Demibold, size=16)
     x1, y1, x2, y2 = ImageDraw.Draw(Image.new("RGB", (1, 1), color="#FFF")).multiline_textbbox((0, 0), text=text, font=font)
     width, height = int(x2 - x1 + 10), int(y2 - y1 + 10)
     img = Image.new("RGB", (width, height), color="#FFF")

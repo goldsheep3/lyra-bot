@@ -16,6 +16,7 @@ from functools import lru_cache
 
 from PIL import Image, ImageDraw, ImageFont
 
+from .resources import FontCode
 from ..utils import MaiData, MaiChart, MaiUser, parse_dxrating_filename
 from ..constants import *
 
@@ -191,7 +192,7 @@ class ImageUnit:
     # 难度式文本样式
     def diff_text(self, diff: Diff, text: Optional[str] = None, limit_width: float = -1, ms: MS = _MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0):
         # 处理文字长度并计算位置
-        font = FONT.font('MIS_HE', ms.x(4.8))
+        font = FONT.font(FontCode.MiSans_Heavy, size=ms.x(4.8))
         if text:
             # 自定义文本，需处理宽度顺序
             text = limit_text(text, font, limit_width) if limit_width > 0 else text
@@ -202,7 +203,7 @@ class ImageUnit:
         x1, y1, x2, y2 = font.getbbox(display_text, anchor='lm', stroke_width=ms.x(0.8))
         if cn_level == 2 and not text:
             # 特殊处理中文默认难度标题的位置
-            cn_font = FONT.font('MIS_HE', ms.x(3.3))
+            cn_font = FONT.font(FontCode.MiSans_Heavy, size=ms.x(3.3))
             cn_x1, _cn_y1, cn_x2, _cn_y2 = cn_font.getbbox(diff.text_title_cn, anchor='lm', stroke_width=ms.x(0.8))
             cn_width = ms.rev(cn_x2 - cn_x1)
         else:
@@ -215,7 +216,7 @@ class ImageUnit:
         du = DrawUnit(img, multiple=ms, cn_level=cn_level)
         du.text(1, height / 2, display_text, diff.text, 'lm', font, shadow=(0.8, diff.deep), shadow2=(0.8, diff.frame, 0.7))
         if cn_width:
-            du.text(ms.rev(x2 - x1) * 1.1, ms.rev(y2 - y1) * 1.1, diff.text_title_cn, diff.text, 'ld', FONT.font('MIS_HE', ms.x(3.3)),
+            du.text(ms.rev(x2 - x1) * 1.1, ms.rev(y2 - y1) * 1.1, diff.text_title_cn, diff.text, 'ld', FONT.font(FontCode.MiSans_Heavy, size=ms.x(3.3)),
                     shadow=(0.8, diff.deep), shadow2=(0.8, diff.frame, 0.7))
 
         return img
@@ -233,7 +234,7 @@ class ImageUnit:
         if eval:
             du = DrawUnit(img, multiple=ms, cn_level=cn_level)
             text = eval.short_name if mini else (eval.cn_name if cn_level == 2 else eval.full_name)
-            du.text(1, 2.5, text, eval.color.fill, 'lm', FONT.font('MIS_HE', ms.x(3)),
+            du.text(1, 2.5, text, eval.color.fill, 'lm', FONT.font(FontCode.MiSans_Heavy, size=ms.x(3)),
                 stroke=(0.5, eval.color.shadow), shadow=(0.65, eval.color.shadow))
         return img
 
@@ -245,7 +246,7 @@ class ImageUnit:
         COLOR_SD = '#4AF'
         du.rounded_rect(0, 0, 20, 5, fill=COLOR_SD, radius=5)
         offset = 0.6 if cn_level else 0
-        font = FONT.font('MIS_HE', ms.x(3 + offset))
+        font = FONT.font(FontCode.MiSans_Heavy, size=ms.x(3 + offset))
         text = "标 准" if cn_level else "スタンダード"
         du.text(10, 2.5, text, '#FFF', 'mm', font)
         return img
@@ -261,9 +262,9 @@ class ImageUnit:
         du.rounded_rect(0, 0, 20, 5, fill='#FFF', radius=5, outline=COLOR_DX[1] if cn_level else COLOR_DELUXE[-1], width=0.5)
         if cn_level:
             text = "DX"
-            du.text(10, 2.5, text, COLOR_DX[0], 'mm', FONT.font('MIS_HE', ms.x(4.1)))
+            du.text(10, 2.5, text, COLOR_DX[0], 'mm', FONT.font(FontCode.MiSans_Heavy, size=ms.x(4.1)))
         else:
-            font = FONT.font('MIS_HE', ms.x(3.2))
+            font = FONT.font(FontCode.MiSans_Heavy, size=ms.x(3.2))
             text = "でらっくす"
             total_text_width = ms.rev(font.getlength(text))
             start_x = (10) - (total_text_width / 2)
@@ -296,7 +297,7 @@ class ImageUnit:
         
         # 基准测量
         base_size = 5.0
-        test_font = FONT.font('MIS_DB', size=ms.x(base_size))
+        test_font = FONT.font(FontCode.MiSans_Demibold, size=ms.x(base_size))
         tx1, ty1, tx2, ty2 = test_font.getbbox(cr_info)
         raw_width = tx2 - tx1
         raw_height = ty2 - ty1
@@ -306,7 +307,7 @@ class ImageUnit:
         ratio = min(target_content_width / (raw_width / ms.multiple), 1.0)
         final_size = max(base_size * ratio, 1.2)
         
-        font = FONT.font('MIS_DB', size=ms.x(final_size))
+        font = FONT.font(FontCode.MiSans_Demibold, size=ms.x(final_size))
         # 预留上下各 25% 的空间，防止文字过于贴边
         bar_height = round(max((raw_height * ratio) * 1.5, ms.x(6)))
 
@@ -355,7 +356,7 @@ class ImageUnit:
 
         du.rounded_rect(ow + 64, ow + 9, 42, 25, fill=bcm(diff.bg, '#0009'), radius=1.5)
         du.infos(ow + 65.5, ow + 21.65, lines=(info_line5 + [''] * 5)[:5], line_height=4.5, limit_width=-1,
-                 font=FONT.font('MIS_DB', size=ms.x(3.2)))
+                 font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(3.2)))
 
         return img
 
@@ -469,8 +470,8 @@ class ImageUnit:
         du.rounded_rect(54, 25, 42, 5, fill=bcm(Difficulty.get(diff_number).bg, '#0009'), radius=4)
         du.rounded_rect(54, 25, 16, 5, fill='#006', radius=4)
         b_type = '15' if is_b15 else '35'
-        du.text(62, 27.5, f"b{b_type} #{index}", fill='#FFF', anchor='mm', font=FONT.font('MIS_DB', size=ms.x(3)))
-        du.text(74, 27.5, f"{chart.lv:.1f} > {data.get_chart_dxrating(diff_number, server, current_version)}", fill='#FFF', anchor='lm', font=FONT.font('MIS_DB', size=ms.x(3)))
+        du.text(62, 27.5, f"b{b_type} #{index}", fill='#FFF', anchor='mm', font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(3)))
+        du.text(74, 27.5, f"{chart.lv:.1f} > {data.get_chart_dxrating(diff_number, server, current_version)}", fill='#FFF', anchor='lm', font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(3)))
         return img
 
 IMU = ImageUnit()  # 全局图像元件实例
@@ -559,7 +560,7 @@ def _user_header_board(
     if dxra_frame := ASSETS.dxrating_image(dxra_frame_filename, size=ms.xy(70, 14)):
         board_title.paste(dxra_frame, ms.xy(dx_ra_x, dx_ra_y), dxra_frame)
     
-    ra_font = FONT.font('MIS_DB', size=ms.x(8))
+    ra_font = FONT.font(FontCode.MiSans_Demibold, size=ms.x(8))
     for i, digit in enumerate(str(dxrating)[::-1]):
         dx = 57.5 - 5.5 * i
         du1.text(dx_ra_x + dx, dx_ra_y + 7.1, text=digit, fill='#FCC916', anchor='mm', 
@@ -568,11 +569,11 @@ def _user_header_board(
     # 用户名条
     du1.rounded_rect(36, 15, 100, 17, fill='#333', radius=2)
     du1.text(36, 23.5, text=' ' + get_full_width_text(user_name), fill='#FFF', anchor='lm',
-             font=FONT.font('MIS_DB', size=ms.x(10)))
+             font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(10)))
 
     # 游玩记录信息
     record_info = f"Updated: [{server}] {update_time}"
-    du1.text(inner_width-2, 2, text=record_info, fill='#FFF', anchor='ra', font=FONT.font('MIS_DB', size=ms.x(5)))
+    du1.text(inner_width-2, 2, text=record_info, fill='#FFF', anchor='ra', font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(5)))
 
     return board_title
 

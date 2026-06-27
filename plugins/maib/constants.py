@@ -128,7 +128,7 @@ def _build_versions_data(meta_data: Mapping[int, object]) -> dict[int, str]:
 
 VERSIONS_DATA = _build_versions_data(VERSIONS_META_DATA)
 PLATE_EXCLUDES_YAML_PATH = ASSETS_PATH / "plate_excludes.yaml"
-PLATE_EXCLUDES_DATA = yaml.safe_load(PLATE_EXCLUDES_YAML_PATH.read_text(encoding="utf-8")) or {}
+PLATE_EXCLUDES_DATA = cast(dict, yaml.safe_load(PLATE_EXCLUDES_YAML_PATH.read_text(encoding="utf-8")) or {})
 
 # DXRating 版本分界线
 BOUNDARIES_DX_RATING = [0, 1000, 2000, 5000, 7000, 10000, 12000, 13000, 14000, 14500, 15000]

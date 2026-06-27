@@ -4,5 +4,11 @@
         "${workspaceFolder}/.venv/Lib/site-packages"
     ],
     "python.analysis.indexing": true,
-    "python.terminal.activateEnvironment": false
+    "python.terminal.activateEnvironment": false,
+    "files.exclude": {
+        "**/*.rpyc": true,
+        "**/*.rpa": true,
+        "**/*.rpymc": true,
+        "**/cache/": true
+    }
 }

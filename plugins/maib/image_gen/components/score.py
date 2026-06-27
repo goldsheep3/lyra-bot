@@ -12,7 +12,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from ..models import Diff, AchColor, Achievement, EvalInfo
 from ..utils import MS, bcm, _MS_DEFAULT
-from ..resources import FontManager
+from ..resources import FontManager, FontCode
 from .base import TextStyle, BaseDrawer
 
 
@@ -37,12 +37,12 @@ class AchievementComponent:
         font_manager = self.font_manager
         if not font_manager:
             from ..resources import FontManager
-            from ..constants import ASSETS_PATH
+            from ...constants import ASSETS_PATH
             font_manager = FontManager(ASSETS_PATH / "fonts")
         
         drawer.rounded_rect(x, y, 60, 14, fill=bcm(self.diff.bg, '#FFF9'), radius=1.5)
         style = TextStyle(fill=self.diff.frame, anchor='la',
-                         font=font_manager.font('MIS_HE', size=self.ms.x(2)))
+                         font=font_manager.font(FontCode.MiSans_Heavy, size=self.ms.x(2)))
         drawer.text(x, y, text=text, style=style)
 
     def render_frame(self, draw: ImageDraw.ImageDraw, x: float, y: float):
@@ -54,7 +54,7 @@ class AchievementComponent:
         font_manager = self.font_manager
         if not font_manager:
             from ..resources import FontManager
-            from ..constants import ASSETS_PATH
+            from ...constants import ASSETS_PATH
             font_manager = FontManager(ASSETS_PATH / "fonts")
         
         if -100 < self.ach_percent < 1000:
@@ -66,7 +66,7 @@ class AchievementComponent:
 
         drawer = BaseDrawer(Image.new('RGBA', (1, 1), '#FFF'), draw, self.ms)
         style = TextStyle(fill=color.fill, anchor='la',
-                         font=font_manager.font('JBM_EB', size=self.ms.x(10)),
+                         font=font_manager.font(FontCode.JBMono_ExtraBold, size=self.ms.x(10)),
                          stroke_width=0.35, stroke_fill=color.stroke,
                          shadow_width=0.4, shadow_color=color.shadow)
         drawer.text(x, y, text=text, style=style)
@@ -115,7 +115,7 @@ class DXScoreComponent:
         font_manager = self.font_manager
         if not font_manager:
             from ..resources import FontManager
-            from ..constants import ASSETS_PATH
+            from ...constants import ASSETS_PATH
             font_manager = FontManager(ASSETS_PATH / "fonts")
         
         drawer = BaseDrawer(Image.new('RGBA', (1, 1), '#FFF'), draw, self.ms)
@@ -123,29 +123,29 @@ class DXScoreComponent:
         if self.lite:
             drawer.rounded_rect(x, y, 42, 3, fill=bcm(self.diff.bg, '#FFF9'), radius=2)
             style_title = TextStyle(fill=COLOR_DXSCORE_GN, anchor='lm',
-                                   font=font_manager.font('MIS_HE', size=self.ms.x(2)))
+                                   font=font_manager.font(FontCode.MiSans_Heavy, size=self.ms.x(2)))
             drawer.text(x + 0.5, y + 1.5, text=title, style=style_title)
             
             style_text = TextStyle(fill='#333', anchor='rm',
-                                  font=font_manager.font('MIS_DB', size=self.ms.x(2.5)))
+                                  font=font_manager.font(FontCode.MiSans_Demibold, size=self.ms.x(2.5)))
             drawer.text(x + 40, y + 1.5, text=text, style=style_text)
             
             style_star = TextStyle(fill=star_color, anchor='mm',
-                                  font=font_manager.font('NSS_RG', size=self.ms.x(2.2)))
+                                  font=font_manager.font(FontCode.NotoSansSymbols2, size=self.ms.x(2.2)))
             drawer.text(x + 20, y + 1.8, text=star_text, style=style_star)
         else:
             drawer.rounded_rect(x, y, 24, 9, fill=bcm(self.diff.bg, '#FFF9'), radius=1.5)
             
             style_title = TextStyle(fill=COLOR_DXSCORE_GN, anchor='la',
-                                   font=font_manager.font('MIS_HE', size=self.ms.x(2)))
+                                   font=font_manager.font(FontCode.MiSans_Heavy, size=self.ms.x(2)))
             drawer.text(x, y, text=title, style=style_title)
             
             style_text = TextStyle(fill='#333', anchor='mm',
-                                  font=font_manager.font('MIS_DB', size=self.ms.x(3)))
+                                  font=font_manager.font(FontCode.MiSans_Demibold, size=self.ms.x(3)))
             drawer.text(x + 12, y + 4.5, text=text, style=style_text)
             
             style_star = TextStyle(fill=star_color, anchor='ma',
-                                  font=font_manager.font('NSS_RG', size=self.ms.x(2.2)))
+                                  font=font_manager.font(FontCode.NotoSansSymbols2, size=self.ms.x(2.2)))
             drawer.text(x + 12, y + 6, text=star_text, style=style_star)
 
 
@@ -182,12 +182,12 @@ class EvaluateComponent:
             font_manager = self.font_manager
             if not font_manager:
                 from ..resources import FontManager
-                from ..constants import ASSETS_PATH
+                from ...constants import ASSETS_PATH
                 font_manager = FontManager(ASSETS_PATH / "fonts")
             
             text = eval_info.short_name if mini else (eval_info.cn_name if cn_level == 2 else eval_info.full_name)
             style = TextStyle(fill=eval_info.color.fill, anchor='lm',
-                            font=font_manager.font('MIS_HE', ms.x(3)),
+                            font=font_manager.font(FontCode.MiSans_Heavy, ms.x(3)),
                             stroke_width=0.5, stroke_fill=eval_info.color.shadow,
                             shadow_width=0.65, shadow_color=eval_info.color.shadow)
             drawer.text(1, 2.5, text, style)

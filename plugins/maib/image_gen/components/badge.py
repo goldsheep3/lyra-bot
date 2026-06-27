@@ -12,7 +12,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from ..models import Diff
 from ..utils import MS, _MS_DEFAULT
-from ..resources import FontManager
+from ..resources import FontManager, FontCode
 from .base import TextStyle, BaseDrawer
 
 
@@ -35,38 +35,38 @@ class LevelBadge:
         # 等级 `LV`
         if self.cn_level == 2:
             draw.text(ms.xy(x - 1, y), text="等级", fill=self.diff.frame, anchor='ls',
-                     font=font_manager.font('MIS_DB', size=ms.x(3)),
+                     font=font_manager.font(FontCode.MiSans_Demibold, size=ms.x(3)),
                      stroke_width=ms.x(0.5), stroke_fill=self.diff.frame)
             draw.text(ms.xy(x - 1, y), text="等级", fill=self.diff.level_text, anchor='ls',
-                     font=font_manager.font('MIS_DB', size=ms.x(3)))
+                     font=font_manager.font(FontCode.MiSans_Demibold, size=ms.x(3)))
         else:
             draw.text(ms.xy(x, y), text="LV", fill=self.diff.frame, anchor='ls',
-                     font=font_manager.font('JBM_BD', size=ms.x(4)),
+                     font=font_manager.font(FontCode.JBMono_Bold, size=ms.x(4)),
                      stroke_width=ms.x(0.5), stroke_fill=self.diff.frame)
             draw.text(ms.xy(x, y), text="LV", fill=self.diff.level_text, anchor='ls',
-                     font=font_manager.font('JBM_BD', size=ms.x(4)))
+                     font=font_manager.font(FontCode.JBMono_Bold, size=ms.x(4)))
         
         # 等级 `xx.x`
         draw.text(ms.xy(x + 6, y), text=f, fill=self.diff.frame, anchor='ls',
-                 font=font_manager.font('JBM_BD', size=ms.x(6)),
+                 font=font_manager.font(FontCode.JBMono_Bold, size=ms.x(6)),
                  stroke_width=ms.x(0.5), stroke_fill=self.diff.frame)
         draw.text(ms.xy(x + 6, y), text=f, fill=self.diff.level_text, anchor='ls',
-                 font=font_manager.font('JBM_BD', size=ms.x(6)))
+                 font=font_manager.font(FontCode.JBMono_Bold, size=ms.x(6)))
         
         if not self.ignore_decimal:
             draw.text(ms.xy(x + 13, y), text="." + d, fill=self.diff.frame, anchor='ls',
-                     font=font_manager.font('JBM_BD', size=ms.x(5)),
+                     font=font_manager.font(FontCode.JBMono_Bold, size=ms.x(5)),
                      stroke_width=ms.x(0.5), stroke_fill=self.diff.frame)
             draw.text(ms.xy(x + 13, y), text="." + d, fill=self.diff.level_text, anchor='ls',
-                     font=font_manager.font('JBM_BD', size=ms.x(5)))
+                     font=font_manager.font(FontCode.JBMono_Bold, size=ms.x(5)))
         
         # 等级 `+`
         if self.plus:
             draw.text(ms.xy(x + 13.7, y - 2.8), text="+", fill=self.diff.frame, anchor='ls',
-                     font=font_manager.font('JBM_BD', size=ms.x(3.5)),
+                     font=font_manager.font(FontCode.JBMono_Bold, size=ms.x(3.5)),
                      stroke_width=ms.x(0.5), stroke_fill=self.diff.frame)
             draw.text(ms.xy(x + 13.7, y - 2.8), text="+", fill=self.diff.level_text, anchor='ls',
-                     font=font_manager.font('JBM_BD', size=ms.x(3.5)))
+                     font=font_manager.font(FontCode.JBMono_Bold, size=ms.x(3.5)))
 
 
 class DifficultyBadge:
@@ -92,10 +92,10 @@ class DifficultyBadge:
         font_manager = self.font_manager
         if not font_manager:
             from ..resources import FontManager
-            from ..constants import ASSETS_PATH
+            from ...constants import ASSETS_PATH
             font_manager = FontManager(ASSETS_PATH / "fonts")
         
-        font = font_manager.font('MIS_HE', ms.x(4.8))
+        font = font_manager.font(FontCode.MiSans_Heavy, ms.x(4.8))
         if text:
             text = limit_text(text, font, limit_width) if limit_width > 0 else text
             display_text = text
@@ -104,7 +104,7 @@ class DifficultyBadge:
 
         x1, y1, x2, y2 = font.getbbox(display_text, anchor='lm', stroke_width=ms.x(0.8))
         if cn_level == 2 and not text:
-            cn_font = font_manager.font('MIS_HE', ms.x(3.3))
+            cn_font = font_manager.font(FontCode.MiSans_Heavy, ms.x(3.3))
             cn_x1, _cn_y1, cn_x2, _cn_y2 = cn_font.getbbox(diff.text_title_cn, anchor='lm', stroke_width=ms.x(0.8))
             cn_width = ms.rev(cn_x2 - cn_x1)
         else:
@@ -124,7 +124,7 @@ class DifficultyBadge:
         
         if cn_width:
             style_cn = TextStyle(fill=diff.text, anchor='ld', 
-                               font=font_manager.font('MIS_HE', ms.x(3.3)),
+                               font=font_manager.font(FontCode.MiSans_Heavy, ms.x(3.3)),
                                shadow_width=0.8, shadow_color=diff.deep,
                                shadow2_width=0.8, shadow2_color=diff.frame, shadow2_offset=0.7)
             drawer.text(ms.rev(x2 - x1) * 1.1, ms.rev(y2 - y1) * 1.1, 
@@ -162,10 +162,10 @@ class DrawBadge:
         font_manager = self.font_manager
         if not font_manager:
             from ..resources import FontManager
-            from ..constants import ASSETS_PATH
+            from ...constants import ASSETS_PATH
             font_manager = FontManager(ASSETS_PATH / "fonts")
         
-        font = font_manager.font('MIS_HE', ms.x(3 + offset))
+        font = font_manager.font(FontCode.MiSans_Heavy, ms.x(3 + offset))
         text = "标 准" if cn_level else "スタンダード"
         style = TextStyle(fill='#FFF', anchor='mm', font=font)
         drawer.text(10, 2.5, text, style)
@@ -187,16 +187,16 @@ class DrawBadge:
         font_manager = self.font_manager
         if not font_manager:
             from ..resources import FontManager
-            from ..constants import ASSETS_PATH
+            from ...constants import ASSETS_PATH
             font_manager = FontManager(ASSETS_PATH / "fonts")
         
         if cn_level:
             text = "DX"
             style = TextStyle(fill=COLOR_DX[0], anchor='mm', 
-                            font=font_manager.font('MIS_HE', ms.x(4.1)))
+                            font=font_manager.font(FontCode.MiSans_Heavy, ms.x(4.1)))
             drawer.text(10, 2.5, text, style)
         else:
-            font = font_manager.font('MIS_HE', ms.x(3.2))
+            font = font_manager.font(FontCode.MiSans_Heavy, ms.x(3.2))
             text = "でらっくす"
             total_text_width = ms.rev(font.getlength(text))
             start_x = 10 - (total_text_width / 2)

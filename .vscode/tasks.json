@@ -1,0 +1,22 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "同步字体 Gitignore",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "${workspaceFolder}/tool.py"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "silent",
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "group": "build",
+            "problemMatcher": []
+        }
+    ]
+}
