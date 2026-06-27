@@ -14,10 +14,10 @@ SPECIAL_MESSAGE = [
 
 # Plugin Information / 插件信息，填写插件名和功能简介
 PLUGIN_INFO = [
-    {"maib": "小梨音游核心，提供围绕 maimai 的各种功能。"},
+    {"maib": "[QQ, TG] 小梨音游核心，提供围绕 maimai 的各种功能。"},
     {"fortune": "运势占卜，提供每日运势、抽签等功能。"},
     {"what_food": "「吃什么」，提供食物随机抽选和评分功能。"},
-    {"daily_partner": "支持「一夫一妻制」的「今日老婆」。"},
+    {"daily_partner": "[QQ]支持「一夫一妻制」的「今日老婆」。"},
 ]
 
 _PLUGIN_TEXT = ""
@@ -53,7 +53,7 @@ async def _():
 
 
 
-_start = on_regex(r"/start", block=True)
+_start = on_regex(r"^/start$", block=True)
 
 @_start.handle()
 async def _(event):
