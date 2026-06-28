@@ -186,8 +186,15 @@ def partner_gacha(targets: dict[int, User], hope_id: Optional[int] = None) -> Op
 
 
 @jrlp.handle()
-async def jrlp_handled(bot: Bot, event: Event, matcher: Matcher, _ = i18n):
+async def jrlp_handled(bot: Bot, event: Event, matcher: Matcher, _i18n = i18n):
     """处理指令: jrlp"""
+    # 将依赖注入返回的语言包数据注入当前协程上下文，供 reply() 读取
+    from plugins.nonebot_plugin_i18n import current_i18n_data
+    if _i18n:
+        current_i18n_data.set(_i18n)
+
+    platform, user_id = get_platform_and_user_id(event)
+
     platform, user_id = get_platform_and_user_id(event)
     group_id = get_group_id(event)
     if not group_id:
@@ -243,8 +250,11 @@ async def jrlp_handled(bot: Bot, event: Event, matcher: Matcher, _ = i18n):
     
 
 @hlp.handle()
-async def hlp_handled(bot: Bot, event: Event, matcher: Matcher, _ = i18n):
+async def hlp_handled(bot: Bot, event: Event, matcher: Matcher, _i18n = i18n):
     """处理指令: hlp"""
+    from plugins.nonebot_plugin_i18n import current_i18n_data
+    if _i18n:
+        current_i18n_data.set(_i18n)
     platform, user_id = get_platform_and_user_id(event)
     group_id = get_group_id(event)
     if not group_id:
@@ -306,13 +316,18 @@ async def hlp_handled(bot: Bot, event: Event, matcher: Matcher, _ = i18n):
     # 然后设置关系
     await services.set_today_partner(platform, group_id, user_id, result.user_id, relation_type=RelationType.WIFE)
     # 若更换次数即将达到上限，提醒用户
+    target_username = await get_user_display_name(bot, group_id, result.user_id)
     reply_key = "hlp.success.common" if record.swap_count + 1 < MAX_SWAP_COUNT else "hlp.success.last"
-    segments = [("at", (None, user_id)), ("text", reply(reply_key, qq=result.user_id))]
+    segments = [("at", (None, user_id)), ("text", reply(reply_key, username=target_username)),
+                ("image", get_user_avatar_url(result.user_id))]
     await build_msg(matcher, event, segments, tag='finish')
 
 @lh.handle()
-async def lh_handled(event: Event, matcher: Matcher, _ = i18n):
+async def lh_handled(bot: Bot, event: Event, matcher: Matcher, _i18n = i18n):
     """处理指令: lh"""
+    from plugins.nonebot_plugin_i18n import current_i18n_data
+    if _i18n:
+        current_i18n_data.set(_i18n)
     platform, user_id = get_platform_and_user_id(event)
     group_id = get_group_id(event)
     if not group_id:
@@ -342,12 +357,17 @@ async def lh_handled(event: Event, matcher: Matcher, _ = i18n):
     # 允许离婚，批准
     await services.set_today_partner(platform, group_id, user_id, target_id=None, relation_type=RelationType.WIFE, is_divorced=True)
     reply_key = "lh.success.self" if record.target_id == user_id else "lh.success.common"
-    segments = [("at", (None, user_id)), ("text", reply(reply_key, qq=record.target_id))]
+    target_username = await get_user_display_name(bot, group_id, record.target_id)
+    segments = [("at", (None, user_id)), ("text", reply(reply_key, username=target_username)),
+                ("image", get_user_avatar_url(record.target_id))]
     await build_msg(matcher, event, segments, tag='finish')
 
 @qq.handle()
-async def qq_handled(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup(), _ = i18n):
+async def qq_handled(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup(), _i18n = i18n):
     """处理指令: qq"""
+    from plugins.nonebot_plugin_i18n import current_i18n_data
+    if _i18n:
+        current_i18n_data.set(_i18n)
     platform, user_id = get_platform_and_user_id(event)
     group_id = get_group_id(event)
     if not group_id:
@@ -430,8 +450,10 @@ async def qq_handled(bot: Bot, event: Event, matcher: Matcher, groups: tuple = R
 
     if not ntr:
         # 若更换次数即将达到上限，提醒用户
+        target_username = await get_user_display_name(bot, group_id, goal_user_id)
         reply_key = "qq.group.success.common" if record.swap_count + 1 < MAX_SWAP_COUNT else "qq.group.success.last"
-        segments = [("at", (None, user_id)), ("text", reply(reply_key, qq=goal_user_id))]
+        segments = [("at", (None, user_id)), ("text", reply(reply_key, username=target_username)),
+                    ("image", get_user_avatar_url(goal_user_id))]
         await build_msg(matcher, event, segments, tag='finish')
     else:
         # 权限狗 NTR 成功
@@ -444,8 +466,11 @@ async def qq_handled(bot: Bot, event: Event, matcher: Matcher, groups: tuple = R
 
 
 @qq_private.handle()
-async def qq_private_handled(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup(), _ = i18n):
+async def qq_private_handled(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup(), _i18n = i18n):
     """处理指令: qq_private"""
+    from plugins.nonebot_plugin_i18n import current_i18n_data
+    if _i18n:
+        current_i18n_data.set(_i18n)
     platform, user_id = get_platform_and_user_id(event)
     user = await services.get_user(platform, user_id)
     if user.is_enabled is False:
@@ -472,8 +497,11 @@ async def qq_private_handled(bot: Bot, event: Event, matcher: Matcher, groups: t
     await build_msg(matcher, event, segments, tag='finish')
 
 @jrlg.handle()
-async def jrlg_handled(bot: Bot, event: Event, matcher: Matcher, _ = i18n):
+async def jrlg_handled(bot: Bot, event: Event, matcher: Matcher, _i18n = i18n):
     """处理指令: jrlg"""
+    from plugins.nonebot_plugin_i18n import current_i18n_data
+    if _i18n:
+        current_i18n_data.set(_i18n)
     platform, user_id = get_platform_and_user_id(event)
     group_id = get_group_id(event)
     if not group_id:
@@ -498,8 +526,11 @@ async def jrlg_handled(bot: Bot, event: Event, matcher: Matcher, _ = i18n):
     return
 
 @hlg.handle()
-async def hlg_handled(event: Event, matcher: Matcher, _ = i18n):
+async def hlg_handled(bot: Bot, event: Event, matcher: Matcher, _i18n = i18n):
     """处理指令: hlg"""
+    from plugins.nonebot_plugin_i18n import current_i18n_data
+    if _i18n:
+        current_i18n_data.set(_i18n)
     platform, user_id = get_platform_and_user_id(event)
     group_id = get_group_id(event)
     if not group_id:
@@ -525,12 +556,17 @@ async def hlg_handled(event: Event, matcher: Matcher, _ = i18n):
     # 执行休夫
     await services.set_today_partner(platform, group_id, user_id, target_id=None, relation_type=RelationType.HUSBAND)
     reply_key = "hlg.success.common" if record.swap_count + 1 < MAX_SWAP_COUNT else "hlg.success.last"
-    segments = [("at", (None, user_id)), ("text", reply(reply_key, qq=record.target_id))]
+    target_username = await get_user_display_name(bot, group_id, record.target_id)
+    segments = [("at", (None, user_id)), ("text", reply(reply_key, username=target_username)),
+                ("image", get_user_avatar_url(record.target_id))]
     await build_msg(matcher, event, segments, tag='finish')
 
 @toggle_status.handle()
-async def toggle_status_handled(event: Event, matcher: Matcher, groups: tuple = RegexGroup(), _ = i18n):
+async def toggle_status_handled(event: Event, matcher: Matcher, groups: tuple = RegexGroup(), _i18n = i18n):
     """处理指令: toggle_status"""
+    from plugins.nonebot_plugin_i18n import current_i18n_data
+    if _i18n:
+        current_i18n_data.set(_i18n)
     platform, user_id = get_platform_and_user_id(event)
     await services.get_user(platform, user_id)
 
@@ -567,8 +603,11 @@ async def toggle_status_handled(event: Event, matcher: Matcher, groups: tuple = 
         await build_msg(matcher, event, segments, tag='finish')
 
 @sudo.handle()
-async def sudo_handled(event: Event, matcher: Matcher, groups: tuple = RegexGroup(), _ = i18n):
+async def sudo_handled(event: Event, matcher: Matcher, groups: tuple = RegexGroup(), _i18n = i18n):
     """处理指令: sudo"""
+    from plugins.nonebot_plugin_i18n import current_i18n_data
+    if _i18n:
+        current_i18n_data.set(_i18n)
     _, cmd = groups  # groups[0] 是插件名，groups[1] 是命令内容
     cmd = cmd.strip()
     user_id = int(event.get_user_id())

@@ -108,6 +108,7 @@ def use_i18n(asset_dir: Path) -> Any:
         # 核心改动：直接 set，不保存 token，不进行 reset。
         # Python 的协程隔离机制会保证其在当前事件处理流中有效，流转结束后随上下文自动销毁。
         current_i18n_data.set(i18n_data)
+        return i18n_data
 
     return Depends(i18n_dependency)
 
