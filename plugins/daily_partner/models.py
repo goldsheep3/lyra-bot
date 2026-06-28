@@ -1,10 +1,15 @@
+from enum import IntEnum
 from typing import Optional
 from datetime import date
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy import BigInteger, Integer, Boolean, Date, UniqueConstraint, String
 from nonebot_plugin_datastore import get_plugin_data
 
-from . import RelationType
+
+class RelationType(IntEnum):
+    WIFE = 0
+    HUSBAND = 1
+
 
 Model = get_plugin_data().Model
 

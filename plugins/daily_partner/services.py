@@ -4,8 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio.session import AsyncSession
 from nonebot_plugin_datastore import create_session
 
-from . import RelationType
-from .models import User, Record
+from .models import User, Record, RelationType
 
 async def get_user(
     platform: str,

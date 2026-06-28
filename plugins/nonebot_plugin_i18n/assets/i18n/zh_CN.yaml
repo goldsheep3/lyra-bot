@@ -1,0 +1,3 @@
+language_name: "简体中文 (Simplified Chinese)"
+set_language:
+    success: "语言已切换为 {language}"

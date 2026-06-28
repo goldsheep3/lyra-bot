@@ -1,0 +1,76 @@
+not_allow_platform: "当前平台还不支持该功能哦~"
+
+jrlp:
+  failed:
+    discovered: "你今天已经离过婚了，不可以再找新老婆了！"
+    already: "你已经有老婆啦！你的老婆是 {username}"
+  success:
+    common: "你今天的老婆是 {username}"
+    self: "你今天的老婆是自己哦=w="
+  
+hlp:
+  failed:
+    discovered: "（翻笔记）你今天已经离过婚了，不可以再换新老婆了！"
+    none: "你今天还没有老婆呢，先去 jrlp 娶一个吧（"
+    limit: "换太多次啦！你现在没有香香软软的亲亲老婆了！😡😡"
+    not_wife: "已经没有可换的对象了，今天就这么过下去吧（（"
+  success:
+    common:
+      - "好吧好吧，给你换了。你现在的老婆是：{username}"
+      - "换好了喔。你现在的老婆是：{username}"
+    last: "再换你就没老婆啦！你现在的老婆是：{username}"
+    self:
+      common: "恭喜你，现在没有其他可以更换的人选了，恭喜水仙（"
+      last: "再换你就没老婆啦！……没有其他可以更换的人选了，总之恭喜水仙（（"
+
+lh:
+  failed:
+    none: "你还没有一个香香软软的亲亲老婆，怎么就想着当个负心汉了！😡😡"
+    already: "你今天已经离过婚了，离婚怎么还要鞭尸（"
+  success:
+    common: "你已经和 {username} 离婚了。（小梨记笔记ing）"
+    self: "水仙也要离婚吗（大脑过载）\n总之小梨记上了，你和自己离婚了（"
+
+qq:
+  group:
+    usage: "若想强娶那个TA，请勇敢地@出来=w="
+    failed:
+      with_lyra: "小梨不能跟你们玩这种游戏啦！莉莉丝阿姐听说了会生气的qwq"
+      discovered: "你今天已经离过婚了，不可以再娶新老婆了！"
+      not_in_group: "TA不在这个群里喔（"
+      disabled: "TA似乎不太愿意玩这个喔……"
+      married: "不可以哦——TA已经有老婆了，TA的老婆会闹情绪的！"
+    success:
+      common: "怎么还有强制play（）总之恭喜娶到 {username}"
+      last: "这是你今天最后一次发力了——你娶到了 {username}"
+      ntr: "我去，还有大权限NTR（）\n{username} 现在已经被你强娶了。让我们可怜原配三秒钟（"
+  private:
+    success: "已悄悄将 {qq} 记入你的愿望单——额外50%的概率翻到TA的牌子！"
+    cleared: "已经清空了你的愿望单，现在你的后宫人人平等（"
+
+jrlg:
+  failed:
+    none: "还没有人娶到你喔ww"
+  success:
+    common: "你现在的老公是：{username}"
+
+hlg:
+  failed:
+    none: "还没有人娶到你喔ww"
+  success:
+    common: "休夫，立即执行！{username} 已经是你的前任了。"
+    last: "{username} 已经是你的前任了。\n这是你今天最后一次发挥xxn的权能（"
+
+toggle:
+  enable:
+    enabled: "设置成功：开启了 jrlp 相关功能。"
+    disabled: "设置成功：关闭了 jrlp 相关功能。"
+  allow_bot:
+    enabled: "设置成功：你的抽选将会包括 bot。"
+    disabled: "设置成功：你的抽选将不会包括 bot。"
+  is_bot:
+    enabled: "设置成功：已定义你是 bot。"
+    disabled: "设置成功：已定义你不是 bot。"
+
+sudo:
+  failed: "暂时不支持 sudo 命令哦~"
