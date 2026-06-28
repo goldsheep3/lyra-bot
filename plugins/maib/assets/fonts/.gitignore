@@ -1,0 +1,81 @@
+**/*.ttf
+**/*.otf
+
+# --- 以下排除(根据 FontCode 自动生成) ---
+
+# Electrolize 字体
+# !Electrolize/Electrolize-Regular.ttf
+
+# JetBrains Mono 变量字体
+# !JetBrains_Mono/JetBrainsMono-VariableFont_wght.ttf
+# !JetBrains_Mono/JetBrainsMono-Italic-VariableFont_wght.ttf
+
+# JetBrains Mono 静态字体
+# !JetBrains_Mono/static/JetBrainsMono-Thin.ttf
+# !JetBrains_Mono/static/JetBrainsMono-ThinItalic.ttf
+# !JetBrains_Mono/static/JetBrainsMono-ExtraLight.ttf
+# !JetBrains_Mono/static/JetBrainsMono-ExtraLightItalic.ttf
+# !JetBrains_Mono/static/JetBrainsMono-Light.ttf
+# !JetBrains_Mono/static/JetBrainsMono-LightItalic.ttf
+# !JetBrains_Mono/static/JetBrainsMono-Regular.ttf
+# !JetBrains_Mono/static/JetBrainsMono-Italic.ttf
+!JetBrains_Mono/static/JetBrainsMono-Medium.ttf
+# !JetBrains_Mono/static/JetBrainsMono-MediumItalic.ttf
+# !JetBrains_Mono/static/JetBrainsMono-SemiBold.ttf
+# !JetBrains_Mono/static/JetBrainsMono-SemiBoldItalic.ttf
+!JetBrains_Mono/static/JetBrainsMono-Bold.ttf
+# !JetBrains_Mono/static/JetBrainsMono-BoldItalic.ttf
+!JetBrains_Mono/static/JetBrainsMono-ExtraBold.ttf
+# !JetBrains_Mono/static/JetBrainsMono-ExtraBoldItalic.ttf
+
+# MiSans 变量字体
+# !MiSans/MiSansVF.ttf
+
+# MiSans 静态字体
+# !MiSans/static/MiSans-Thin.ttf
+# !MiSans/static/MiSans-ExtraLight.ttf
+# !MiSans/static/MiSans-Light.ttf
+# !MiSans/static/MiSans-Normal.ttf
+# !MiSans/static/MiSans-Regular.ttf
+# !MiSans/static/MiSans-Medium.ttf
+# !MiSans/static/MiSans-Semibold.ttf
+!MiSans/static/MiSans-Demibold.ttf
+# !MiSans/static/MiSans-Bold.ttf
+!MiSans/static/MiSans-Heavy.ttf
+
+# Noto 字体家族
+# !Noto_Emoji/NotoEmoji-VariableFont_wght.ttf
+!Noto_Sans_Symbols_2/NotoSansSymbols2-Regular.ttf
+
+# NotoSansSC 变量字体
+# !Noto_Sans_SC/NotoSansSC-VariableFont_wght.ttf
+
+# NotoSansSC 静态字体
+# !Noto_Sans_SC/static/NotoSansSC-Thin.ttf
+# !Noto_Sans_SC/static/NotoSansSC-Light.ttf
+# !Noto_Sans_SC/static/NotoSansSC-ExtraLight.ttf
+# !Noto_Sans_SC/static/NotoSansSC-Regular.ttf
+# !Noto_Sans_SC/static/NotoSansSC-Medium.ttf
+# !Noto_Sans_SC/static/NotoSansSC-SemiBold.ttf
+# !Noto_Sans_SC/static/NotoSansSC-Bold.ttf
+# !Noto_Sans_SC/static/NotoSansSC-ExtraBold.ttf
+# !Noto_Sans_SC/static/NotoSansSC-Black.ttf
+
+# Oxanium 变量字体
+# !Oxanium/Oxanium-VariableFont_wght.ttf
+
+# Oxanium 静态字体
+# !Oxanium/static/Oxanium-ExtraLight.ttf
+# !Oxanium/static/Oxanium-Light.ttf
+# !Oxanium/static/Oxanium-Regular.ttf
+# !Oxanium/static/Oxanium-Medium.ttf
+# !Oxanium/static/Oxanium-SemiBold.ttf
+# !Oxanium/static/Oxanium-Bold.ttf
+# !Oxanium/static/Oxanium-ExtraBold.ttf
+
+# 1. 无论是枚举还是普通字符串，StrEnum 的 value 直接就是路径字符串
+# 如果传入的是枚举，通过 font_code.value 获取路径；如果是普通文本则直接作为路径
+
+# 2. 拼接完整路径
+
+# 3. 兜底：如果路径不存在，尝试拼 .ttf 或是绝对路径（兼容你原本的灵活性）

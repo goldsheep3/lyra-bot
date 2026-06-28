@@ -3,7 +3,7 @@ import re
 import time
 import bisect
 import zipfile
-from thefuzz import process
+from difflib import get_close_matches
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, Literal
@@ -12,6 +12,11 @@ from PIL import Image
 from loguru import logger
 
 from .constants import *  # 导入常量表
+
+try:
+    from thefuzz import process
+except ImportError:
+    process = None
 
 # Custom Exceptions
 class NoLinkQQError(ValueError):
@@ -71,7 +76,7 @@ def _build_version_id_map() -> dict[str, int]:
     version_id_map: dict[str, int] = {}
     
     for version_id, version_meta in VERSIONS_META_DATA.items():
-        version_name: str = version_meta.get("name")
+        version_name: str = version_meta.get("name", "")
         normalized_text = _normalize_version_text(version_name)
         if not normalized_text:
             continue
@@ -109,14 +114,17 @@ async def parse_genre(genre_str: str, genre_dict_fixed: dict[str, int]) -> int:
     
     # 2. 模糊匹配 (容错几个字符)
     if g is None:
-        try:
-            # 提取相似度最高的一个，阈值设为 80 (可以根据实际效果调整)
+        # 提取相似度最高的一个，阈值设为 80 (可以根据实际效果调整)
+        if process is not None:
             best_match = process.extractOne(g_str, list(genre_dict_fixed.keys()))
             if best_match and best_match[1] >= 80:
                 g = genre_dict_fixed[best_match[0]]
                 logger.debug(f"流派模糊匹配成功: '{genre_str}' -> '{best_match[0]}' (相似度: {best_match[1]})")
-        except ImportError:
-            logger.warning("未安装 thefuzz 库，跳过模糊匹配")
+        else:
+            matches = get_close_matches(g_str, list(genre_dict_fixed.keys()), n=1, cutoff=0.8)
+            if matches:
+                g = genre_dict_fixed[matches[0]]
+                logger.debug(f"流派模糊匹配成功: '{genre_str}' -> '{matches[0]}' (stdlib fallback)")
 
     if g is None:
         logger.warning(f"无法解析流派名: {genre_str}")
