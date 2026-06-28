@@ -42,6 +42,7 @@ qq:
       married: "不可以哦——TA已经有老婆了，TA的老婆会闹情绪的！"
     success:
       common: "怎么还有强制play（）总之恭喜娶到 {username}"
+      self: "还有水仙！我吃我吃我吃（"
       last: "这是你今天最后一次发力了——你娶到了 {username}"
       ntr: "我去，还有大权限NTR（）\n{username} 现在已经被你强娶了。让我们可怜原配三秒钟（"
   private:

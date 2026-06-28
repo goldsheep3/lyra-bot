@@ -448,6 +448,13 @@ async def qq_handled(bot: Bot, event: Event, matcher: Matcher, groups: tuple = R
     # 执行强娶
     record = await services.set_today_partner(platform, group_id, user_id, target_id=goal_user_id, relation_type=RelationType.WIFE)
 
+    if record.target_id == user_id:
+        # 水仙
+        segments = [("at", (None, user_id)), ("text", reply("qq.group.success.self")),
+                    ("image", get_user_avatar_url(goal_user_id))]
+        await build_msg(matcher, event, segments, tag='finish')
+        return        
+
     if not ntr:
         # 若更换次数即将达到上限，提醒用户
         target_username = await get_user_display_name(bot, group_id, goal_user_id)
