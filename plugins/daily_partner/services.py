@@ -1,32 +1,41 @@
-from datetime import date, timedelta
+from datetime import date
 from typing import Sequence, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio.session import AsyncSession
 from nonebot_plugin_datastore import create_session
 
-from .models import User, Record, RelationType
+from .models import User, Record
 
-async def get_user(
+
+async def check_user(
     platform: str,
-    user_id: int,
+    user_id: str,
     is_bot: bool = False) -> User:
     """获取用户配置，如果不存在则初始化一条默认记录"""
     async with create_session() as session:
         stmt = select(User).where(User.platform == platform, User.user_id == user_id)
         user = (await session.execute(stmt)).scalar_one_or_none()
         
+        if user and user.is_bot == is_bot:
+            return user
+
         if not user:
             user = User(platform=platform, user_id=user_id, is_bot=is_bot)
-            session.add(user)
-            await session.commit()
-            await session.refresh(user)
+
+        if user.is_bot != is_bot:
+            user.is_bot = is_bot
+
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
             
         return user
 
-async def get_users_bulk(platform: str, users_data: list[dict]) -> dict[int, User]:
+
+async def check_users_bulk(platform: str, users_data: list[dict]) -> dict[str, User]:
     """
-    批量获取用户配置，如果不存在则批量初始化默认记录（仅占用 1 个数据库连接）
-    :param users_data: 包含 {"user_id": int, "is_bot": bool} 的列表
+    批量获取用户配置，如果不存在则批量初始化默认记录
+    :param users_data: 包含 {"user_id": str, "is_bot": bool} 的列表
     :return: 返回一个字典 {user_id: User对象}
     """
     if not users_data:
@@ -42,7 +51,7 @@ async def get_users_bulk(platform: str, users_data: list[dict]) -> dict[int, Use
         existing_users = result.scalars().all()
         
         # 建立已存在用户的映射表
-        user_map: dict[int, User] = {u.user_id: u for u in existing_users}
+        user_map: dict[str, User] = {u.user_id: u for u in existing_users}
         
         # 2. 找出哪些用户不在数据库中，进行批量创建
         new_users = []
@@ -62,205 +71,199 @@ async def get_users_bulk(platform: str, users_data: list[dict]) -> dict[int, Use
                 await session.commit()
                 # 顺便把新生成的对象也塞进 map 里返回
                 for u in new_users:
-                    # 如果后续业务不需要立刻读取数据库自动生成的字段（如自增id/创建时间），
-                    # 甚至可以不写 refresh，性能会更好。
-                    await session.refresh(u) 
+                    # 自增id和创建时间 不需要立即读取，refresh 先忽略
+                    # await session.refresh(u) 
                     user_map[u.user_id] = u
             except Exception as e:
                 await session.rollback()
-                raise e
+                raise
                 
         return user_map
 
+
 async def get_today_partner(
-    platform: str, 
-    group_id: int, 
-    user_id: int, 
-    relation_type: RelationType, 
-    *, 
-    session: Optional[AsyncSession] = None) -> Optional[Record]:
+    platform: str, group_id: str, user_id: str, *,
+    session: Optional[AsyncSession] = None) -> Record:
     """获取用户今天在该群的伴侣记录"""
     
-    # 1. 构造通用的查询语句
-    stmt = select(Record).where(
-        Record.record_date == date.today(),
-        Record.platform == platform,
-        Record.group_id == group_id,
-        Record.user_id == user_id,
-        Record.relation_type == relation_type
-    )
+    created: bool = False
     
-    # 2. 如果外部传了有效 session，直接复用它进行查询
-    if session:
-        return (await session.execute(stmt)).scalar_one_or_none()
-        
-    # 3. 如果外部没传，才自己开启并管理生命周期（比如单独调用该函数时）
-    async with create_session() as new_session:
-        return (await new_session.execute(stmt)).scalar_one_or_none()
-
-async def set_today_partner(
-    platform: str, 
-    group_id: int, 
-    user_id: int, 
-    target_id: Optional[int], 
-    relation_type: RelationType, 
-    is_divorced: bool = False) -> Record:
-    """设置或更新今天的伴侣（包含多方连带剥离的原子性操作）"""
-    if is_divorced:
-        target_id = None  # 离婚状态下，目标 ID 一定为 None
-
-    opposite_type = RelationType.HUSBAND if relation_type == RelationType.WIFE else RelationType.WIFE
-
-    async with create_session() as session:
-        # 1. 查询当前用户的今日记录
+    async def _get_record_with_session(session: AsyncSession) -> Record:
+        """带有 session 的内部复用函数"""
         stmt = select(Record).where(
             Record.record_date == date.today(),
             Record.platform == platform,
             Record.group_id == group_id,
             Record.user_id == user_id,
-            Record.relation_type == relation_type
-        )
+            )
+        
         record = (await session.execute(stmt)).scalar_one_or_none()
-        record_old_target_id: Optional[int] = None
-
-        if record:
-            record_old_target_id = record.target_id  # 记录旧的目标 ID
-            record.target_id = target_id
-            record.is_divorced = is_divorced
-            if target_id is not None:
-                record.swap_count += 1
-        else:
-            # 新增初始化
+        if not record:
+            # 暂无记录，创建默认记录
             record = Record(
                 record_date=date.today(),
                 platform=platform,
                 group_id=group_id,
                 user_id=user_id,
-                target_id=target_id,
-                relation_type=relation_type,
-                swap_count=0,
-                is_divorced=is_divorced
+                wife_id=None,
+                husband_id=None,
+                swap_count=-1,  # -1 标识为未初始化状态，jrlp抽选逻辑 +1 后计算为 0
+                is_divorced=False
             )
             session.add(record)
-
-        # 2. 双方记录一致性及【连带被动剥离】处理
-        # 注意：下面的 get_today_partner 必须显式传入 session 参数
-        
-        # 情况 A：当前用户绑定了新目标 (娶妻 或 嫁夫)
-        if target_id is not None:
-            # 查一下这个新目标今天的关系记录
-            target_record = await get_today_partner(
-                platform, group_id, target_id, relation_type=opposite_type, session=session
-            )
-            
-            if target_record:
-                old_partner_of_target = target_record.target_id
-                # 【核心拦截】：如果新目标心里已经有别人了(old_partner_of_target)，且不是当前用户
-                # 此时说明触发了“强娶”或“换伴侣”，这个“前任倒霉蛋”的对象被抢走了！
-                if old_partner_of_target is not None and old_partner_of_target != user_id:
-                    ex_partner_record = await get_today_partner(
-                        platform, group_id, old_partner_of_target, relation_type=relation_type, session=session
-                    )
-                    if ex_partner_record:
-                        ex_partner_record.target_id = None  # 强行剥离！倒霉蛋的目标变回 ×，完美触发路由2/7
-                
-                # 更新新目标的方向指针，指向当前用户
-                target_record.target_id = user_id
-            else:
-                # 新目标今天还没生成记录，直接为对方新建一条
-                new_target_record = Record(
-                    record_date=date.today(),
-                    platform=platform,
-                    group_id=group_id,
-                    user_id=target_id,
-                    target_id=user_id,
-                    relation_type=opposite_type,
-                    swap_count=0
-                )
-                session.add(new_target_record)
-
-        # 情况 B：当前用户主动抛弃了旧目标 (主动离婚 或 主动换人)
-        if record_old_target_id is not None and record_old_target_id != target_id:
-            # 找到旧目标的记录
-            old_target_record = await get_today_partner(
-                platform, group_id, record_old_target_id, relation_type=opposite_type, session=session
-            )
-            # 如果旧目标还指着当前用户，解绑它
-            if old_target_record and old_target_record.target_id == user_id:
-                old_target_record.target_id = None
-
-        await session.commit()
-        await session.refresh(record)
+            created = True
+        return record
+    
+    # 传入 session 直接使用
+    if session:
+        record = await _get_record_with_session(session)
+        if created:
+            await session.flush()  # 刷新该记录以保证一致性
         return record
 
-async def get_available_targets(
+    # 未传入 session 独立开启
+    async with create_session() as session:
+        record = await _get_record_with_session(session)
+        await session.commit()
+        await session.refresh(record)  # 刷新该记录以保证一致性
+        return record
+    
+
+async def set_today_wife(
     platform: str,
-    group_id: int,
-    active_member_ids: list[int],
-    current_user: User,
-    relation_type: RelationType) -> dict[int, User]:
-    """
-    获取当前可用的抽选对象，核心过滤逻辑：
-    1. 必须在传入的活跃成员列表 (active_member_ids) 中
-    2. 排除自己
-    3. 排除在数据库中已关闭该功能 (is_enabled=False) 的人
-    4. 排除今天在该群内已经被别人选走的人（防止一妻多夫/一夫多妻）
-    5. 根据当前用户的 allow_bot 设置，决定是否过滤机器人
-    """
+    group_id: str,
+    user_id: str,
+    wife_id: Optional[str],
+    is_divorced: bool = False) -> Record:
+    """设置或更新「今日老婆」"""
+    wife_id = None if is_divorced else wife_id
+    
+    async with create_session() as session:
+        user_record: Record = await get_today_partner(platform, group_id, user_id, session=session)
+        user_wife_id_old = user_record.wife_id  # 记录旧的老婆 ID
+        if user_wife_id_old == wife_id:
+            return user_record  # 如果老婆没有变化，直接返回，不做后续处理
+        
+        user_record.wife_id = wife_id
+        user_record.is_divorced = is_divorced
+        user_record.swap_count += 1
+
+        # 新 wife 存在，「解决」新 wife 的原 husband
+        if wife_id is not None:
+            
+            # 处理老婆的记录，确保双方一致性
+            new_wife_record: Record = await get_today_partner(platform, group_id, wife_id, session=session)
+            new_wife_husband_id_old = new_wife_record.husband_id  # 记录老婆旧的老公 ID
+            
+            new_wife_record.husband_id = user_id
+            
+            if new_wife_husband_id_old is not None and new_wife_husband_id_old != user_id:
+                # 如果老婆已经有老公了，且不是当前用户，则剥离旧老公的指针
+                old_husband_record: Record = await get_today_partner(platform, group_id, new_wife_husband_id_old, session=session)
+                if old_husband_record.wife_id == wife_id:
+                    old_husband_record.wife_id = None  # 解绑旧老公的指针
+
+        # 旧 wife 存在，「解决」旧 wife 的 husband 指针
+        if user_wife_id_old is not None:
+            old_wife_record: Record = await get_today_partner(platform, group_id, user_wife_id_old, session=session)
+            if old_wife_record.husband_id == user_id:
+                old_wife_record.husband_id = None  # 解绑旧老婆的指针
+        
+        await session.commit()
+        await session.refresh(user_record)
+    
+        return user_record
+
+
+async def set_today_husband(
+    platform: str,
+    group_id: str,
+    user_id: str,
+    husband_id: Optional[str],
+    is_divorced: bool = False) -> Record:
+    """设置或更新「今日老公」"""
+    husband_id = None if is_divorced else husband_id
+    
+    async with create_session() as session:
+        user_record: Record = await get_today_partner(platform, group_id, user_id, session=session)
+        user_husband_id_old = user_record.husband_id
+        if user_husband_id_old == husband_id:
+            return user_record    # 如果老公没有变化，直接返回，不做后续处理
+        
+        user_record.husband_id = husband_id
+        user_record.is_divorced = is_divorced
+        user_record.swap_count += 1
+
+        # 新 husband 存在，处理新 husband 以及他可能存在的原 wife
+        if husband_id is not None:
+            new_husband_record: Record = await get_today_partner(platform, group_id, husband_id, session=session)
+            new_husband_wife_id_old = new_husband_record.wife_id
+            
+            new_husband_record.wife_id = user_id
+    
+            if new_husband_wife_id_old is not None and new_husband_wife_id_old != user_id:
+                old_wife_record: Record = await get_today_partner(platform, group_id, new_husband_wife_id_old, session=session)
+                if old_wife_record.husband_id == husband_id:
+                    old_wife_record.husband_id = None
+
+        # 旧 husband 存在，处理旧 husband
+        if user_husband_id_old is not None:
+            old_husband_record: Record = await get_today_partner(platform, group_id, user_husband_id_old, session=session)
+            # 如果旧老公的老婆还是当前用户，解除绑定
+            if old_husband_record.wife_id == user_id:
+                old_husband_record.wife_id = None
+        
+        # 统一提交事务
+        await session.commit()
+        await session.refresh(user_record)
+    
+        return user_record
+
+
+async def get_wifeable_targets(
+    platform: str,
+    group_id: str,
+    active_member_ids: list[str],
+    current_user: User) -> dict[str, User]:
+    """获取当前可用的「选老婆」抽选对象"""
     if not active_member_ids:
         return {}
 
     async with create_session() as session:
-        # 1. 批量查出群内活跃成员的 User 配置
+        
+        # 查询符合条件{1,2,3,4}的用户
         user_stmt = select(User).where(
             User.platform == platform,
-            User.user_id.in_(active_member_ids),  # 过滤{1}: 活跃成员
-            User.is_enabled == True  # 过滤{3}: 开启功能
+            # 过滤{1}: 必须在传入的活跃成员列表 (active_member_ids) 中
+            User.user_id.in_(active_member_ids),
+            # 过滤{2}: 排除在数据库中已关闭该功能 (is_enabled=False) 的人
+            User.is_enabled == True,
+            # 过滤{3}: 排除自己
+            User.user_id != current_user.user_id,
         )
+        if not current_user.allow_bot:
+            # 过滤{4}: 根据当前用户的 allow_bot 设置，决定是否过滤机器人
+            user_stmt = user_stmt.where(User.is_bot == False)
         users: Sequence[User] = (await session.execute(user_stmt)).scalars().all()
-
-        # 2. 查出今天该群内已经被占用的 target_id 集合
-        record_stmt = select(Record.target_id).where(
+        
+        # 查询符合条件{5}的记录
+        record_stmt = select(Record).where(
             Record.record_date == date.today(),
             Record.platform == platform,
             Record.group_id == group_id,
-            Record.relation_type == relation_type
+            # 过滤{5}: 排除今天在该群内已经被别人选走作为老婆的人
+            Record.wife_id.is_not(None),
         )
-        taken_targets = set((await session.execute(record_stmt)).scalars().all())
-
-        # 3. 执行内存过滤
-        targets: dict[int, User] = {
-            u.user_id: u for u in users if not any([
-                u.user_id == current_user.user_id,  # 过滤{2}: 不包括自己
-                u.user_id in taken_targets,         # 过滤{4}: 不包括已被选走的人
-                not current_user.allow_bot and u.is_bot  # 过滤{5}: 根据当前用户的 allow_bot 设置，决定是否过滤机器人
-            ])
-        }
+        records: Sequence[Record] = (await session.execute(record_stmt)).scalars().all()
+        taken_targets: set[str] = {r.wife_id for r in records if r.wife_id is not None}
+        
+        # 通过 users 列表和 taken_targets 集合，过滤出最终可选的对象
+        targets: dict[str, User] = {user.user_id: user for user in users if user.user_id not in taken_targets}
 
         return targets
+    
 
-async def get_husband_record(platform: str, group_id: int, user_id: int) -> Optional[Record]:
-    """查询谁把当前用户当成了老婆（即查询当前用户的老公）"""
-    async with create_session() as session:
-        stmt = select(Record).where(
-            Record.record_date == date.today(),
-            Record.platform == platform,
-            Record.group_id == group_id,
-            Record.target_id == user_id,       # 注意这里是 target_id
-            Record.relation_type == RelationType.WIFE,
-            Record.is_divorced == False        # 没有离婚
-        )
-        return (await session.execute(stmt)).scalar_one_or_none()
-
-async def divorce_record(record_id: int) -> None:
-    """通过记录 ID 标记离婚状态"""
-    async with create_session() as session:
-        record = await session.get(Record, record_id)
-        if record:
-            record.is_divorced = True
-            await session.commit()
-
-async def hope_for_user(platform: str, user_id: int, hope_id: Optional[int]) -> None:
+async def hope_for_user(platform: str, user_id: str, hope_id: Optional[str]) -> None:
     """设置用户的心愿单"""
     async with create_session() as session:
         stmt = select(User).where(User.platform == platform, User.user_id == user_id)
@@ -272,7 +275,8 @@ async def hope_for_user(platform: str, user_id: int, hope_id: Optional[int]) -> 
         user.hope_id = hope_id
         await session.commit()
 
-async def update_user_setting(platform: str, user_id: int, **kwargs) -> None:
+
+async def update_user_setting(platform: str, user_id: str, **kwargs) -> None:
     """更新用户配置（例如开启/关闭分配、允许bot等）"""
     async with create_session() as session:
         stmt = select(User).where(User.platform == platform, User.user_id == user_id)
@@ -284,4 +288,27 @@ async def update_user_setting(platform: str, user_id: int, **kwargs) -> None:
         for key, value in kwargs.items():
             if hasattr(user, key):
                 setattr(user, key, value)
+        await session.commit()
+
+
+async def check_bot_settings(platform: str, user_id: str) -> None:
+    """检查 bot 固有的 is_bot 和 is_enabled 设置，如果不符合预期则修正"""
+    async with create_session() as session:
+        stmt = select(User).where(User.platform == platform, User.user_id == user_id)
+        user = (await session.execute(stmt)).scalar_one_or_none()
+        
+        # 不存在立即创建
+        if not user:
+            user = User(platform=platform, user_id=user_id, is_bot=True, is_enabled=False)
+            session.add(user)
+            await session.commit()
+            return
+        
+        # 存在检查
+        if (user.is_bot == True) and (user.is_enabled == False):
+            return  # 已经符合预期，无需修改
+
+        # 存在修改
+        user.is_bot = True
+        user.is_enabled = False
         await session.commit()
