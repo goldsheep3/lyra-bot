@@ -580,32 +580,32 @@ async def toggle_status_handled(event: Event, matcher: Matcher, groups: tuple = 
     
     if cmd == "不当老婆":
         await services.update_user_setting(platform, user_id, is_enabled=False)
-        segments = [("at", (None, user_id)), ("text", reply("toggle.enable.off"))]
+        segments = [("at", (None, user_id)), ("text", reply("toggle.enable.disabled"))]
         await build_msg(matcher, event, segments, tag='finish')
         
     elif cmd == "当老婆":
         await services.update_user_setting(platform, user_id, is_enabled=True)
-        segments = [("at", (None, user_id)), ("text", reply("toggle.enable.on"))]
+        segments = [("at", (None, user_id)), ("text", reply("toggle.enable.enabled"))]
         await build_msg(matcher, event, segments, tag='finish')
     
     elif cmd == "不娶bot":
         await services.update_user_setting(platform, user_id, allow_bot=False)
-        segments = [("at", (None, user_id)), ("text", reply("toggle.allow_bot.off"))]
+        segments = [("at", (None, user_id)), ("text", reply("toggle.allow_bot.disabled"))]
         await build_msg(matcher, event, segments, tag='finish')
         
     elif cmd == "娶bot":
         await services.update_user_setting(platform, user_id, allow_bot=True)
-        segments = [("at", (None, user_id)), ("text", reply("toggle.allow_bot.on"))]
+        segments = [("at", (None, user_id)), ("text", reply("toggle.allow_bot.enabled"))]
         await build_msg(matcher, event, segments, tag='finish')
 
     elif cmd == "我是bot":
         await services.update_user_setting(platform, user_id, is_bot=True)
-        segments = [("at", (None, user_id)), ("text", reply("toggle.is_bot.on"))]
+        segments = [("at", (None, user_id)), ("text", reply("toggle.is_bot.enabled"))]
         await build_msg(matcher, event, segments, tag='finish')
 
     elif cmd == "我不是bot":
         await services.update_user_setting(platform, user_id, is_bot=False)
-        segments = [("at", (None, user_id)), ("text", reply("toggle.is_bot.off"))]
+        segments = [("at", (None, user_id)), ("text", reply("toggle.is_bot.disabled"))]
         await build_msg(matcher, event, segments, tag='finish')
 
 
@@ -636,7 +636,7 @@ async def sudo_handled(event: OneBotV11GroupMessageEvent, matcher: Matcher, grou
                 await build_msg(matcher, event, reply("plugin.sudo.filter_activate.usage"), tag='finish')
                 return
             await services.check_group(platform, group_id, filter_activate=status)
-            reply_key = "plugin.sudo.filter_activate.on" if status else "plugin.sudo.filter_activate.off"
+            reply_key = "plugin.sudo.filter_activate.enabled" if status else "plugin.sudo.filter_activate.disabled"
             await build_msg(matcher, event, reply(reply_key), tag='finish')
             return
 
@@ -655,7 +655,7 @@ async def sudo_handled(event: OneBotV11GroupMessageEvent, matcher: Matcher, grou
                 await build_msg(matcher, event, reply("plugin.sudo.set_bot.usage"), tag='finish')
                 return
             await services.check_user(platform, bot_qq, is_bot=is_bot)
-            reply_key = "plugin.sudo.set_bot.on" if is_bot else "plugin.sudo.set_bot.off"
+            reply_key = "plugin.sudo.set_bot.enabled" if is_bot else "plugin.sudo.set_bot.disabled"
             await build_msg(matcher, event, reply(reply_key, qq=bot_qq), tag='finish')
             return
 
