@@ -207,12 +207,16 @@ async def jrlp_handled(bot: Bot, event: Event, matcher: Matcher, _i18n = i18n):
         return
 
     # 预抽选逻辑
-    if isinstance(bot, OneBotV11Bot):
-        active_member_ids = await get_active_pool(bot, group_id)
+    if (await services.check_group(platform, group_id)).filter_activate:
+        if isinstance(bot, OneBotV11Bot):
+            active_member_ids = await get_active_pool(bot, group_id)
+        else:
+            segments = [("at", (None, user_id)), ("text", reply("not_allow_platform"))]
+            await build_msg(matcher, event, segments, tag='finish')
+            return
     else:
-        segments = [("at", (None, user_id)), ("text", reply("not_allow_platform"))]
-        await build_msg(matcher, event, segments, tag='finish')
-        return
+        active_member_ids = None  # 不启用活跃过滤器，直接传入 None
+    
     targets = await services.get_wifeable_targets(platform, group_id, active_member_ids, user)
     
     # 池子无目标水仙逻辑
@@ -271,12 +275,16 @@ async def hlp_handled(bot: Bot, event: Event, matcher: Matcher, _i18n = i18n):
         return
     
     # 抽选前置逻辑（获取活跃成员）
-    if isinstance(bot, OneBotV11Bot):
-        active_member_ids = await get_active_pool(bot, group_id)
+    if (await services.check_group(platform, group_id)).filter_activate:
+        if isinstance(bot, OneBotV11Bot):
+            active_member_ids = await get_active_pool(bot, group_id)
+        else:
+            segments = [("at", (None, user_id)), ("text", reply("not_allow_platform"))]
+            await build_msg(matcher, event, segments, tag='finish')
+            return
     else:
-        segments = [("at", (None, user_id)), ("text", reply("not_allow_platform"))]
-        await build_msg(matcher, event, segments, tag='finish')
-        return
+        active_member_ids = None  # 不启用活跃过滤器，直接传入 None
+
     targets = await services.get_wifeable_targets(platform, group_id, active_member_ids, user)
     
     # 前任剔除
@@ -572,50 +580,85 @@ async def toggle_status_handled(event: Event, matcher: Matcher, groups: tuple = 
     
     if cmd == "不当老婆":
         await services.update_user_setting(platform, user_id, is_enabled=False)
-        segments = [("at", (None, user_id)), ("text", reply("toggle.enable.disabled"))]
+        segments = [("at", (None, user_id)), ("text", reply("toggle.enable.off"))]
         await build_msg(matcher, event, segments, tag='finish')
         
     elif cmd == "当老婆":
         await services.update_user_setting(platform, user_id, is_enabled=True)
-        segments = [("at", (None, user_id)), ("text", reply("toggle.enable.enabled"))]
+        segments = [("at", (None, user_id)), ("text", reply("toggle.enable.on"))]
         await build_msg(matcher, event, segments, tag='finish')
     
     elif cmd == "不娶bot":
         await services.update_user_setting(platform, user_id, allow_bot=False)
-        segments = [("at", (None, user_id)), ("text", reply("toggle.allow_bot.disabled"))]
+        segments = [("at", (None, user_id)), ("text", reply("toggle.allow_bot.off"))]
         await build_msg(matcher, event, segments, tag='finish')
         
     elif cmd == "娶bot":
         await services.update_user_setting(platform, user_id, allow_bot=True)
-        segments = [("at", (None, user_id)), ("text", reply("toggle.allow_bot.enabled"))]
+        segments = [("at", (None, user_id)), ("text", reply("toggle.allow_bot.on"))]
         await build_msg(matcher, event, segments, tag='finish')
 
     elif cmd == "我是bot":
         await services.update_user_setting(platform, user_id, is_bot=True)
-        segments = [("at", (None, user_id)), ("text", reply("toggle.is_bot.enabled"))]
+        segments = [("at", (None, user_id)), ("text", reply("toggle.is_bot.on"))]
         await build_msg(matcher, event, segments, tag='finish')
 
     elif cmd == "我不是bot":
         await services.update_user_setting(platform, user_id, is_bot=False)
-        segments = [("at", (None, user_id)), ("text", reply("toggle.is_bot.disabled"))]
+        segments = [("at", (None, user_id)), ("text", reply("toggle.is_bot.off"))]
         await build_msg(matcher, event, segments, tag='finish')
 
 
 @sudo.handle()
-async def sudo_handled(event: Event, matcher: Matcher, groups: tuple = RegexGroup(), _i18n = i18n):
+async def sudo_handled(event: OneBotV11GroupMessageEvent, matcher: Matcher, groups: tuple = RegexGroup(), _i18n = i18n):
     """处理指令: sudo"""
     i18n_data.set(_i18n)
     _, cmd = groups  # groups[0] 是插件名，groups[1] 是命令内容
     cmd = cmd.strip()
+    parts = cmd.split()
     platform = get_platform(event)
-    user_id = int(event.get_user_id())
+    user_id = event.get_user_id()
+    group_id = get_group_id(event)
     # Permission check 已经在 on_regex 的 permission 参数中完成，这里不再重复检查
+    if not group_id:
+        await build_msg(matcher, event, reply("sudo.failed.not_in_group"), tag='finish')
+        return
     
+    # sudo jrlp filter_activate <on|off>
+    if cmd.startswith("filter_activate"):
+        if len(parts) == 2:
+            _, action = parts
+            if action.lower() == "on":
+                status = True
+            elif action.lower() == "off":
+                status = False
+            else:
+                await build_msg(matcher, event, reply("sudo.filter_activate.usage"), tag='finish')
+                return
+            await services.check_group(platform, group_id, filter_activate=status)
+            reply_key = "sudo.filter_activate.on" if status else "sudo.filter_activate.off"
+            await build_msg(matcher, event, reply(reply_key), tag='finish')
+            return
+
     # sudo jrlp set_bot <bot_qq | @bot> <is_bot>
     if cmd.startswith("set_bot"):
+        await build_msg(matcher, event, reply("sudo.set_bot.disabled"), tag='finish')
+        return
         parts = cmd.split()
+        if len(parts) == 3:
+            _, bot_qq, is_bot_str = parts
+            if is_bot_str.lower() == "true":
+                is_bot = True
+            elif is_bot_str.lower() == "false":
+                is_bot = False
+            else:
+                await build_msg(matcher, event, reply("sudo.set_bot.usage"), tag='finish')
+                return
+            await services.check_user(platform, bot_qq, is_bot=is_bot)
+            reply_key = "sudo.set_bot.on" if is_bot else "sudo.set_bot.off"
+            await build_msg(matcher, event, reply(reply_key, qq=bot_qq), tag='finish')
+            return
 
-    # TODO
-
-    segments = [("at", (None, user_id)), ("text", reply("plugin.sudo"))]
+    segments = [("at", (None, user_id)), ("text", reply("plugin.sudo.help"))]
     await build_msg(matcher, event, segments, tag='finish')
+    return

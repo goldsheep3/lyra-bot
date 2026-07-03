@@ -104,7 +104,6 @@ def upgrade() -> None:
     with op.batch_alter_table('daily_partner_record', schema=None) as batch_op:
         # 移除旧索引（需确认 Alembic 之前生成的具体索引名称，通常自带 ix_ 前缀）
         batch_op.drop_index('ix_daily_partner_record_target_id')
-        batch_op.drop_index('ix_daily_partner_record_relation_type')
         
         # 移除旧的联合唯一约束
         batch_op.drop_constraint('uq_daily_relation', type_='unique')
@@ -165,7 +164,6 @@ def downgrade() -> None:
         
         # 恢复索引
         batch_op.create_index(batch_op.f('ix_daily_partner_record_target_id'), ['target_id'], unique=False)
-        batch_op.create_index(batch_op.f('ix_daily_partner_record_relation_type'), ['relation_type'], unique=False)
 
         # 删除新字段
         batch_op.drop_column('wife_id')

@@ -23,8 +23,20 @@ plugin:
       配置项：控制你是否可以娶该群的QQ官方机器人作为「老婆」
     3. 我是bot / 我不是bot
       配置项：控制该账号是否被视为 bot
-  sudo: |-
-    暂时不支持 sudo 命令哦~
+  sudo:
+    help: |-
+      暂时不支持 sudo 命令哦~
+    failed:
+      not_in_group: "sudo 命令必须在群聊中使用哦~"
+    filter_activate:
+      usage: "sudo filter_activate <on|off>：开启或关闭活跃成员过滤功能"
+      on: "已成功开启活跃成员过滤功能，只有活跃成员才会被抽选为老婆哦~"
+      off: "已成功关闭活跃成员过滤功能，所有群成员都有可能被抽选为老婆哦~"
+    set_bot:
+      usage: "sudo set_bot <bot_qq | @bot> <true|false>：将指定的 QQ 账号标记为 bot 或非 bot"
+      on: "已成功将 {qq} 标记为 bot。请注意，该设置全局同步~"
+      off: "已成功将 {qq} 设置为非 bot。请注意，该设置全局同步~"
+      disabled: "sudo set_bot 命令暂时不支持哦~"
   
 
 not_allow_platform: "当前平台还不支持该功能哦~"
@@ -97,11 +109,11 @@ hlg:
 
 toggle:
   enable:
-    enabled: "设置成功：开启了 jrlp 相关功能。"
-    disabled: "设置成功：关闭了 jrlp 相关功能。"
+    on: "设置成功：开启了 jrlp 相关功能。"
+    off: "设置成功：关闭了 jrlp 相关功能。"
   allow_bot:
-    enabled: "设置成功：你的抽选将会包括 bot。"
-    disabled: "设置成功：你的抽选将不会包括 bot。"
+    on: "设置成功：你的抽选将会包括 bot。"
+    off: "设置成功：你的抽选将不会包括 bot。"
   is_bot:
-    enabled: "设置成功：已定义你是 bot。"
-    disabled: "设置成功：已定义你不是 bot。"
+    on: "设置成功：已定义你是 bot。"
+    off: "设置成功：已定义你不是 bot。"

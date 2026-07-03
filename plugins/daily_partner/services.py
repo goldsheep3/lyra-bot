@@ -4,32 +4,67 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio.session import AsyncSession
 from nonebot_plugin_datastore import create_session
 
-from .models import User, Record
+from .models import Record, User, Group
 
 
-async def check_user(
-    platform: str,
-    user_id: str,
-    is_bot: bool = False) -> User:
-    """获取用户配置，如果不存在则初始化一条默认记录"""
+def check_dict_consistency(input: dict, standard: dict) -> bool:
+    """一致性检查"""
+    return all(
+        standard.get(k) == v
+        for k, v in input.items()
+    )
+
+
+async def check_user(platform: str, user_id: str, **kwargs) -> User:
+    """获取或更新用户配置，含初始化逻辑"""
     async with create_session() as session:
         stmt = select(User).where(User.platform == platform, User.user_id == user_id)
         user = (await session.execute(stmt)).scalar_one_or_none()
         
-        if user and user.is_bot == is_bot:
+        if not user:
+            user = User(platform=platform, user_id=user_id, **kwargs)
+            session.add(user)
+            await session.commit()
+            await session.refresh(user)
             return user
 
-        if not user:
-            user = User(platform=platform, user_id=user_id, is_bot=is_bot)
+        if not check_dict_consistency(kwargs, user.dict()):
+            # 更新用户配置
+            for key, value in kwargs.items():
+                setattr(user, key, value)
 
-        if user.is_bot != is_bot:
-            user.is_bot = is_bot
+            session.add(user)
+            await session.commit()
+            await session.refresh(user)
+            return user
 
-        session.add(user)
-        await session.commit()
-        await session.refresh(user)
-            
         return user
+
+
+async def check_group(platform: str, group_id: str, **kwargs) -> Group:
+    """获取或更新群组配置，含初始化逻辑"""
+    async with create_session() as session:
+        stmt = select(Group).where(Group.platform == platform, Group.group_id == group_id)
+        group = (await session.execute(stmt)).scalar_one_or_none()
+        
+        if not group:
+            group = Group(platform=platform, group_id=group_id, **kwargs)
+            session.add(group)
+            await session.commit()
+            await session.refresh(group)
+            return group
+
+        if not check_dict_consistency(kwargs, group.dict()):
+            # 更新群组配置
+            for key, value in kwargs.items():
+                if hasattr(group, key):
+                    setattr(group, key, value)
+            await session.commit()
+            await session.refresh(group)
+            return group
+
+        return group
+
 
 
 async def check_users_bulk(platform: str, users_data: list[dict]) -> dict[str, User]:
@@ -86,9 +121,7 @@ async def get_today_partner(
     session: Optional[AsyncSession] = None) -> Record:
     """获取用户今天在该群的伴侣记录"""
     
-    created: bool = False
-    
-    async def _get_record_with_session(session: AsyncSession) -> Record:
+    async def _get_record_with_session(session: AsyncSession) -> tuple[Record, bool]:
         """带有 session 的内部复用函数"""
         stmt = select(Record).where(
             Record.record_date == date.today(),
@@ -111,19 +144,19 @@ async def get_today_partner(
                 is_divorced=False
             )
             session.add(record)
-            created = True
-        return record
+            return record, True  # 返回 True 表示是新创建的记录
+        return record, False  # 返回 False 表示是已有记录
     
     # 传入 session 直接使用
     if session:
-        record = await _get_record_with_session(session)
+        record, created = await _get_record_with_session(session)
         if created:
             await session.flush()  # 刷新该记录以保证一致性
         return record
 
     # 未传入 session 独立开启
     async with create_session() as session:
-        record = await _get_record_with_session(session)
+        record, _ = await _get_record_with_session(session)
         await session.commit()
         await session.refresh(record)  # 刷新该记录以保证一致性
         return record
@@ -223,19 +256,14 @@ async def set_today_husband(
 async def get_wifeable_targets(
     platform: str,
     group_id: str,
-    active_member_ids: list[str],
+    active_member_ids: list[str] | None,
     current_user: User) -> dict[str, User]:
     """获取当前可用的「选老婆」抽选对象"""
-    if not active_member_ids:
-        return {}
-
     async with create_session() as session:
         
         # 查询符合条件{1,2,3,4}的用户
         user_stmt = select(User).where(
             User.platform == platform,
-            # 过滤{1}: 必须在传入的活跃成员列表 (active_member_ids) 中
-            User.user_id.in_(active_member_ids),
             # 过滤{2}: 排除在数据库中已关闭该功能 (is_enabled=False) 的人
             User.is_enabled == True,
             # 过滤{3}: 排除自己
@@ -244,6 +272,9 @@ async def get_wifeable_targets(
         if not current_user.allow_bot:
             # 过滤{4}: 根据当前用户的 allow_bot 设置，决定是否过滤机器人
             user_stmt = user_stmt.where(User.is_bot == False)
+        if active_member_ids is not None:
+            # 过滤{1}: 若存在传入列表，则只考虑活跃成员
+            user_stmt = user_stmt.where(User.user_id.in_(active_member_ids))
         users: Sequence[User] = (await session.execute(user_stmt)).scalars().all()
         
         # 查询符合条件{5}的记录
