@@ -86,10 +86,8 @@ def is_private_message(event: Event) -> bool:
     """判断事件是否为私聊消息"""
     return isinstance(event, OneBotV11PrivateMessageEvent) and hasattr(event, 'user_id')
 
-async def get_active_pool(bot: OneBotV11Bot, group_id: str) -> list[str]:
-    """
-    根据最后发言时间筛选活跃的群成员 ID 列表
-    """
+async def get_pool(bot: OneBotV11Bot, group_id: str, filter_active: bool = True) -> list[str]:
+    """获取成员池，支持活跃成员过滤"""
     try:
         member_list = await bot.get_group_member_list(group_id=int(group_id))
     except Exception as e:
@@ -106,10 +104,12 @@ async def get_active_pool(bot: OneBotV11Bot, group_id: str) -> list[str]:
     active_members: list[dict] = []
     
     for member_info in member_list:
-        if member_info.get("last_sent_time", 0) >= active_threshold:
-            member_id = member_info["user_id"]
-            is_bot = bool(member_info.get("is_bot")) or str(member_id) == str(bot.self_id)
-            active_members.append({"user_id": member_id, "is_bot": is_bot})
+        # 若启用活跃过滤器，则只考虑最近发言时间在阈值内的成员，将不满足的成员 continue 过滤
+        if filter_active and member_info.get("last_sent_time", 0) < active_threshold:
+            continue
+        member_id = member_info["user_id"]
+        is_bot = bool(member_info.get("is_bot")) or str(member_id) == str(bot.self_id)
+        active_members.append({"user_id": member_id, "is_bot": is_bot})
 
     if active_members:
         await services.check_users_bulk(platform="onebot-v11", users_data=active_members)
@@ -207,16 +207,14 @@ async def jrlp_handled(bot: Bot, event: Event, matcher: Matcher, _i18n = i18n):
         return
 
     # 预抽选逻辑
-    if (await services.check_group(platform, group_id)).filter_activate:
-        if isinstance(bot, OneBotV11Bot):
-            active_member_ids = await get_active_pool(bot, group_id)
-        else:
-            segments = [("at", (None, user_id)), ("text", reply("not_allow_platform"))]
-            await build_msg(matcher, event, segments, tag='finish')
-            return
+    if isinstance(bot, OneBotV11Bot):
+        filter_active = (await services.check_group(platform, group_id)).filter_activate
+        active_member_ids = await get_pool(bot, group_id, filter_active=filter_active)
     else:
-        active_member_ids = None  # 不启用活跃过滤器，直接传入 None
-    
+        segments = [("at", (None, user_id)), ("text", reply("not_allow_platform"))]
+        await build_msg(matcher, event, segments, tag='finish')
+        return
+
     targets = await services.get_wifeable_targets(platform, group_id, active_member_ids, user)
     
     # 池子无目标水仙逻辑
@@ -275,15 +273,13 @@ async def hlp_handled(bot: Bot, event: Event, matcher: Matcher, _i18n = i18n):
         return
     
     # 抽选前置逻辑（获取活跃成员）
-    if (await services.check_group(platform, group_id)).filter_activate:
-        if isinstance(bot, OneBotV11Bot):
-            active_member_ids = await get_active_pool(bot, group_id)
-        else:
-            segments = [("at", (None, user_id)), ("text", reply("not_allow_platform"))]
-            await build_msg(matcher, event, segments, tag='finish')
-            return
+    if isinstance(bot, OneBotV11Bot):
+        filter_active = (await services.check_group(platform, group_id)).filter_activate
+        active_member_ids = await get_pool(bot, group_id, filter_active=filter_active)
     else:
-        active_member_ids = None  # 不启用活跃过滤器，直接传入 None
+        segments = [("at", (None, user_id)), ("text", reply("not_allow_platform"))]
+        await build_msg(matcher, event, segments, tag='finish')
+        return
 
     targets = await services.get_wifeable_targets(platform, group_id, active_member_ids, user)
     

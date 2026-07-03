@@ -256,14 +256,19 @@ async def set_today_husband(
 async def get_wifeable_targets(
     platform: str,
     group_id: str,
-    active_member_ids: list[str] | None,
+    id_pool: list[str],
     current_user: User) -> dict[str, User]:
     """获取当前可用的「选老婆」抽选对象"""
+    if not id_pool:
+        raise ValueError("id_pool 列表不能为空")
+    
     async with create_session() as session:
         
         # 查询符合条件{1,2,3,4}的用户
         user_stmt = select(User).where(
             User.platform == platform,
+            # 过滤{1}: 只抽选满足条件的群友
+            User.user_id.in_(id_pool),
             # 过滤{2}: 排除在数据库中已关闭该功能 (is_enabled=False) 的人
             User.is_enabled == True,
             # 过滤{3}: 排除自己
@@ -272,9 +277,7 @@ async def get_wifeable_targets(
         if not current_user.allow_bot:
             # 过滤{4}: 根据当前用户的 allow_bot 设置，决定是否过滤机器人
             user_stmt = user_stmt.where(User.is_bot == False)
-        if active_member_ids is not None:
-            # 过滤{1}: 若存在传入列表，则只考虑活跃成员
-            user_stmt = user_stmt.where(User.user_id.in_(active_member_ids))
+
         users: Sequence[User] = (await session.execute(user_stmt)).scalars().all()
         
         # 查询符合条件{5}的记录
