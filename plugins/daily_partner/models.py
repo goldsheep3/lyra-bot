@@ -63,7 +63,7 @@ class User(Model):
 
 
 class Group(Model):
-    # TODO: 群组配置功能 建议来自 LDxiaodiの粉丝老爷们@无名客晓枫
+    # 群组配置功能 建议来自 LDxiaodiの粉丝老爷们@无名客晓枫
     __table_args__ = (
         UniqueConstraint('platform', 'group_id', name='uq_group_platform_id'),
     )
