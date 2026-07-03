@@ -76,8 +76,8 @@ async def check_users_bulk(platform: str, users_data: list[dict]) -> dict[str, U
     if not users_data:
         return {}
 
-    user_ids = [u["user_id"] for u in users_data]
-    is_bot_map = {u["user_id"]: u["is_bot"] for u in users_data}
+    user_ids: list[str] = [str(u["user_id"]) for u in users_data]
+    is_bot_map: dict[str, bool] = {str(u["user_id"]): u["is_bot"] for u in users_data}
 
     async with create_session() as session:
         # 1. 一次性查询所有已存在的用户（核心优化：一条 SQL 搞定）

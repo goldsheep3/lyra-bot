@@ -621,7 +621,7 @@ async def sudo_handled(event: OneBotV11GroupMessageEvent, matcher: Matcher, grou
     group_id = get_group_id(event)
     # Permission check 已经在 on_regex 的 permission 参数中完成，这里不再重复检查
     if not group_id:
-        await build_msg(matcher, event, reply("sudo.failed.not_in_group"), tag='finish')
+        await build_msg(matcher, event, reply("plugin.sudo.failed.not_in_group"), tag='finish')
         return
     
     # sudo jrlp filter_activate <on|off>
@@ -633,16 +633,16 @@ async def sudo_handled(event: OneBotV11GroupMessageEvent, matcher: Matcher, grou
             elif action.lower() == "off":
                 status = False
             else:
-                await build_msg(matcher, event, reply("sudo.filter_activate.usage"), tag='finish')
+                await build_msg(matcher, event, reply("plugin.sudo.filter_activate.usage"), tag='finish')
                 return
             await services.check_group(platform, group_id, filter_activate=status)
-            reply_key = "sudo.filter_activate.on" if status else "sudo.filter_activate.off"
+            reply_key = "plugin.sudo.filter_activate.on" if status else "plugin.sudo.filter_activate.off"
             await build_msg(matcher, event, reply(reply_key), tag='finish')
             return
 
     # sudo jrlp set_bot <bot_qq | @bot> <is_bot>
     if cmd.startswith("set_bot"):
-        await build_msg(matcher, event, reply("sudo.set_bot.disabled"), tag='finish')
+        await build_msg(matcher, event, reply("plugin.sudo.set_bot.disabled"), tag='finish')
         return
         parts = cmd.split()
         if len(parts) == 3:
@@ -652,10 +652,10 @@ async def sudo_handled(event: OneBotV11GroupMessageEvent, matcher: Matcher, grou
             elif is_bot_str.lower() == "false":
                 is_bot = False
             else:
-                await build_msg(matcher, event, reply("sudo.set_bot.usage"), tag='finish')
+                await build_msg(matcher, event, reply("plugin.sudo.set_bot.usage"), tag='finish')
                 return
             await services.check_user(platform, bot_qq, is_bot=is_bot)
-            reply_key = "sudo.set_bot.on" if is_bot else "sudo.set_bot.off"
+            reply_key = "plugin.sudo.set_bot.on" if is_bot else "plugin.sudo.set_bot.off"
             await build_msg(matcher, event, reply(reply_key, qq=bot_qq), tag='finish')
             return
 
