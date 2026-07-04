@@ -1,35 +1,32 @@
-"""
-image_gen 绘图模块的内部数据模型
-- 难度信息 (Difficulty)
-- 达成率颜色 (Achievement)
-- 评价信息 (Combo, Sync)
-"""
-
+"""image_gen/utils.py 绘图基础工具"""
 from enum import Enum
 from typing import Iterator, Optional, Any
 from dataclasses import dataclass
 
 
-# ========================================
-# 基础颜色常量
-# ========================================
-
-COLOR_DXSCORE_GN = '#0A5'
-COLOR_DXSCORE_OR = '#C72'
-COLOR_DXSCORE_GD = '#ED4'
-COLOR_THEME = '#64d2ce'
-NO_COLOR = '#FFFFFF00'  # 完全透明
-
-COLOR_UTAGE_TAG_BG = '#236'
-COLOR_UTAGE_TAG_FRAME = '#BEF'
-COLOR_BUDDY_TAG_BG = '#411'
-COLOR_BUDDY_TAG_FRAME = '#FEA'
+__all__ = [
+    # 难度
+    "Diff", "Difficulty",
+    # 达成率
+    "AchColor", "Achievement",
+    # Combo / Sync
+    "EvaluateColor", "EvalInfo", "Combo", "Sync",
+]
 
 
-# ========================================
-# 难度定义
-# ========================================
+# --- 基础颜色 ---
+COLOR_DXSCORE_GN = '#0A5'  # DXScore ✦ / ✦✦
+COLOR_DXSCORE_OR = '#C72'  # DXScore ✦✦✦ / ✦✦✦✦
+COLOR_DXSCORE_GD = '#ED4'  # DXScore ✦✦✦✦✦
+COLOR_THEME = '#64d2ce'  # 主题色
+EMP_COLOR = '#FFFFFF00'  # 完全透明
 
+COLOR_UTAGE_TAG_BG = '#236'  # 宴会场标签背景
+COLOR_UTAGE_TAG_FRAME = '#BEF'  # 宴会场标签边框
+COLOR_BUDDY_TAG_BG = '#411'  # buddy 宴会场标签背景
+COLOR_BUDDY_TAG_FRAME = '#FEA'  # buddy 宴会场标签边框
+
+# --- 难度数据类 ---
 @dataclass(frozen=True)
 class Diff:
     """难度信息数据类"""
@@ -47,7 +44,6 @@ class Diff:
     def level_text(self) -> str:
         return self._level_text if self._level_text else self.text
 
-
 class Difficulty(Enum):
     """难度枚举"""
     NONE = Diff(0, "N/A", "N/A", bg='#FFF', frame='#FFF', text='#FFF', deep='#FFF', title_bg='#FFF')
@@ -62,23 +58,21 @@ class Difficulty(Enum):
     @classmethod
     def get(cls, code: int) -> Diff:
         """根据难度代码获取难度信息"""
+        ob = cls.NONE
         for item in cls:
             if item.value.code == code:
-                return item.value
-        return cls.NONE.value
+                ob = item
+                break
+        return ob.value
 
 
-# ========================================
-# 达成率相关定义
-# ========================================
-
+# --- 达成率数据类 --- 
 @dataclass(frozen=True)
 class AchColor:
     """达成率颜色信息"""
     fill: str
     stroke: str
     shadow: str
-
 
 class Achievement(Enum):
     """达成率评级"""
@@ -95,23 +89,17 @@ class Achievement(Enum):
             return cls.A.value
         return cls.B.value
 
-
-# ========================================
-# 评价定义 (FC/FS/Sync)
-# ========================================
-
+# --- Combo / Sync 数据类 ---
 @dataclass(frozen=True)
 class EvaluateColor:
     """评价颜色信息"""
     fill: str
     shadow: str
 
-
 _EVAL_GN = EvaluateColor(fill='#7D5', shadow='#162')  # FC / FC+
 _EVAL_GD = EvaluateColor(fill='#FE2', shadow='#A02')  # AP / AP+ / FDX / FDX+
 _EVAL_BE = EvaluateColor(fill='#6DF', shadow='#038')  # FS / FS+
 _EVAL_DB = EvaluateColor(fill='#038', shadow='#FFF')  # SYNC PLAY
-
 
 @dataclass(frozen=True)
 class EvalInfo:
@@ -123,40 +111,41 @@ class EvalInfo:
     cn_name: str
 
     def __iter__(self) -> Iterator[Any]:
-        # 使 EvalInfo 可以直接解包为 (color, full_name, short_name, cn_name)
         return iter((self.color, self.full_name, self.short_name, self.cn_name))
-
 
 class Combo(Enum):
     """Combo 类型 (FC, AP 等)"""
-    NONE    = EvalInfo(0, _EVAL_GN, '', '', '')
-    FC      = EvalInfo(1, _EVAL_GN, 'FULL COMBO', 'FC', '全连击')
-    FC_PLUS = EvalInfo(2, _EVAL_GN, 'FULL COMBO +', 'FC+', '全连击+')
-    AP      = EvalInfo(3, _EVAL_GD, 'ALL PERFECT', 'AP', '完美无缺')
-    AP_PLUS = EvalInfo(4, _EVAL_GD, 'ALL PERFECT +', 'AP+', '完美无缺+')
+    NONE = EvalInfo(0, _EVAL_GN, '', '', '')
+    FC   = EvalInfo(1, _EVAL_GN, 'FULL COMBO', 'FC', '全连击')
+    FCP  = EvalInfo(2, _EVAL_GN, 'FULL COMBO +', 'FC+', '全连击+')
+    AP   = EvalInfo(3, _EVAL_GD, 'ALL PERFECT', 'AP', '完美无缺')
+    APP  = EvalInfo(4, _EVAL_GD, 'ALL PERFECT +', 'AP+', '完美无缺+')
 
     @classmethod
     def get(cls, code: int) -> EvalInfo:
         """根据代码获取组合评价"""
+        ob = cls.NONE
         for item in cls:
             if item.value.code == code:
-                return item.value
-        return cls.NONE.value
-
+                ob = item
+                break
+        return ob.value
 
 class Sync(Enum):
     """Sync 类型 (FS, FDX 等)"""
-    NONE     = EvalInfo(0, _EVAL_DB, '', '', '')
-    SYNC     = EvalInfo(1, _EVAL_DB, 'SYNC PLAY', 'SYNC', '同步游玩')
-    FS       = EvalInfo(2, _EVAL_BE, 'FULL SYNC', 'FS', '全完同步')  # 原文如此
-    FS_PLUS  = EvalInfo(3, _EVAL_BE, 'FULL SYNC +', 'FS+', '全完同步+')  # 原文如此
-    FDX      = EvalInfo(4, _EVAL_GD, 'FULL SYNC DX', 'FDX', '完全同步DX')
-    FDX_PLUS = EvalInfo(5, _EVAL_GD, 'FULL SYNC DX +', 'FDX+', '完全同步DX+')
+    NONE = EvalInfo(0, _EVAL_DB, '', '', '')
+    SYNC = EvalInfo(1, _EVAL_DB, 'SYNC PLAY', 'SYNC', '同步游玩')
+    FS   = EvalInfo(2, _EVAL_BE, 'FULL SYNC', 'FS', '全完同步')  # 原文如此
+    FSP  = EvalInfo(3, _EVAL_BE, 'FULL SYNC +', 'FS+', '全完同步+')  # 原文如此
+    FDX  = EvalInfo(4, _EVAL_GD, 'FULL SYNC DX', 'FDX', '完全同步DX')
+    FDXP = EvalInfo(5, _EVAL_GD, 'FULL SYNC DX +', 'FDX+', '完全同步DX+')
 
     @classmethod
     def get(cls, code: int) -> EvalInfo:
         """根据代码获取同步评价"""
+        ob = cls.NONE
         for item in cls:
             if item.value.code == code:
-                return item.value
-        return cls.NONE.value
+                ob = item
+                break
+        return ob.value

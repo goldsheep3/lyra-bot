@@ -1,3 +1,4 @@
+"""napcat_stream.py NapCat 流式下载支持模块"""
 import asyncio
 import base64
 import contextvars
@@ -17,7 +18,7 @@ _CURRENT_STREAM: contextvars.ContextVar["NapCatStreamFile | None"] = contextvars
     "maib_current_stream",
     default=None,
 )
-_ACTIVE_STREAMS: dict[int, "NapCatStreamFile"] = {}
+_ACTIVE_STREAMS: dict[str, "NapCatStreamFile"] = {}
 
 _original_json_to_event = Adapter.json_to_event.__func__
 _original_get_seq = ResultStore.get_seq
@@ -41,13 +42,11 @@ def _decode_stream_payload(payload: Any) -> bytes:
     return str(payload).encode("utf-8")
 
 
-def _extract_echo(result: dict[str, Any]) -> Optional[int]:
+def _extract_echo(result: dict[str, Any]) -> Optional[str]:
     echo = result.get("echo")
-    if isinstance(echo, int):
-        return echo
-    if isinstance(echo, str) and echo.isdecimal():
-        return int(echo)
-    return None
+    if echo is None:
+        return None
+    return str(echo)
 
 
 def _stream_kind(result: dict[str, Any]) -> tuple[Optional[str], bytes, Optional[str]]:
@@ -98,7 +97,7 @@ def install_hook() -> None:
         return
 
     setattr(ResultStore, 'get_seq', _patched_get_seq)
-    setattr(Adapter, 'json_to_event', _patched_json_to_event)
+    setattr(Adapter, 'json_to_event', classmethod(_patched_json_to_event))
     _HOOK_INSTALLED = True
     logger.info("NapCat stream hook installed")
 
@@ -108,15 +107,15 @@ class NapCatStreamFile:
         self.bot = bot
         self.file_id = file_id
         self.timeout = timeout
-        self._seq: Optional[int] = None
+        self._seq: Optional[str] = None
         self._buffer = bytearray()
         self._done = asyncio.Event()
         self._error: Optional[str] = None
         self.path: Optional[Path] = None
 
-    def bind_seq(self, seq: int) -> None:
-        self._seq = seq
-        _ACTIVE_STREAMS[seq] = self
+    def bind_seq(self, seq: Any) -> None:
+        self._seq = str(seq)
+        _ACTIVE_STREAMS[self._seq] = self
 
     def on_chunk(self, chunk: bytes) -> None:
         if chunk:
@@ -138,6 +137,7 @@ class NapCatStreamFile:
                 self.bot.call_api("download_file_stream", file_id=self.file_id),
                 timeout=self.timeout,
             )
+            await asyncio.wait_for(self._done.wait(), timeout=self.timeout)
             if self._error:
                 raise RuntimeError(self._error)
 

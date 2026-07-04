@@ -5,12 +5,12 @@
 """
 
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional
 from functools import lru_cache
 
 from PIL import Image, ImageDraw, ImageFont
 
-from ..utils import MS, limit_text, _MS_DEFAULT
+from ..utils import MS, limit_text, MS_DEFAULT
 
 
 @dataclass
@@ -33,7 +33,7 @@ class TextStyle:
 class BaseDrawer:
     """基础绘制工具类"""
     
-    def __init__(self, img: Image.Image, draw: ImageDraw.ImageDraw, ms: MS = _MS_DEFAULT):
+    def __init__(self, img: Image.Image, draw: ImageDraw.ImageDraw, ms: MS = MS_DEFAULT):
         """初始化绘制器"""
         self.img = img
         self.draw = draw

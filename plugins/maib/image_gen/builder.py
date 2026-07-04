@@ -1,55 +1,29 @@
-"""
-image_gen 高级画布拼装层
-负责将底层组件和资源拼装为完整图片。
-"""
-
+"""image_gen/builder.py 绘图构建器"""
 from __future__ import annotations
 
 import io
 import zipfile
 from pathlib import Path
-from typing import Literal, Optional, Tuple, List
+from typing import Literal, Optional, Union
 
 from PIL import Image, ImageDraw
 
-from ..constants import *
-from ..utils import MaiChart, MaiData, MaiUser, parse_dxrating_filename
-from .components import BaseDrawer, TextStyle
-from .config import MODEL_VERSION
-from .models import (
-    AchColor,
-    Combo,
-    Diff,
-    Difficulty,
-    EvalInfo,
-    Sync,
-    COLOR_THEME,
-    NO_COLOR,
-)
-from .resources import AssetsManager, FontManager, FontCode
-from .utils import MS, _MS_DEFAULT, bcm, get_full_width_text
-
-# 这些对象由 image_gen.__init__ 初始化后回填到包级命名空间。
-# builder 通过包级导入复用它们，避免重复初始化资源。
-from . import ASSETS, FONT, IMU, DrawUnit, get_genre
+from ..constants import server, VERSION_MAP
+from ..utils.models import MaiData, MaiUser
+from .models import COLOR_THEME, EMP_COLOR
+from .utils import MS, MS_DEFAULT, FontCode, FontManager, ImageManager, DrawUnit, ImageUnit
+from .tools import FullWidthConverter, get_dxra_frame_filename, get_genre
 
 
 __all__ = [
     "draw_info_box",
     "draw_b50",
     "simple_list",
-    "simple_maidata_box",
-    "get_image_bytes",
 ]
 
 
-def _image_grid_board(
-    image_list: list[Image.Image],
-    cols: int = 4,
-    gap: int = 0,
-    skip_first: bool = True,
-    auto_close: bool = False,
-) -> Image.Image | None:
+def _image_grid_board(image_list: list[Image.Image], cols: int = 4, gap: int = 0,
+                      skip_first: bool = True, auto_close: bool = False) -> Optional[Image.Image]:
     """将图片列表排列成网格看板。"""
     if not image_list:
         return None
@@ -74,19 +48,13 @@ def _image_grid_board(
     return board
 
 
-def _user_header_board(
-    inner_width: int,
-    dxrating: int,
-    server: SERVER_TAG,
-    user_name: str,
-    user_avatar: bytes | Image.Image | None = None,
-    update_time: str = "Unknown Time",
-    dxra_cirp_frame: bool = True,
-    ms: MS = _MS_DEFAULT,
-    cn_level: Literal[0, 1, 2] = 0,
-) -> Image.Image | None:
+def _user_header_board(inner_width: int, dxrating: int, server: server,
+                       user_name: str, user_avatar: Optional[Union[bytes, Image.Image]] = None,
+                       update_time: str = "Unknown Time", dxra_cirp_frame: bool = True,
+                       ms: MS = MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Optional[Image.Image]:
+    """生成用户信息看板"""
     header_h = 32
-    board_title = Image.new("RGBA", ms.xy(inner_width, header_h), NO_COLOR)
+    board_title = Image.new("RGBA", ms.xy(inner_width, header_h), EMP_COLOR)
     du1 = DrawUnit(board_title, multiple=ms, cn_level=cn_level)
 
     avatar_size = 32
@@ -96,23 +64,26 @@ def _user_header_board(
         except Exception:
             avatar = None
     elif isinstance(user_avatar, Image.Image):
-        avatar = user_avatar
+        avatar = user_avatar.copy().convert("RGBA")
     else:
         avatar = None
-    avatar = avatar or Image.new("RGB", ms.xy(avatar_size, avatar_size), color="#CCC")
-    if avatar.size != ms.xy(avatar_size, avatar_size):
-        avatar = avatar.resize(ms.xy(avatar_size, avatar_size), Image.Resampling.LANCZOS)
-    mask = IMU.get_mask(w=avatar_size, h=avatar_size, radius=5, ms=ms)
+    avatar = avatar or Image.new("RGBA", ms.xy(avatar_size, avatar_size), color="#CCC")
+    target_avatar_size = ms.xy(avatar_size, avatar_size)
+    if avatar.size != target_avatar_size:
+        resized_avatar = avatar.resize(target_avatar_size, Image.Resampling.LANCZOS)
+        avatar.close()
+        avatar = resized_avatar
+    mask = ImageUnit.get_mask(w=avatar_size, h=avatar_size, radius=5, ms=ms)
     board_title.paste(avatar, (0, 0), mask)
     avatar.close()
     du1.rounded_rect(0, 0, avatar_size, avatar_size, radius=5, fill=None, outline="#FFF", width=1)
 
     dx_ra_x, dx_ra_y = 36, 0
-    dxra_frame_filename = parse_dxrating_filename(dxrating, cirp_frame=dxra_cirp_frame)
-    if dxra_frame := ASSETS.dxrating_image(dxra_frame_filename, size=ms.xy(70, 14)):
+    dxra_frame_filename = get_dxra_frame_filename(dxrating, cirp_frame=dxra_cirp_frame)
+    if dxra_frame := ImageManager.dxrating_image(dxra_frame_filename, size=ms.xy(70, 14)):
         board_title.paste(dxra_frame, ms.xy(dx_ra_x, dx_ra_y), dxra_frame)
 
-    ra_font = FONT.font(FontCode.MiSans_Demibold, size=ms.x(8))
+    ra_font = FontManager.font(FontCode.MiSans_Demibold, size=ms.x(8))
     for i, digit in enumerate(str(dxrating)[::-1]):
         dx = 57.5 - 5.5 * i
         du1.text(
@@ -126,84 +97,81 @@ def _user_header_board(
         )
 
     du1.rounded_rect(36, 15, 100, 17, fill="#333", radius=2)
-    du1.text(36, 23.5, text=" " + get_full_width_text(user_name), fill="#FFF", anchor="lm", font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(10)))
+    
+    du1.text(36, 23.5, text=" " + FullWidthConverter.convert(user_name), fill="#FFF", anchor="lm", font=FontManager.font(FontCode.MiSans_Demibold, size=ms.x(10)))
 
     record_info = f"Updated: [{server}] {update_time}"
-    du1.text(inner_width - 2, 2, text=record_info, fill="#FFF", anchor="ra", font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(5)))
+    du1.text(inner_width - 2, 2, text=record_info, fill="#FFF", anchor="ra", font=FontManager.font(FontCode.MiSans_Demibold, size=ms.x(5)))
 
     return board_title
 
 
-def draw_info_box(
-    maidata: MaiData,
-    server: SERVER_TAG,
-    maiuser: MaiUser | None = None,
-    ms: MS = _MS_DEFAULT,
-    cn_level: Literal[0, 1, 2] = 0,
-) -> Image.Image:
+def draw_info_box(maidata: MaiData, server: server, maiuser: Optional[MaiUser] = None,
+                  ms: MS = MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+    """绘制 mai_info 看板"""
     width, fw = 220, 10
     all_width = width + fw * 2
 
     cover_width = 54
-    board1 = Image.new("RGBA", ms.xy(width, cover_width + 2), NO_COLOR)
+    board1 = Image.new("RGBA", ms.xy(width, cover_width + 2), EMP_COLOR)
     du1 = DrawUnit(board1, multiple=ms, cn_level=cn_level)
 
     img = maidata.image if maidata.image else Image.new("RGB", ms.xy(cover_width, cover_width), color="#999")
-    mask = IMU.get_mask(w=cover_width, h=cover_width, radius=5, ms=ms)
+    mask = ImageUnit.get_mask(w=cover_width, h=cover_width, radius=5, ms=ms)
     cover_img = img.resize(ms.xy(cover_width, cover_width), Image.Resampling.LANCZOS) if img.size != (cover_width, cover_width) else img
     board1.paste(cover_img, ms.xy(1, 1), mask)
     du1.rounded_rect(1, 1, cover_width, cover_width, radius=5, fill=None, outline="#FFF", width=1)
 
     dx = cover_width + 5
-    du1.text(dx, 0, text=maidata.title, fill="#FFF", anchor="la", font=FONT.font(FontCode.MiSans_Heavy, size=ms.x(11)))
-    du1.text(dx, 14, text=maidata.artist, fill="#FFF", anchor="la", font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(5)))
-    du1.text(dx, 23, text=f"ID {maidata.shortid}", fill="#FFF", anchor="la", font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(6)))
-    du1.text(dx + 30, 23, text=f"BPM {maidata.bpm}", fill="#FFF", anchor="la", font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(6)))
-    du1.text(dx + 60, 23, text=f"谱面来源: {maidata.converter}", fill="#FFF", anchor="la", font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(6)))
+    du1.text(dx, 0, text=maidata.title, fill="#FFF", anchor="la", font=FontManager.font(FontCode.MiSans_Heavy, size=ms.x(11)))
+    du1.text(dx, 14, text=maidata.artist, fill="#FFF", anchor="la", font=FontManager.font(FontCode.MiSans_Demibold, size=ms.x(5)))
+    du1.text(dx, 23, text=f"ID {maidata.shortid}", fill="#FFF", anchor="la", font=FontManager.font(FontCode.MiSans_Demibold, size=ms.x(6)))
+    du1.text(dx + 30, 23, text=f"BPM {maidata.bpm}", fill="#FFF", anchor="la", font=FontManager.font(FontCode.MiSans_Demibold, size=ms.x(6)))
+    du1.text(dx + 60, 23, text=f"谱面来源: {maidata.converter}", fill="#FFF", anchor="la", font=FontManager.font(FontCode.MiSans_Demibold, size=ms.x(6)))
 
     margin = 5
     dy = 32
     im_y1, im_y1_5 = dy + 3, dy + 12
     genre_x, jpv_x, cnv_x, dv_x = dx, dx + 34 + margin, dx + 68 + margin * 2, dx + 102 + margin * 3
-    du1.text(genre_x, dy, text="流派", fill="#FFF", anchor="la", font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(4)))
+    du1.text(genre_x, dy, text="流派", fill="#FFF", anchor="la", font=FontManager.font(FontCode.MiSans_Demibold, size=ms.x(4)))
     if maidata.genre:
         genre_text, genre_fill = get_genre(maidata.genre, cn_level=cn_level)
-        du1.text(genre_x + 17, im_y1_5, text=genre_text, fill=genre_fill, anchor="mm", font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(5)), shadow=(1.2, "#FFF"))
+        du1.text(genre_x + 17, im_y1_5, text=genre_text, fill=genre_fill, anchor="mm", font=FontManager.font(FontCode.MiSans_Demibold, size=ms.x(5)), shadow=(1.2, "#FFF"))
 
-    du1.text(jpv_x, dy, text="JP", fill="#FFF", anchor="la", font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(4)))
+    du1.text(jpv_x, dy, text="JP", fill="#FFF", anchor="la", font=FontManager.font(FontCode.MiSans_Demibold, size=ms.x(4)))
     if maidata.version:
-        if ver_jp := ASSETS.version_image(maidata.version, size=ms.xy(34, 16)):
+        if ver_jp := ImageManager.version_image(maidata.version, size=ms.xy(34, 16)):
             board1.paste(ver_jp, ms.xy(jpv_x, im_y1), ver_jp)
         else:
-            text = VERSIONS_DATA.get(maidata.version, str(maidata.version)).replace(" ", "\n")
-            du1.text(jpv_x + 17, im_y1_5, text=text, fill="#FFF", anchor="mm", font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(5)))
+            text = VERSION_MAP.get(maidata.version, str(maidata.version)).replace(" ", "\n")
+            du1.text(jpv_x + 17, im_y1_5, text=text, fill="#FFF", anchor="mm", font=FontManager.font(FontCode.MiSans_Demibold, size=ms.x(5)))
 
-    du1.text(cnv_x, dy, text="CN", fill="#FFF", anchor="la", font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(4)))
+    du1.text(cnv_x, dy, text="CN", fill="#FFF", anchor="la", font=FontManager.font(FontCode.MiSans_Demibold, size=ms.x(4)))
     if maidata.version_cn:
-        if ver_cn := ASSETS.version_image(maidata.version_cn, size=ms.xy(34, 16)):
+        if ver_cn := ImageManager.version_image(maidata.version_cn, size=ms.xy(34, 16)):
             board1.paste(ver_cn, ms.xy(cnv_x, im_y1), ver_cn)
         else:
-            text = VERSIONS_DATA.get(maidata.version_cn, str(maidata.version_cn)).replace(" ", "\n")
-            du1.text(cnv_x + 17, im_y1_5, text=text, fill="#FFF", anchor="mm", font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(5)))
+            text = VERSION_MAP.get(maidata.version_cn, str(maidata.version_cn)).replace(" ", "\n")
+            du1.text(cnv_x + 17, im_y1_5, text=text, fill="#FFF", anchor="mm", font=FontManager.font(FontCode.MiSans_Demibold, size=ms.x(5)))
     else:
-        du1.text(cnv_x + 17, im_y1_5, text="X\n", fill="#F00", anchor="mm", font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(4)), stroke=(0.8, "#FFF"))
-        du1.text(cnv_x + 17, im_y1_5, text="\n国服无此乐曲", fill="#FFF", anchor="mm", font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(4)))
+        du1.text(cnv_x + 17, im_y1_5, text="X\n", fill="#F00", anchor="mm", font=FontManager.font(FontCode.MiSans_Demibold, size=ms.x(4)), stroke=(0.8, "#FFF"))
+        du1.text(cnv_x + 17, im_y1_5, text="\n国服无此乐曲", fill="#FFF", anchor="mm", font=FontManager.font(FontCode.MiSans_Demibold, size=ms.x(4)))
 
     if maiuser:
-        du1.text(dv_x, dy, text="Record / 游玩记录", fill="#FFF", anchor="la", font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(4)))
-        username_text = get_full_width_text(maiuser.get_username()) + "\n\n"
-        du1.text(dv_x, im_y1_5, text=username_text, fill="#FFF", anchor="lm", font=FONT.font(FontCode.MiSans_Demibold, size=ms.x(3)))
+        du1.text(dv_x, dy, text="Record / 游玩记录", fill="#FFF", anchor="la", font=FontManager.font(FontCode.MiSans_Demibold, size=ms.x(4)))
+        username_text = FullWidthConverter.convert(maiuser.get_username()) + "\n\n"
+        du1.text(dv_x, im_y1_5, text=username_text, fill="#FFF", anchor="lm", font=FontManager.font(FontCode.MiSans_Demibold, size=ms.x(3)))
         records = [
             "",
-            f"[CN({maiuser.cn_dxrating})] {maiuser.get_formated_time('CN').replace('0','O')}",
-            f"[JP({maiuser.jp_dxrating})] {maiuser.get_formated_time('JP').replace('0','O')}",
+            f"[CN({maiuser.get_dxrating_data("CN").total})] {maiuser.get_formated_time('CN').replace('0','O')}",
+            f"[JP({maiuser.get_dxrating_data("JP").total})] {maiuser.get_formated_time('JP').replace('0','O')}",
         ]
-        du1.text(dv_x, im_y1_5, text="\n".join(records), fill="#FFF", anchor="lm", font=FONT.font(FontCode.JBMono_Bold, size=ms.x(2.2)))
+        du1.text(dv_x, im_y1_5, text="\n".join(records), fill="#FFF", anchor="lm", font=FontManager.font(FontCode.JBMono_Bold, size=ms.x(2.2)))
         del du1
 
     if maidata.aliases:
         font_size = 4
-        font = FONT.font(FontCode.MiSans_Demibold, size=ms.x(font_size))
+        font = FontManager.font(FontCode.MiSans_Demibold, size=ms.x(font_size))
         alias_width_list = [(alias.alias, font.getlength(alias.alias)) for alias in maidata.aliases]
         alias_cut: list[tuple[list[str], float]] = [([], 0)]
         for alias, alias_width in alias_width_list:
@@ -213,7 +181,7 @@ def draw_info_box(
                 alias_cut[-1][0].append(alias)
                 alias_cut[-1] = (alias_cut[-1][0], alias_cut[-1][1] + alias_width + font.getlength("  "))
         aliases_height = (len(alias_cut) + 1) * font_size * 1.5
-        board2 = Image.new("RGBA", ms.xy(width, aliases_height), NO_COLOR)
+        board2 = Image.new("RGBA", ms.xy(width, aliases_height), EMP_COLOR)
         du2 = DrawUnit(board2, multiple=ms, cn_level=cn_level)
         du2.text(0, 0, text="这首歌的别名包括：", fill="#FFF", anchor="la", font=font)
         for i, (alias_list, _) in enumerate(alias_cut):
@@ -222,9 +190,9 @@ def draw_info_box(
     else:
         board2 = None
 
-    chart_imgs = []
+    chart_imgs: list[Image.Image] = []
     for diff, chart in maidata.charts.items():
-        func = IMU.chart_box if diff >= 4 else IMU.chart_box_lite
+        func = ImageUnit.chart_box if diff >= 4 else ImageUnit.chart_box_lite
         chart_img = func(chart=chart, cabinet_dx=maidata.is_cabinet_dx, server=server, ms=ms, cn_level=cn_level)
         chart_imgs.append(chart_img)
 
@@ -239,27 +207,28 @@ def draw_info_box(
         rows_data.append((chunk, current_y))
         current_y += row_height
 
-    board3 = Image.new("RGBA", (ms.x(width), current_y), NO_COLOR)
-    canvas_width = ms.x(width)
-    chart_w = chart_imgs[0].size[0]
-    right_x = canvas_width - chart_w
-    for chunk, y_offset in rows_data:
-        board3.paste(chunk[0], (0, y_offset), chunk[0])
-        chunk[0].close()
-        if len(chunk) > 1:
-            board3.paste(chunk[1], (right_x, y_offset), chunk[1])
-            chunk[1].close()
+    board3 = Image.new("RGBA", (ms.x(width), current_y), EMP_COLOR) if chart_imgs else None
+    if board3 is not None:
+        canvas_width = ms.x(width)
+        chart_w = chart_imgs[0].size[0]
+        right_x = canvas_width - chart_w
+        for chunk, y_offset in rows_data:
+            board3.paste(chunk[0], (0, y_offset), chunk[0])
+            chunk[0].close()
+            if len(chunk) > 1:
+                board3.paste(chunk[1], (right_x, y_offset), chunk[1])
+                chunk[1].close()
     chart_imgs.clear()
     del chart_imgs
 
-    board_last = IMU.copyright_bar(width=all_width, ms=ms, cn_level=cn_level)
+    board_last = ImageUnit.copyright_bar(width=all_width, ms=ms, cn_level=cn_level)
 
     margin = ms.x(fw) // 3
     boards = [board for board in (board1, board2, board3) if board is not None]
     all_height_msed = sum((sum(b.height for b in boards), board_last.height, ms.x(fw) * 2, (len(boards) - 1) * margin))
     all_width_msed = ms.x(all_width)
     result_img = Image.new("RGBA", (all_width_msed, all_height_msed), COLOR_THEME)
-    bg_img = ASSETS.background((all_width_msed, round(all_width_msed)))
+    bg_img = ImageManager.background(size=(all_width_msed, round(all_width_msed)))
     if bg_img:
         result_img.paste(bg_img, (0, 0))
     current_y = ms.x(fw)
@@ -271,22 +240,15 @@ def draw_info_box(
     return result_img.convert("RGB")
 
 
-def draw_b50(
-    b35_entries: list[tuple[MaiData, int]],
-    b15_entries: list[tuple[MaiData, int]],
-    *,
-    dxrating: int,
-    current_version: int,
-    server: SERVER_TAG,
-    user_name: str,
-    user_avatar: bytes | Image.Image | None = None,
-    update_time: str = "Unknown Update Time",
-    line_width: Literal[4, 5] = 5,
-    ms: MS = _MS_DEFAULT,
-    cn_level: Literal[0, 1, 2] = 0,
-) -> Image.Image:
+def draw_b50(b35_entries: list[tuple[MaiData, int]], b15_entries: list[tuple[MaiData, int]],
+             *,
+             dxrating: int, current_version: int, server: server,
+             user_name: str, user_avatar: Optional[Union[bytes, Image.Image]] = None,
+             update_time: str = "Unknown Update Time", line_width: Literal[4, 5] = 5,
+             ms: MS = MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+    """绘制 mai_b50 看板"""
     margin = 10
-    temp_box = IMU.mini_box(None, 0, "JP", ms=ms, cn_level=cn_level)
+    temp_box = ImageUnit.mini_box(None, 0, "JP", ms=ms, cn_level=cn_level)
     if isinstance(temp_box, tuple):
         box_w, _ = temp_box
     else:
@@ -316,7 +278,7 @@ def draw_b50(
                 shared_zip_handles[zip_path] = zipfile.ZipFile(zip_path, "r")
 
         b35_imgs = [
-            IMU.b50_box(
+            ImageUnit.b50_box(
                 maidata,
                 diff,
                 server,
@@ -333,7 +295,7 @@ def draw_b50(
         board_b35 = _image_grid_board(b35_imgs, cols=line_width, gap=ms.x(5), skip_first=line_width == 4, auto_close=True)
 
         b15_imgs = [
-            IMU.b50_box(
+            ImageUnit.b50_box(
                 maidata,
                 diff,
                 server,
@@ -352,13 +314,13 @@ def draw_b50(
         for zip_handle in shared_zip_handles.values():
             zip_handle.close()
 
-    board_last = IMU.copyright_bar(width=width, ms=ms, cn_level=cn_level)
+    board_last = ImageUnit.copyright_bar(width=width, ms=ms, cn_level=cn_level)
 
     boards = [board for board in (board_title, board_b35, board_b15) if board is not None]
     all_height_msed = ms.x(margin) * 2 + sum(b.height for b in boards) + ms.x(margin) * (len(boards) - 1) + board_last.height
     result_img = Image.new("RGBA", (ms.x(width), all_height_msed), COLOR_THEME)
 
-    if bg_img := ASSETS.background(result_img.size):
+    if bg_img := ImageManager.background(size=result_img.size):
         result_img.paste(bg_img, (0, 0))
 
     curr_y = ms.x(margin)
@@ -373,65 +335,10 @@ def draw_b50(
 
 def simple_list(text: str) -> Image.Image:
     """生成一个简单的文本列表图。"""
-    font = FONT.font(FontCode.MiSans_Demibold, size=16)
+    font = FontManager.font(FontCode.MiSans_Demibold, size=16)
     x1, y1, x2, y2 = ImageDraw.Draw(Image.new("RGB", (1, 1), color="#FFF")).multiline_textbbox((0, 0), text=text, font=font)
     width, height = int(x2 - x1 + 10), int(y2 - y1 + 10)
     img = Image.new("RGB", (width, height), color="#FFF")
     img_draw = ImageDraw.Draw(img)
     img_draw.text((2, 2), text, fill="#000", font=font)
     return img.convert("RGB")
-
-
-def simple_maidata_box(maidata_list: List[MaiData]) -> Image.Image:
-    """生成一个简单的文本列表图，展示多个曲目的信息。"""
-    return simple_list("\n".join([f"{maidata.shortid}.\t{maidata.title}" for maidata in maidata_list]))
-
-
-def get_image_bytes(img: Image.Image, format: str = "jpeg") -> bytes:
-    """将 PIL Image 对象转换为字节流。"""
-    with io.BytesIO() as output:
-        if format.lower() == "jpeg" and max(img.size) > 65500:
-            format = "png"
-        try:
-            img.save(output, format=format)
-        except OSError:
-            if format.lower() != "jpeg":
-                raise
-            output.seek(0)
-            output.truncate(0)
-            img.save(output, format="png")
-        return output.getvalue()
-
-
-def _debug_demo() -> None:
-    from random import randint
-
-    from .. import utils
-
-    aliases = ["transcend lights", "超越光", "九月的雨", "超超光光", "美瞳广告", "小女孩们的茶话会", "超越之光", "bright主题曲", "别急19", "音击的武士", "tl", "萝莉的雨", "音击妹妹", "114514", "音击的雨"]
-    maidata = MaiData(11451, "Transcend Lights", 70, "曲：小高光太郎／歌：オンゲキシューターズ", 5, "DX", 18, 2023, "debug", Path(r"E:\Projects\PythonProjects\lyra-bot\temp\debug_cover.png"), None, aliases=[utils.MaiAlias(11451, a, 0, -1) for a in aliases])
-    maidata2 = MaiData(11451, "Transcend Lights", 70, "曲：小高光太郎／歌：オンゲキシューターズ", 5, "DX", 25, 2023, "debug", Path(r"E:\Projects\PythonProjects\lyra-bot\temp\debug_cover.png"), None, aliases=[utils.MaiAlias(11451, a, 0, -1) for a in aliases])
-    for i in range(2, 7):
-        chart = MaiChart(11451, i, 1 + i * 3)
-        chart.set_ach(utils.MaiChartAch(11451, i, "JP", 97.6 + i * 0.5, combo=3, sync=2))
-        maidata.set_chart(chart)
-        maidata2.set_chart(chart)
-
-    b35_entries = [(maidata, randint(2, 6)) for _ in range(35)]
-    b15_entries = [(maidata2, randint(2, 6)) for _ in range(15)]
-
-    target = draw_info_box(maidata, server="JP", ms=MS(5), cn_level=1)
-    # target = draw_b50(
-    #     b35_entries=b35_entries,
-    #     b15_entries=b15_entries,
-    #     dxrating=15409,
-    #     current_version=26,
-    #     server='JP',
-    #     user_name='测试用户',
-    #     line_width=5,
-    #     ms=MS(5), cn_level=1)
-    target.show()
-
-
-if __name__ == "__main__":
-    _debug_demo()

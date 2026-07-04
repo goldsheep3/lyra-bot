@@ -1,14 +1,13 @@
 {
     "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
-    "python.analysis.extraPaths": [
-        "${workspaceFolder}/.venv/Lib/site-packages"
-    ],
     "python.analysis.indexing": true,
     "python.terminal.activateEnvironment": false,
+    "python.terminal.useEnvFile": true,
     "files.exclude": {
         "**/*.rpyc": true,
         "**/*.rpa": true,
         "**/*.rpymc": true,
         "**/cache/": true
-    }
+    },
+    // "python.analysis.diagnosticMode": "workspace"
 }

@@ -1,4 +1,6 @@
-# lyra-plugin-help
+"""plugin_help.py 帮助信息"""
+# 该插件不在 unpack 重构计划中。等待 locales 重构计划进行支持 i18n 的重构。
+
 from nonebot import on_regex
 
 _help = on_regex(r"^(帮助|help)\s*(maib|舞萌|mai|maimai)$", priority=10, block=True)

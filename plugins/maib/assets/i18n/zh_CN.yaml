@@ -1,0 +1,74 @@
+# link 查询与绑定
+link:
+  query_disabled: "查询功能正在开发中，敬请期待！"
+  only_qq: "此操作仅支持通过 QQ 进行"
+  tip: "请在其他平台的 LyraBot 中输入以下命令完成绑定，该信息五分钟内有效。"
+  invalid_hash: "提供的 hash 值无效或已过期"
+  not_found: "未找到匹配的绑定信息"
+  success: "绑定成功！"
+  unlink_success: "解绑成功！"
+  not_platform: "未知平台"
+  not_linked: "你似乎还没有绑定 QQ 号~请使用「绑定link」尝试绑定"
+  onebot_no_bind: "你可以直接操作的（）QQ 之间不能绑定的"
+  get_more_info: "你还没有绑定 QQ 号，绑定后可以同步游玩数据哦！"
+
+# ra_calc
+rc:
+  failed: "小梨无法解析你提供的定数或歌曲信息喔TT"
+  success: "小梨算出来咯！\n定数{level}*{achievement}% -> Rating: {ra}"
+  excluding_ap_bouns: "该 ra 不考虑 AP 的额外分数哦！"
+
+# adx_download (ad)
+ad:
+  no_maidata: "没有找到id为{short_id}的谱面的数据！可能还没被收录，请联系监护人确认喔qwq"
+  bad_id: "请提供正确的乐曲 ID 哦qwq"
+  no_chart_file: "谱面文件不存在！可能还没被收录，请联系监护人确认喔qwq"
+  prepare: "请稍候——小梨开始准备 id{target_short_id} 的谱面文件啦！"
+  error: "小梨在处理谱面文件时遇到了问题，请联系监护人确认喔qwq"
+  success:
+    qq_private: "登登~请查收谱面 {song_name}！"
+    qq_group: "小梨已经将 {song_name} 的adx谱面传到群里啦！"
+    tg: "wu~小梨已经将 {song_name} 的谱面发来啦！"
+
+# mai_info
+info:
+  invalid_id: "请提供正确的乐曲 ID 哦qwq"
+  maidata_not_found: "没有找到 id{short_id} 的乐曲数据qwq"
+  # what_song
+  found_none: "没有找到包含「{keyword}」的乐曲数据qwq"
+  found_single: "猜你想找：{shortid}. {title}"
+  found_multiple: "小梨找到了 {count} 首乐曲，请查看是否有你的期待w"
+  found_many: "小梨翻到了好多歌……呜哇，{count}首（）"
+  found_too_many_abort: "太多了啦！缩小一下搜索范围吧qwq"
+
+# mai_alias (alias)
+alias:
+  add:
+    success: "成功为 {shortid} 添加别名【{alias}】！"
+    already_exists: "这个别名似乎已经存在了捏~"
+  remove:
+    deletion_not_supported: "目前还不能自助删除别名喔~"
+
+# b50
+b50:
+  all_not_supported: "混合成绩图还在开发中，暂时无法使用哦qwq"
+  qq_parsing_failed: "小梨没找到合适的查询目标……？请联系监护人确认"
+  drawing: "小梨正在绘制 b50 图片，请稍候……"
+  other_updated_drawing: "小梨发现查询对象的水鱼数据有更新，已经为TA更新到了最新！正在尝试绘制 b50 图片，请稍候……"
+  no_jp_data: "你还没有日服数据！可以通过 lyra-sync 上传成绩后再试哦！"
+  no_cn_data: "你还没有国服数据！可以上传水鱼成绩后再试哦！"
+
+# sync
+sync:
+  sy:
+    syncing: "小梨正在尝试从水鱼查分器获取你的最新成绩数据！"
+    no_update: "检查过啦！小梨记录的成绩数据已经是最新的啦。"
+
+# Exception Tip
+error:
+  low_memory: "当前为低内存模式，暂停了这项功能的图片生成喵( ๑ŏ ﹏ ŏ๑ )"
+  invalid_user_id: "无法解析 str 格式的 user_id: {raw_uid}"
+  user_not_found: "未找到绑定的 QQ 账号，请先使用 link 功能绑定 QQ 号"
+  unexpected: "不支持的平台类型"
+  common: "小梨遇到了意外的错误，请联系监护人确认喔qwq"
+  platform_not_supported: "意外错误(Platform Not Supported)，请联系监护人确认喔qwq"
