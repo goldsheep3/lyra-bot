@@ -102,13 +102,13 @@ async def check_users_bulk(platform: str, users_data: list[dict]) -> dict[str, U
         
         # 3. 如果有新用户，统一提交一次
         if new_users:
+            # commit 前存下 user_id，避免 commit 后属性过期触发懒加载
+            new_user_ids = [u.user_id for u in new_users]
             try:
                 await session.commit()
                 # 顺便把新生成的对象也塞进 map 里返回
-                for u in new_users:
-                    # 自增id和创建时间 不需要立即读取，refresh 先忽略
-                    # await session.refresh(u) 
-                    user_map[u.user_id] = u
+                for u, uid in zip(new_users, new_user_ids):
+                    user_map[uid] = u
             except Exception as e:
                 await session.rollback()
                 raise
