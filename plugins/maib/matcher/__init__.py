@@ -10,8 +10,10 @@ from nonebot.internal.matcher import Matcher
 from nonebot.adapters import Event
 
 # -- platform adapter --
-from nonebot.adapters.onebot.v11 import Event as OneBotV11Event
+from nonebot.adapters.onebot.v11 import (Event as OneBotV11Event,
+                                         PrivateMessageEvent as OneBotV11PrivateMessageEvent)
 from nonebot.adapters.telegram import Event as TGEvent
+from nonebot.adapters.telegram.event import PrivateMessageEvent as TGPrivateMessageEvent
 
 
 # --- i18n configs ---
@@ -22,6 +24,15 @@ i18n = use_i18n(i18n_dir)
 
 from .context import get_args, get_maidata_with_ach, get_maiuser
 from .message import build_msg
+
+# --- rules ---
+
+def file_received_enabled(event: Event) -> bool:
+    if isinstance(event, OneBotV11PrivateMessageEvent):
+        return True
+    elif isinstance(event, TGPrivateMessageEvent):
+        return True
+    return False
 
 # --- matcher ---
 
@@ -42,7 +53,7 @@ b50 = on_regex(r'^(b50|kkb)\s*(.*)$', priority=1, block=True)
 # ra 计算
 ra_calc = on_regex(r"^ra\s+(\S+)?\s+(\S+)", priority=5, block=True)
 # 上传 JSON 配置数据
-file_receiver = on_message(priority=25)
+file_receiver = on_message(priority=25, rule=file_received_enabled)
 # 群文件上传 notice，用于处理 upload_group_file 超时但实际成功的场景
 group_upload_notice = on_notice(priority=1, block=False)
 # 获取同步码

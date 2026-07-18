@@ -160,8 +160,9 @@ class MaiChartAch(Model):
             user_id=_get(ach, "user_id", -1),
         )
 
-    def to_utils(self) -> utils.MaiChartAch:
-        dxscore_max = self.chart.dxscore_max if self.chart is not None else 0
+    def to_utils(self, dxscore_max: int | None = None) -> utils.MaiChartAch:
+        if dxscore_max is None:
+            dxscore_max = self.chart.dxscore_max if self.chart is not None else 0
         return utils.MaiChartAch(
             shortid=self.shortid,
             difficulty=self.difficulty,
@@ -272,7 +273,7 @@ class MaiChart(Model):
         if include_achs or achs_user_id is not None:
             for ach in self.achs:
                 if include_achs or ach.user_id == achs_user_id:
-                    maichart.set_ach(ach.to_utils())
+                    maichart.set_ach(ach.to_utils(dxscore_max=self.dxscore_max))
         return maichart
 
 
