@@ -1,89 +1,102 @@
 import re
+from typing import Optional
 
-from nonebot.params import RegexGroup
+from nonebot.params import RegexDict
 from nonebot.internal.matcher import Matcher
+from nonebot.adapters import Event
+from nonebot.adapters.onebot.v11 import Event as OneBotV11Event
+from nonebot.adapters.telegram import Event as TGEvent
 
-from .. import utils, services
-from ..utils import MaiChart, MaiChartAch
+from .. import services
+from ..utils import get_dxrating
 from ..constants import RATE_ALIAS, DIFFICULTY_MAP
 from . import i18n_data, i18n, reply, ra_calc
 
+
 # --- ra_calc ---
 
+pattern = r"^id(?P<id>\d+)(?P<color>[蓝绿黄红紫白彩])$"
+
 @ra_calc.handle()
-async def ra_calc_handled(matcher: Matcher, groups: tuple = RegexGroup(), _i18n = i18n):
+async def ra_calc_handled(event: Event, matcher: Matcher, groups: dict[str, str] = RegexDict(), _i18n = i18n):
     """处理命令: ra 13.2 100.1000"""
     i18n_data.set(_i18n)
+    
+    # 解析 achievement
+    achievement: float | None
+    raw_achievement: str = groups.get("achievement", "").rstrip("%")
+    if raw_achievement == "":
+        # 参数为空，输出多个
+        achievement = None
+    elif raw_achievement.replace('.', '', 1).isdigit():
+        # 可解析为浮点数
+        achievement = float(raw_achievement)
+        # achievement = int(achievement * 10000)  -> 后续重构为 INT 1,010,000 存储格式
+    else:
+        # 按照别名解析
+        achievement = RATE_ALIAS.key(raw_achievement.lower())
+        if achievement is None:
+            await matcher.finish(reply("rc.achievement_invalid", achievement=raw_achievement))
+            return
 
-    info, rate = groups
-    level: float = 0
+    # 解析 level
+    raw_level: str = groups.get("level", "")
+    if raw_level.lower() in ["help", "帮助"]:
+        await matcher.finish(reply("rc.help"))
+        return
+    elif raw_level.replace('.', '', 1).isdigit():
+        # 可解析为浮点数
+        level = float(raw_level)
+        if not 15 >= level >= 1:
+            # 似乎是不支持的定数范围
+            await matcher.finish(reply("rc.level_failed"))
+            return
+    elif match := re.match(pattern, raw_level):
+        # 解析 `id11951紫` 形式
+        shortid = int(match.group("id"))
+        difficulty = DIFFICULTY_MAP.key(match.group("color")) or 5  # MASTER
+        
+        mdt = await services.get_mdt.id(shortid)
+        if mdt is None:
+            await matcher.finish(reply("rc.maidata_invalid"))
+            return
+        
+        # TODO 这里未来可以考虑获取一下用户的谱面成绩和对应版本地板，来确定能不能上分
+        chart = mdt.to_utils(achs_user_id=None).get_chart(difficulty)
+        if chart is None:
+            await matcher.finish(reply("rc.maidata_invalid"))
+            return
+        level = chart.lv
 
-    # 先解析 rate
-    try:
-        achievement = float(rate)
-    except (ValueError, TypeError):
-        achievement = RATE_ALIAS.key(rate.lower()) or -100
-
-    # 1. 尝试以定数形式解析
-    try:
-        level = float(info)
-    except (ValueError, TypeError):
-        pass
-
-    # 2. 判断定数是否越界，越界则解析为纯数字 id
-    if level > 20:
-        level = 0  # 大于 20 则一定不为定数，驳回上述解析
-        try:
-            shortid = int(info)
-            mai = await services.get_mdt.id(shortid)
-        except (ValueError, TypeError):
-            mai = None
-        if mai and mai.charts:
-            level = mai.charts[-1].lv  # 取最高难度的定数
-
-    # 3. 尝试以 id11451/info11451/id114514紫 形式解析
-    if level == 0:
-        # 通过正则提取 id
-        match = re.search(r'\d+', info)
-        diff_info = re.search('[绿黄红紫白]', info)
-        if match and any([
-            'id' in info.lower(),
-            'info' in info.lower(),
-            diff_info,
-        ]):
-            level_str = match.group(0)
-            try:
-                shortid = int(level_str)
-                mai = await services.get_mdt.id(shortid)
-            except (ValueError, TypeError):
-                mai = None
-            if mai:
-                charts = mai.charts
-                s = diff_info.group(0) if diff_info else ''
-                diff = DIFFICULTY_MAP.key(s) or None
-                if diff:
-                    # 指定了难度颜色，尝试匹配
-                    for c in charts:
-                        if c.difficulty == diff:
-                            level = c.lv
-                            break
-                level = level if level else charts[-1].lv
-
-    # 4. 尝试解析 歌名/别名
-    if level == 0:
-        pass  # todo: 未实现 歌名/别名解析
-
-    # 解析结束
-    if level == 0:
-        await matcher.finish(reply("rc.failed"))
+    else:
+        # 解析失败
+        await matcher.finish(reply("rc.level_invalid"))
         return
 
-    # 调用 MaiChart 计算 DX Rating
-    chart = MaiChart(shortid=0, difficulty=0, lv=level)
-    chart.set_ach(MaiChartAch(shortid=0, difficulty=0, server="JP", achievement=achievement))
-    ra = chart.get_dxrating()
+    level = round(level, 1)
+    
+    if achievement is None:
+        lines = [reply("rc.success.tip")]
+        for rate, _achievement in (
+            ("SSS+", 100.5),
+            ("SSS", 100.0),
+            ("SS+", 99.5),
+            ("SS", 99.0),
+            ("S+", 98.0),
+            ("S", 97.0),
+        ):
+            ra = get_dxrating(_achievement, level, 0)
+            lines.append(reply("rc.blur", level=level, rate=rate, ra=ra))
+        lines.append(reply("rc.excluding_ap_bouns"))
+        await matcher.finish("\n".join(lines))
+        return
+    else:
+        ra = get_dxrating(achievement, level, 0)
+        lines = [
+            reply("rc.success.tip"),
+            reply("rc.common", level=level, achievement=f"{achievement:.4f}", ra=ra),
+            reply("rc.excluding_ap_bouns") if achievement >= 100.5 else ""
+        ]
+        await matcher.finish("\n".join(lines).strip('\n'))
+        return
 
-    msg = reply("rc.success", level=level, achievement=f"{achievement:.4f}", ra=ra)
-    if achievement >= 100.5:
-        msg += '\n' + reply("rc.excluding_ap_bouns")
-    await matcher.finish(msg)

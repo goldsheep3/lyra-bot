@@ -14,8 +14,19 @@ link:
 
 # ra_calc
 rc:
-  failed: "小梨无法解析你提供的定数或歌曲信息喔TT"
-  success: "小梨算出来咯！\n定数{level}*{achievement}% -> Rating: {ra}"
+  help: |-
+    ra_calc: ra <定数> [完成率]
+        可以计算 DXRating
+        定数: 可以直接输入，也可以使用 id11951紫 形式获取谱面定数
+        完成率: 可以直接输入，也可以使用“鸟家”“sss+”等表达方式，或留空以计算s~sss+的分档ra
+  achievement_invalid: "请提供正确的成绩分数哦qwq"
+  maidata_invalid: "小梨无法解析你提供的歌曲信息喔TT"
+  level_invalid: "请提供正确的定数哦qwq"
+  level_failed: "小梨无法解析你提供的定数信息喔TT"
+  success:
+    tip: "小梨算出来咯！"
+    common: "定数{level}*{achievement}% -> Rating: {ra}"
+    blur: "定数{level} {rate} -> Rating: {ra}"
   excluding_ap_bouns: "该 ra 不考虑 AP 的额外分数哦！"
 
 # adx_download (ad)

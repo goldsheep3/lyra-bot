@@ -51,7 +51,7 @@ sytb = on_regex(r'^sytb$', priority=5, block=True)
 # b50 查询
 b50 = on_regex(r'^(b50|kkb)\s*(.*)$', priority=1, block=True)
 # ra 计算
-ra_calc = on_regex(r"^ra\s+(\S+)?\s+(\S+)", priority=5, block=True)
+ra_calc = on_regex(r"^ra\s+(?P<level>\S+)(?:\s+(?P<achievement>\S+))?$", priority=5, block=True)
 # 上传 JSON 配置数据
 file_receiver = on_message(priority=25, rule=file_received_enabled)
 # 群文件上传 notice，用于处理 upload_group_file 超时但实际成功的场景

@@ -259,7 +259,7 @@ class MaiChart(Model):
             notes=notes,
         )
 
-    def to_utils(self, achs_user_id: Optional[int] = None, include_achs: bool = False) -> utils.MaiChart:
+    def to_utils(self, achs_user_id: Optional[int] = None) -> utils.MaiChart:
         maichart = utils.MaiChart(
             shortid=self.shortid,
             difficulty=self.difficulty,
@@ -270,9 +270,9 @@ class MaiChart(Model):
             inote=self.inote,
             notes=self.notes,
         )
-        if include_achs or achs_user_id is not None:
+        if achs_user_id is not None:
             for ach in self.achs:
-                if include_achs or ach.user_id == achs_user_id:
+                if ach.user_id == achs_user_id:
                     maichart.set_ach(ach.to_utils(dxscore_max=self.dxscore_max))
         return maichart
 
@@ -346,7 +346,7 @@ class MaiData(Model):
         self.charts.sort(key=lambda c: c.difficulty)
         return self.charts
 
-    def to_utils(self, achs_user_id: Optional[int] = None, include_achs: bool = False) -> utils.MaiData:
+    def to_utils(self, achs_user_id: Optional[int] = None) -> utils.MaiData:
         zip_path = Path(self.zip_path) if self.zip_path else None
         if zip_path is not None and not zip_path.is_absolute():
             zip_path = get_plugin_data_dir() / zip_path
@@ -372,7 +372,7 @@ class MaiData(Model):
             aliases=[alias.to_utils() for alias in self.aliases],
         )
         for chart in self.charts:
-            maidata.set_chart(chart.to_utils(achs_user_id=achs_user_id, include_achs=include_achs))
+            maidata.set_chart(chart.to_utils(achs_user_id=achs_user_id))
         return maidata
 
 
