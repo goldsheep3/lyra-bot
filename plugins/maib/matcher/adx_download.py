@@ -3,7 +3,7 @@ import re
 import time
 from typing import Any, Optional
 
-from nonebot import logger
+from nonebot import logger, on_regex, on_notice
 from nonebot.params import RegexGroup
 from nonebot.internal.matcher import Matcher
 from nonebot.adapters import Bot, Event
@@ -12,19 +12,25 @@ from nonebot.adapters import Bot, Event
 from nonebot.adapters.onebot.v11 import (Bot as OneBotV11Bot,
                                          Event as OneBotV11Event,
                                          GroupMessageEvent as OneBotV11GroupMessageEvent,
-                                         PrivateMessageEvent as OneBotV11PrivateMessageEvent,)
+                                         PrivateMessageEvent as OneBotV11PrivateMessageEvent,
+                                         GroupUploadNoticeEvent as OneBotV11GroupUploadNoticeEvent)
 
 from nonebot.adapters.telegram import (Bot as TGBot,
                                        Event as TGEvent,)
 
 from nonebot_plugin_localstore import get_plugin_data_dir
 
+from . import rule_is_group, rule_is_self
 from .. import services
 from ..utils import file_api
-from . import i18n_data, i18n, reply, adx_download_matcher, group_upload_notice
+from . import i18n_data, i18n, reply
 
 
-# --- adx_download ---
+# 下载谱面
+adx_download = on_regex(r"^下载[铺谱]面\s*(\d*)\s*(.*)$", priority=10, block=True)
+# 群文件上传 notice，用于处理 upload_group_file 超时但实际成功的场景
+group_upload_notice = on_notice(priority=1, block=False, rule=(rule_is_group and rule_is_self))
+
 
 GROUP_UPLOAD_NOTICE_TIMEOUT: float = 90.0
 _GROUP_UPLOAD_WAITERS: dict[tuple[int, str, int], list[asyncio.Future[dict[str, Any]]]] = {}
@@ -73,28 +79,20 @@ async def _wait_group_upload_notice(
 
 
 @group_upload_notice.handle()
-async def group_upload_notice_handled(event: Event):
-    if not isinstance(event, OneBotV11Event):
-        return
-    if getattr(event, "notice_type", None) != "group_upload":
-        return
-    if str(getattr(event, "user_id", "")) != str(getattr(event, "self_id", "")):
-        return
+async def group_upload_notice_handled(event: OneBotV11GroupUploadNoticeEvent):
+    file_name = event.file.name
+    file_size = event.file.size
+    group_id = event.group_id
 
-    file_info = getattr(event, "file", None)
-    if not isinstance(file_info, dict):
-        return
-    file_name = str(file_info.get("name") or file_info.get("file_name") or "")
-    file_size = file_info.get("size")
-    group_id = getattr(event, "group_id", None)
-    if group_id is None or not file_name or file_size is None:
+    if not file_name or file_size is None:
         return
 
     key = _group_upload_waiter_key(group_id, file_name, int(file_size))
     waiters = _GROUP_UPLOAD_WAITERS.pop(key, [])
+    
     for future in waiters:
         if not future.done():
-            future.set_result(file_info)
+            future.set_result(event.file.dict())
 
 
 async def _get_adx_folder(bot: OneBotV11Bot, group_id: int) -> Optional[str]:
@@ -150,7 +148,7 @@ async def _cleanup_expired_group_files(bot: OneBotV11Bot, group_id: int, folder_
             # 由于已排序，遇到未过期的文件即可停止
             break
 
-@adx_download_matcher.handle()
+@adx_download.handle()
 async def adx_download_handled(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup(), _i18n = i18n): 
     """处理命令: 下载谱面11568"""
     i18n_data.set(_i18n)

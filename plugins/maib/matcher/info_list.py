@@ -1,6 +1,6 @@
 from typing import Optional, Any
 
-from nonebot import logger
+from nonebot import logger, on_regex
 from nonebot.params import RegexGroup
 from nonebot.internal.matcher import Matcher
 from nonebot.adapters import Event
@@ -13,11 +13,16 @@ from nonebot.adapters.telegram import (Event as TGEvent,)
 from .. import config, utils, services, image_gen, network
 from ..utils.report import build_diff_report
 from ..constants import server, VERSION_MAP
-from . import build_msg, i18n_data, i18n, reply, get_args, b50, sync
+from . import i18n_data, i18n, reply,  sync
+from .context import get_args
+from .message import build_msg
 
 
 
-# --- b50 ---
+# scorelist = on_regex(r'^(.*?)\s*(完成表|进度|列表)$', priority=5, block=True)
+
+b50 = on_regex(r'^(b50|kkb)\s*(.*)$', priority=1, block=True)
+
 
 @b50.handle()
 async def b50_handled(event: Event, matcher: Matcher, groups: tuple = RegexGroup(), _i18n = i18n):

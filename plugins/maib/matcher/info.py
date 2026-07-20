@@ -1,15 +1,20 @@
 from typing import Optional
 
+from nonebot import on_regex
 from nonebot.params import RegexGroup
 from nonebot.internal.matcher import Matcher
 from nonebot.adapters import Event
 
 from .. import services, image_gen
 from ..utils import NoLinkQQError
-from . import build_msg, i18n_data, i18n, reply, get_maiuser, get_args, mai_info, mai_what_song
+from . import i18n_data, i18n, reply
+from .context import get_args, get_maiuser
+from .message import build_msg
 
+mai_info = on_regex(r"^(id|info)(\d+)\s*(.*)$", priority=10, block=True)
 
-# --- mai_info ---
+mai_what_song = on_regex(r"^(.+?)是什么歌([?？]?)$", priority=10, block=True)
+
 
 @mai_info.handle()
 async def mai_info_handled(event: Event, matcher: Matcher, groups: tuple = RegexGroup(), _i18n = i18n):

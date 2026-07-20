@@ -1,6 +1,7 @@
 import re
 from typing import Optional
 
+from nonebot import on_regex
 from nonebot.params import RegexDict
 from nonebot.internal.matcher import Matcher
 from nonebot.adapters import Event
@@ -10,21 +11,21 @@ from nonebot.adapters.telegram import Event as TGEvent
 from .. import services
 from ..utils import get_dxrating
 from ..constants import RATE_ALIAS, DIFFICULTY_MAP
-from . import i18n_data, i18n, reply, ra_calc
+from . import i18n_data, i18n, reply
 
 
-# --- ra_calc ---
+ra_calc = on_regex(r"^ra\s+(?P<level>\S+)(?:\s+(?P<achievement>\S+))?\s*$", priority=5, block=True)
 
 pattern = r"^id(?P<id>\d+)(?P<color>[蓝绿黄红紫白彩])$"
 
 @ra_calc.handle()
-async def ra_calc_handled(event: Event, matcher: Matcher, groups: dict[str, str] = RegexDict(), _i18n = i18n):
+async def ra_calc_handled(event: Event, matcher: Matcher, groups: dict[str, Optional[str]] = RegexDict(), _i18n = i18n):
     """处理命令: ra 13.2 100.1000"""
     i18n_data.set(_i18n)
     
     # 解析 achievement
     achievement: float | None
-    raw_achievement: str = groups.get("achievement", "").rstrip("%")
+    raw_achievement: str = (groups.get("achievement") or "").rstrip("%")
     if raw_achievement == "":
         # 参数为空，输出多个
         achievement = None
@@ -40,7 +41,7 @@ async def ra_calc_handled(event: Event, matcher: Matcher, groups: dict[str, str]
             return
 
     # 解析 level
-    raw_level: str = groups.get("level", "")
+    raw_level: str = groups.get("level") or ""
     if raw_level.lower() in ["help", "帮助"]:
         await matcher.finish(reply("rc.help"))
         return
@@ -86,7 +87,7 @@ async def ra_calc_handled(event: Event, matcher: Matcher, groups: dict[str, str]
             ("S", 97.0),
         ):
             ra = get_dxrating(_achievement, level, 0)
-            lines.append(reply("rc.blur", level=level, rate=rate, ra=ra))
+            lines.append(reply("rc.success.blur", level=level, rate=rate, ra=ra))
         lines.append(reply("rc.excluding_ap_bouns"))
         await matcher.finish("\n".join(lines))
         return
@@ -94,7 +95,7 @@ async def ra_calc_handled(event: Event, matcher: Matcher, groups: dict[str, str]
         ra = get_dxrating(achievement, level, 0)
         lines = [
             reply("rc.success.tip"),
-            reply("rc.common", level=level, achievement=f"{achievement:.4f}", ra=ra),
+            reply("rc.success.common", level=level, achievement=f"{achievement:.4f}", ra=ra),
             reply("rc.excluding_ap_bouns") if achievement >= 100.5 else ""
         ]
         await matcher.finish("\n".join(lines).strip('\n'))

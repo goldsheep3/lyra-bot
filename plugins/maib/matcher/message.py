@@ -1,5 +1,6 @@
 from typing import Any, Literal
 
+from nonebot import on_regex
 from nonebot.adapters import Event
 from nonebot.internal.matcher import Matcher
 

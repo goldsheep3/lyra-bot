@@ -11,9 +11,11 @@ from nonebot.adapters import Event
 
 # -- platform adapter --
 from nonebot.adapters.onebot.v11 import (Event as OneBotV11Event,
-                                         PrivateMessageEvent as OneBotV11PrivateMessageEvent)
+                                         PrivateMessageEvent as OneBotV11PrivateMessageEvent,
+                                         GroupMessageEvent as OneBotV11GroupMessageEvent)
 from nonebot.adapters.telegram import Event as TGEvent
-from nonebot.adapters.telegram.event import PrivateMessageEvent as TGPrivateMessageEvent
+from nonebot.adapters.telegram.event import (PrivateMessageEvent as TGPrivateMessageEvent,
+                                             GroupMessageEvent as TGGroupMessageEvent)
 
 
 # --- i18n configs ---
@@ -22,50 +24,30 @@ from plugins.nonebot_plugin_i18n import use_i18n, reply, current_i18n_data as i1
 i18n_dir = ASSETS_PATH / "i18n"
 i18n = use_i18n(i18n_dir)
 
-from .context import get_args, get_maidata_with_ach, get_maiuser
-from .message import build_msg
 
 # --- rules ---
 
-def file_received_enabled(event: Event) -> bool:
-    if isinstance(event, OneBotV11PrivateMessageEvent):
-        return True
-    elif isinstance(event, TGPrivateMessageEvent):
-        return True
-    return False
+def rule_is_group(event: Event) -> bool:
+    return isinstance(event, (
+        OneBotV11GroupMessageEvent,
+        TGGroupMessageEvent
+    ))
 
-# --- matcher ---
+def rule_is_private(event: Event) -> bool:
+    return isinstance(event, (
+        OneBotV11PrivateMessageEvent,
+        TGPrivateMessageEvent
+    ))
 
-# 下载谱面
-adx_download_matcher = on_regex(r"^下载[铺谱]面\s*(\d*)\s*(.*)$", priority=10, block=True)
-# 查询乐曲信息 (id / info)
-mai_info = on_regex(r"^(id|info)(\d+)\s*(.*)$", priority=10, block=True)
-# 查询乐曲信息 (是什么歌)
-mai_what_song = on_regex(r"^(.+?)是什么歌([?？]?)$", priority=10, block=True)
-# 设置乐曲别名
-mai_alias = on_regex(r'^(添加|删除)别名\s+(?:id)?(\d+)\s+([^\s]+)$', priority=5, block=True)
-# 列表查询（完成表/进度/列表）
-# scorelist = on_regex(r'^(.*?)\s*(完成表|进度|列表)$', priority=5, block=True)
-# 同步水鱼数据
-sytb = on_regex(r'^sytb$', priority=5, block=True)
-# b50 查询
-b50 = on_regex(r'^(b50|kkb)\s*(.*)$', priority=1, block=True)
-# ra 计算
-ra_calc = on_regex(r"^ra\s+(?P<level>\S+)(?:\s+(?P<achievement>\S+))?$", priority=5, block=True)
-# 上传 JSON 配置数据
-file_receiver = on_message(priority=25, rule=file_received_enabled)
-# 群文件上传 notice，用于处理 upload_group_file 超时但实际成功的场景
-group_upload_notice = on_notice(priority=1, block=False)
-# 获取同步码
-get_sync_code = on_regex(r"^获取同步码$", priority=5, block=True)
-# link 查询与绑定
+def rule_is_self(event: OneBotV11Event) -> bool:
+    return event.get_user_id() == str(event.self_id)
+
+
+# =================================
+
+
 link = on_regex(r"^(查询|获取|绑定|解除|解绑)?link(?:\s+(\S+))?$", priority=5, block=True)
 
-# =================================
-# 业务逻辑
-# =================================
-
-# --- link ---
 
 @link.handle()
 async def link_handled(event: Event, matcher: Matcher, groups: tuple = RegexGroup(), _i18n = i18n):

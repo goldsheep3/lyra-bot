@@ -1,5 +1,6 @@
 from typing import Optional
 
+from nonebot import on_regex
 from nonebot.params import RegexGroup
 from nonebot.internal.matcher import Matcher
 from nonebot.adapters import Event
@@ -10,10 +11,13 @@ from nonebot.adapters.onebot.v11 import (GroupMessageEvent as OneBotV11GroupMess
 from nonebot.adapters.telegram import (Event as TGEvent,)
 
 from .. import services
-from . import build_msg, i18n_data, i18n, reply, get_maiuser, mai_alias
+from . import i18n_data, i18n, reply
+from .context import get_maiuser
 
 
-# --- mai_alias ---
+# 设置乐曲别名
+mai_alias = on_regex(r'^(添加|删除)别名\s+(?:id)?(\d+)\s+([^\s]+)$', priority=5, block=True)
+
 
 @mai_alias.handle()
 async def mai_alias_handled(event: Event, matcher: Matcher, groups: tuple = RegexGroup(), _i18n = i18n):

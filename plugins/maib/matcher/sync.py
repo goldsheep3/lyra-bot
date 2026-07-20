@@ -5,7 +5,7 @@ from typing import Optional, Any, cast
 import aiofiles
 import orjson
 
-from nonebot import logger
+from nonebot import logger, on_message, on_regex
 from nonebot.internal.matcher import Matcher
 from nonebot.adapters import Bot, Event
 
@@ -20,7 +20,15 @@ from .. import config, utils, services, image_gen, network, sync
 from ..utils.report import MaiChartAchDiffReport, build_diff_report
 from ..utils import MaiChartAch
 from ..constants import DIFFICULTY_MAP, COMBO_MAP, SYNC_MAP
-from . import build_msg, i18n_data, i18n, reply, get_maiuser, sytb, file_receiver, get_sync_code
+from . import i18n_data, i18n, reply, rule_is_private
+from .context import get_maiuser
+from .message import build_msg
+
+sytb = on_regex(r'^sytb$', priority=5, block=True)
+
+file_receiver = on_message(priority=25, rule=rule_is_private)
+
+get_sync_code = on_regex(r"^获取同步码$", priority=5, block=True)
 
 
 # --- Json Parser ---

@@ -1,7 +1,7 @@
 """services/fetch.py 定数、版本等 fetch 相关 CRUD 操作"""
-from typing import Optional, Literal
+from typing import Optional, Literal, cast
 
-from sqlalchemy import select, update, bindparam
+from sqlalchemy import Table, select, update, bindparam
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -49,21 +49,39 @@ async def set_mct_level(mct: MaiChart | tuple[int, int], server: server | Litera
 async def set_mct_level_batch(data: list[dict], server: server | Literal['synh'],
                               *, session: Optional[AsyncSession] = None):
     """批量设置谱面定数"""
+    if not data:
+        return
+
     async def _action(session: AsyncSession):
-        field_map = {'JP': MaiChart.lv, 'CN': MaiChart.lv_cn, 'synh': MaiChart.lv_synh}
+        table = cast(Table, MaiChart.__table__)
+        field_map = {
+            'JP': table.c.lv,
+            'CN': table.c.lv_cn,
+            'synh': table.c.lv_synh,
+        }
         if server not in field_map:
             raise ValueError(f"Unsupported server: {server}")
-        
+
         stmt = (
-            update(MaiChart)
-            .where(MaiChart.shortid == bindparam("b_shortid"))
-            .where(MaiChart.difficulty == bindparam("b_diff"))
+            update(table)
+            .where(table.c.shortid == bindparam("b_shortid"))
+            .where(table.c.difficulty == bindparam("b_diff"))
             .values({field_map[server]: bindparam("b_level")})
             .execution_options(synchronize_session=False)
         )
-        await session.execute(stmt, [
-            {"b_shortid": d["shortid"], "b_diff": d["difficulty"], "b_level": d["level"]} for d in data
-        ])
+
+        await session.execute(
+            stmt,
+            [
+                {
+                    "b_shortid": int(d["shortid"]),
+                    "b_diff": int(d["difficulty"]),
+                    "b_level": float(d["level"]),
+                }
+                for d in data
+            ]
+        )
+
     await execute_func.action(_action, session=session)
 
 
