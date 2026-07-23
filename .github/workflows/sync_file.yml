@@ -1,0 +1,54 @@
+name: Sync lyra-maisync.user.js to Gitee
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  sync-file:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. 拉取当前 GitHub 仓库
+      - name: Checkout GitHub Repository
+        uses: actions/checkout@v4
+
+      # 2. 配置 SSH 密钥，连接 Gitee
+      - name: Set up SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.ID_ED25519_GITEE_SYNC }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan gitee.com >> ~/.ssh/known_hosts
+
+      # 3. 克隆 Gitee 目标仓库、复制并替换内容后提交
+      - name: Copy file, replace URL, and push to Gitee
+        run: |
+          # 配置 Git 提交身份
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "actions@github.com"
+
+          # 1) 克隆 Gitee 目标仓库到临时文件夹
+          git clone git@gitee.com:goldsheep3/lyra-sync.git gitee_target
+
+          # 2) 复制源文件到 Gitee 仓库根目录
+          cp "plugins/maib/sync/lyra-maisync.user.js" "gitee_target/lyra-maisync.user.js"
+
+          # 3) 使用 sed 替换目标文件中的 URL 字符串
+          SRC_URL="https://github.com/goldsheep3/lyra-bot/raw/refs/heads/main/plugins/maib/sync/lyra-maisync.user.js"
+          DST_URL="https://raw.giteeusercontent.com/goldsheep3/lyra-sync/raw/main/lyra-maisync.user.js"
+          
+          # 注意：URL 带有斜杠，因此 sed 中改用 | 作为分隔符
+          sed -i "s|${SRC_URL}|${DST_URL}|g" "gitee_target/lyra-maisync.user.js"
+
+          # 4) 提交更改并推送到 Gitee
+          cd gitee_target
+          git add lyra-maisync.user.js
+
+          if git diff --staged --quiet; then
+            echo "文件内容没有发生变化，无需推送。"
+          else
+            git commit -m "sync: updated lyra-maisync.user.js and updated release URL"
+            git push origin main
+          fi

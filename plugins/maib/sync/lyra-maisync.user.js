@@ -5,8 +5,8 @@
 // @author       GoldSheep3 with Gemini
 // @match        https://*/maimai/music
 // @match        https://*/maimai/music?*
-// @updateURL    https://github.com/goldsheep3/lyra-parse/raw/refs/heads/main/monkey/lyra-mai.user.js
-// @downloadURL  https://github.com/goldsheep3/lyra-parse/raw/refs/heads/main/monkey/lyra-mai.user.js
+// @updateURL    https://github.com/goldsheep3/lyra-bot/raw/refs/heads/main/plugins/maib/sync/lyra-maisync.user.js
+// @downloadURL  https://github.com/goldsheep3/lyra-bot/raw/refs/heads/main/plugins/maib/sync/lyra-maisync.user.js
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_deleteValue

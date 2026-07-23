@@ -1,21 +1,13 @@
+# Python 虚拟环境与缓存文件
 .venv/
-
 *.pyc
-plugins/__pycache__/
+**/__pycache__/
 
-# Python 管理器锁文件
-*.lock
-
-
-# PyCharm
-.idea/
-
-# 隐藏隐私token
+# 环境变量文件
 .env
-.env.*
 
-# 测试临时文件
+# 测时文件
 temp/
 
-# static
+# 静态资源
 plugins/maib/assets/pic/
