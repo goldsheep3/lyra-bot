@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Lyra Mai Sync (Beta)
 // @description  用于捕获「电棍」版本的舞萌数据 - 重构版 [RC]
-// @version      0.3.0-rc2
+// @version      0.3.0-rc3
 // @author       GoldSheep3 with Gemini
 // @match        https://*/maimai/music
 // @match        https://*/maimai/music?*
@@ -16,31 +16,35 @@
 
 // =============== 🔧 配置区域 (可修改) ===============
 const CONFIG = {
-    // 🔹 调试模式: true=显示日志, false=静默运行
+    // 调试模式: true=显示日志, false=静默运行
     DEBUG: true,
     
-    // 🔹 脚本版本标识（仅用于日志）
-    VERSION: '0.3.0-rc2',
+    /**
+     * 脚本版本号
+     * 
+     * 接受 `0-9a-z.-` 的版本号格式
+     */
+    VERSION: '0.3.0-rc3',
     
-    // 🔹 存储键名
+    // 存储键名
     STORE_KEY: 'lyra_mai_multistore',
     
-    // 🔹 目标 ID 范围
+    // 目标 ID 范围
     ID_MIN: 1,
     ID_MAX: 99,
     
-    // 🔹 超时设置 (毫秒)
+    // 超时设置 (毫秒)
     TIMEOUT_SCROLL: 4000,      // 滚动加载等待
     TIMEOUT_PAGE: 6000,        // 页面切换等待
     TIMEOUT_VERIFY: 3000,      // 页面验证等待
     TIMEOUT_STORAGE: 2000,     // 存储验证等待
     
-    // 🔹 滚动参数
+    // 滚动参数
     SCROLL_STEP: 1500,         // 每次滚动像素
     SCROLL_INTERVAL: 200,      // 滚动间隔毫秒
     SCROLL_STABLE_COUNT: 2,    // 稳定判定次数
     
-    // 🔹 UI 样式配置
+    // UI 样式配置
     STYLES: {
         BTN: "padding:7px 14px;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;font-size:13px;transition:all 0.15s;",
         BTN_SM: "padding:6px 10px;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:500;font-size:12px;",
@@ -50,7 +54,7 @@ const CONFIG = {
         BADGE: "background:linear-gradient(135deg,#e84393,#fd79a8);color:#fff;padding:5px 10px;border-radius:8px;font-weight:800;font-size:13px;",
     },
     
-    // 🔹 按钮颜色配置
+    // 按钮颜色配置
     COLORS: {
         CATCH: '#00b8a9',      // 捕获按钮
         EXPORT: '#3775de',     // 导出按钮
@@ -64,10 +68,10 @@ const CONFIG = {
         CONFIRM: '#27ae60',    // 确认按钮
     },
     
-    // 🔹 导出文件名模板
+    // 导出文件名模板
     EXPORT_NAMES: {
-        DX: (id) => `lyra-dx-id${id}.json`,
-        GZIP: (id) => `lyra-gz-id${id}.json.gz.b64`,
+        DXRATING: (id) => `lyra-dxrating-import-id${id}.json`,
+        GZIP_BASE64: (id) => `lyra-maisync-data-id${id}.json.gz.b64`,
     },
 };
 
@@ -81,7 +85,8 @@ const CONFIG = {
             TIMEOUT_VERIFY, TIMEOUT_STORAGE, SCROLL_STEP, SCROLL_INTERVAL, SCROLL_STABLE_COUNT, 
             STYLES, COLORS, EXPORT_NAMES } = CONFIG;
 
-    const MAI_SYNC_DESC_HEADER = 'lyra_maisync:json.gz.base64:v0.3.0;';
+    // 导出文件头部标识，用于区分 lyra-maisync 导出的 gzip base64 文件，内含脚本版本号
+    const MAI_SYNC_DESC_HEADER = `lyra_maisync:json.gz.base64:v${VERSION};`;
     
     const LOG = (...args) => { if (DEBUG) console.log('[LyraMai]', ...args); };
     const WARN = (...args) => console.warn('[LyraMai⚠️]', ...args);
@@ -90,9 +95,15 @@ const CONFIG = {
     const multiDataStore = {};
     let currentTargetId = 1;
     let isCapturing = false;
+    let currentCaptureMode = '';
 
     // =============== 工具函数 ===============
 
+    /**
+     * 解析时间字符串为 Unix 时间戳（秒）
+     * @param {string} timeStr - 时间字符串
+     * @return {number} Unix 时间戳（秒）
+     */
     const parseTimeToTimestamp = (timeStr) => {
         if (!timeStr) return 0;
         try {
@@ -115,6 +126,11 @@ const CONFIG = {
         }
     };
 
+    /**
+     * 解析图片名称为特定标识
+     * @param {string} src - 图片源地址
+     * @return {string} 解析后的标识
+     */
     const getImgName = (src) => {
         if (!src) return "";
         let name = src.split('/').pop().replace(/\.[^/.]+$/, "");
@@ -122,8 +138,19 @@ const CONFIG = {
         return name === 'standard' ? 'std' : name;
     };
 
-    const generateSheetId = (title, type, diff) => `${title}__dxrt__${type}__dxrt__${diff}`;
+    /**
+     * 生成唯一 sheetId
+     * @param {string} title - 歌曲标题
+     * @param {string} cabinet - 谱面类型 (`std` / `dx`)
+     * @param {string} diff - 难度
+     * @return {string} `<title>__dxrt__<cabinet>__dxrt__<diff>` */
+    const generateSheetId = (title, cabinet, diff) => `${title}__dxrt__${cabinet}__dxrt__${diff}`;
 
+    /**
+     * 解析达成率字符串为数字
+     * @param {string} rawStr - 原始达成率字符串
+     * @return {number} - 解析后的达成率数字
+     */
     const parseAchievement = (rawStr) => {
         if (!rawStr) return 0;
         const str = rawStr.trim();
@@ -134,6 +161,11 @@ const CONFIG = {
         return parseFloat(digits) || 0;
     };
 
+    /**
+     * 等待滚动加载完成
+     * @param {number} timeoutMs - 超时时间（毫秒）
+     * @returns {Promise<boolean>} - 加载是否成功
+     */
     const waitForScrollLoad = async (timeoutMs = TIMEOUT_SCROLL) => {
         const start = Date.now();
         let lastH = 0, stable = 0;
@@ -146,12 +178,19 @@ const CONFIG = {
         return true;
     };
 
-    const waitForPageLoad = async (timeoutMs = TIMEOUT_PAGE) => {
+    /**
+     * 等待页面加载完成
+     * @param {string} mode - 模式 ('best' 或 'history')
+     * @param {number} timeoutMs - 超时时间（毫秒）
+     * @returns {Promise<boolean>} - 加载是否成功
+     */
+    const waitForPageLoad = async (mode, timeoutMs = TIMEOUT_PAGE) => {
         LOG('🔄 等待新页面加载, timeout:', timeoutMs);
         const start = Date.now();
         while (Date.now() - start < timeoutMs) {
             await new Promise(r => setTimeout(r, 300));
-            const boxes = document.querySelectorAll('.mai-music-box');
+            const selector = mode === 'best' ? '.poster-grid .tile' : '.mai-music-box';
+            const boxes = document.querySelectorAll(selector);
             if (boxes.length > 0) {
                 LOG('✅ 新页面元素已加载, 数量:', boxes.length);
                 return true;
@@ -161,6 +200,10 @@ const CONFIG = {
         return false;
     };
 
+    /**
+     * 查找下一页按钮
+     * @returns {HTMLElement|null} 下一页按钮元素或 null
+     */
     const getNextPageButton = () => {
         LOG('🔍 查找下一页按钮...');
         const activePage = document.querySelector('.n-pagination-item--active');
@@ -193,47 +236,92 @@ const CONFIG = {
         return null;
     };
 
-    const verifyPageChanged = async (prevFirstRecord, timeoutMs = TIMEOUT_VERIFY) => {
+    /**
+     * 获取历史页面指纹
+     * @return {string} 指纹字符串
+     */
+    const getHistoryFingerprint = () => {
+        const firstBox = document.querySelector('.mai-music-box');
+        if (!firstBox) return '';
+        const title = firstBox.querySelector('.mai-music-title')?.innerText?.trim() || '';
+        const time = firstBox.querySelector('.sub_title span:last-child')?.innerText?.trim() || '';
+        return `history:${title}_${time}`;
+    };
+
+    /**
+     * 验证历史页面是否已切换
+     * @param {string} prevFirstRecord - 上一个第一条记录的指纹
+     * @param {number} timeoutMs - 超时时间（毫秒）
+     * @returns {Promise<boolean>} - 是否已切换
+     */
+    const verifyHistoryPageChanged = async (prevFirstRecord, timeoutMs = TIMEOUT_VERIFY) => {
         LOG('🔍 验证页面是否切换...');
         const start = Date.now();
         while (Date.now() - start < timeoutMs) {
             await new Promise(r => setTimeout(r, 200));
-            const firstBox = document.querySelector('.mai-music-box');
-            if (firstBox) {
-                const titleEl = firstBox.querySelector('.mai-music-title');
-                const title = titleEl?.innerText?.trim();
-                const timeEl = firstBox.querySelector('.sub_title span:last-child');
-                const time = timeEl?.innerText?.trim();
-                const currentKey = `${title}_${time}`;
-                if (currentKey && currentKey !== prevFirstRecord) {
-                    LOG('✅ 页面已切换, 新记录:', currentKey);
-                    return true;
-                }
-                LOG('⏳ 页面内容未变化, 等待中...');
+            const currentKey = getHistoryFingerprint();
+            if (currentKey && currentKey !== prevFirstRecord) {
+                LOG('✅ 页面已切换, 新记录:', currentKey);
+                return true;
             }
+            LOG('⏳ 页面内容未变化, 等待中...');
         }
         LOG('⚠️ 页面切换验证超时');
         return false;
     };
 
-    // dxrating 导出前去重 - 相同 sheetId 取最高 achievementRate
-    const dedupeForDxRating = (records) => {
+    /**
+     * 检测捕获模式
+     * @return {string} 模式 ('best' 或 'history')
+     */
+    const detectCaptureMode = () => {
+        if (document.querySelector('.mai-music-box')) return 'history';
+        if (document.querySelector('.poster-grid .tile')) return 'best';
+        return '';
+    };
+
+    /**
+     * dxrating 导出前去重
+     * 
+     * 相同 sheetId 取最高 achievement
+     * @param {Array} records - 原始记录数组
+     * @return {Array} 去重后的记录数组
+     */
+    const DXRATING_SHEET_ID_RE = /^.+__dxrt__\S+__dxrt__\S+$/;
+
+    const isValidDXRatingSheetId = (sheetId) => DXRATING_SHEET_ID_RE.test(sheetId || '');
+
+    const stripSheetIdForBackup = (records) => records.map(({ sheetId, ...rest }) => rest);
+
+    const dedupeForDXRating = (records) => {
         LOG('🔀 开始 dxrating 去重处理...');
         const bestMap = new Map();
+        let invalidCount = 0;
         records.forEach(rec => {
+            if (!isValidDXRatingSheetId(rec.sheetId)) {
+                invalidCount++;
+                WARN('⚠️ 跳过非法 sheetId:', rec.sheetId);
+                return;
+            }
             const existing = bestMap.get(rec.sheetId);
-            if (!existing || rec.achievementRate > existing.achievementRate) {
+            if (!existing || rec.achievement > existing.achievement) {
                 bestMap.set(rec.sheetId, rec);
-                LOG('📈 更新最优记录:', rec.sheetId, '@', rec.achievementRate);
+                LOG('📈 更新最优记录:', rec.sheetId, '@', rec.achievement);
             }
         });
         const result = Array.from(bestMap.values());
         LOG(`✅ 去重完成: ${records.length} → ${result.length} 条`);
+        if (invalidCount > 0) LOG('⚠️ 已忽略非法 sheetId 数量:', invalidCount);
         return result;
     };
 
-    // =============== 存储验证 ===============
-
+    /**
+     * 存储值验证
+     * @param {string} key - 存储键
+     * @param {*} expectedValue - 期望值
+     * @param {number} timeoutMs - 超时时间（毫秒）
+     * @returns {Promise<boolean>} - 验证是否通过
+     */
     const verifyStorage = async (key, expectedValue, timeoutMs = TIMEOUT_STORAGE) => {
         LOG('🔐 验证存储:', key);
         return new Promise((resolve) => {
@@ -255,68 +343,88 @@ const CONFIG = {
         });
     };
 
-    // =============== 数据解析 ===============
-
-    const parseVisibleRecords = () => {
+    /**
+     * 解析可见记录
+     * @param {string} mode - 模式 (`best` 或 `history`)
+     * @param {number} capturePlayTime - 捕获的游玩时间
+     * @returns {Array} 记录数组
+     */
+    const parseVisibleRecords = (mode, capturePlayTime) => {
         LOG('🔍 开始解析可见记录...');
         const records = [];
-        
-        document.querySelectorAll('.mai-music-box').forEach((node, idx) => {
-            const titleEl = node.querySelector('.mai-music-title');
-            const title = titleEl?.innerText?.trim() || titleEl?.textContent?.trim();
-            if (!title) return;
-            
-            const type = getImgName(node.querySelector('.playlog_music_kind_icon')?.src);
-            const diff = getImgName(node.querySelector('#diff_and_date img')?.src);
-            const achEl = node.querySelector('.mai-music-info_achievement_score');
-            const achRaw = achEl?.innerText || achEl?.textContent || "0";
-            const achievement = parseAchievement(achRaw);
-            
-            let dxscore = 0;
-            const dxEl = node.querySelector('.mai-music-info_dx_score') || node.querySelector('.score');
-            if (dxEl) {
-                const dxStr = dxEl.innerText.split('/')[0]?.trim();
-                dxscore = parseInt(dxStr) || 0;
-            }
-            
-            const badges = Array.from(node.querySelectorAll('.playlog_score'));
-            const combo = getImgName(badges[0]?.src), sync = getImgName(badges[1]?.src);
-            const timeEl = node.querySelector('.sub_title span:last-child');
-            const play_time = parseTimeToTimestamp(timeEl?.innerText?.trim());
-            
-            records.push({
-                sheetId: generateSheetId(title, type, diff),
-                achievementRate: achievement, title, type, diff,
-                achievement, dxscore, combo, sync, play_time
-            });
-        });
 
-        document.querySelectorAll('.music_list_item').forEach(node => {
-            const title = node.querySelector('.music_name_block')?.innerText?.trim();
-            if (!title) return;
-            const type = getImgName(node.querySelector('.music_kind_icon')?.src);
-            const diff = getImgName(node.querySelector('img[src*="diff_"]')?.src);
-            const achRaw = node.querySelector('.music_score_block')?.innerText || "0";
-            const achievement = parseAchievement(achRaw);
-            const dxscore = parseInt(node.querySelector('.music_score_block span')?.innerText?.trim()) || 0;
-            const imgs = Array.from(node.querySelectorAll('.music_rate_block img'));
-            
-            records.push({
-                sheetId: generateSheetId(title, type, diff),
-                achievementRate: achievement, title, type, diff,
-                achievement, dxscore,
-                combo: getImgName(imgs[1]?.src),
-                sync: getImgName(imgs[2]?.src),
-                play_time: 0
+        if (mode === 'history') {
+            document.querySelectorAll('.mai-music-box').forEach(node => {
+                const titleEl = node.querySelector('.mai-music-title');
+                const title = titleEl?.innerText?.trim() || titleEl?.textContent?.trim();
+                if (!title) return;
+
+                const cabinet = getImgName(node.querySelector('.playlog_music_kind_icon')?.src);
+                const diff = getImgName(node.querySelector('#diff_and_date img')?.src);
+                const achEl = node.querySelector('.mai-music-info_achievement_score');
+                const achRaw = achEl?.innerText || achEl?.textContent || '0';
+                const achievement = parseAchievement(achRaw);
+
+                let dxscore = 0;
+                const dxEl = node.querySelector('.mai-music-info_dx_score') || node.querySelector('.score');
+                if (dxEl) {
+                    const dxStr = dxEl.innerText.split('/')[0]?.trim();
+                    dxscore = parseInt(dxStr) || 0;
+                }
+
+                const badges = Array.from(node.querySelectorAll('.playlog_score'));
+                const combo = getImgName(badges[0]?.src);
+                const sync = getImgName(badges[1]?.src);
+                const timeEl = node.querySelector('.sub_title span:last-child');
+                const play_time = parseTimeToTimestamp(timeEl?.innerText?.trim());
+
+                records.push({
+                    sheetId: generateSheetId(title, cabinet, diff),
+                    title,
+                    cabinet,
+                    diff,
+                    type: 'history',
+                    achievement,
+                    dxscore,
+                    combo,
+                    sync,
+                    play_time
+                });
             });
-        });
+        } else if (mode === 'best') {
+            document.querySelectorAll('.poster-grid .tile').forEach(node => {
+                const title = node.querySelector('.title')?.innerText?.trim() || node.querySelector('.title')?.textContent?.trim();
+                if (!title) return;
+
+                const cabinet = getImgName(node.querySelector('.kind')?.src);
+                const diff = getImgName(node.querySelector('.diff')?.src);
+                const vals = Array.from(node.querySelectorAll('.val'));
+                const achievement = parseAchievement(vals[0]?.innerText || vals[0]?.textContent || '0');
+                const dxscore = parseInt((vals[1]?.innerText || vals[1]?.textContent || '0').replace(/[^\d]/g, '')) || 0;
+
+                records.push({
+                    sheetId: generateSheetId(title, cabinet, diff),
+                    title,
+                    cabinet,
+                    diff,
+                    type: 'best',
+                    achievement,
+                    dxscore,
+                    combo: '',
+                    sync: '',
+                    play_time: capturePlayTime
+                });
+            });
+        }
 
         LOG(`✅ 解析完成: 总计 ${records.length} 条`);
         return records;
     };
 
-    // =============== 存储管理 ===============
-
+    /**
+     * 加载存储数据
+     * @return {void}
+     */
     const loadStore = () => {
         const raw = GM_getValue(STORE_KEY, {});
         if (raw && typeof raw === 'object') {
@@ -325,6 +433,10 @@ const CONFIG = {
         if (!multiDataStore[currentTargetId]) multiDataStore[currentTargetId] = [];
     };
 
+    /**
+     * 保存存储数据
+     * @returns {Promise<boolean>} - 保存是否成功
+     */
     const saveStore = async () => {
         LOG('💾 保存存储, ID#', currentTargetId, '长度:', getCurrentArray().length);
         GM_setValue(STORE_KEY, multiDataStore);
@@ -333,40 +445,73 @@ const CONFIG = {
         return ok;
     };
 
+    /**
+     * 获取当前目标 ID 的数据数组
+     * @returns {Array} 当前目标 ID 的数据数组
+     */
     const getCurrentArray = () => { if (!multiDataStore[currentTargetId]) multiDataStore[currentTargetId] = []; return multiDataStore[currentTargetId]; };
 
-    const isRecordExists = (targetArr, sheetId, play_time) => {
-        return targetArr.some(r => r.sheetId === sheetId && r.play_time === play_time);
-    };
+    /**
+     * 检查 history 记录是否存在
+     * @param {Array} targetArr - 目标数组
+     * @param {string} sheetId - 曲目主键
+     * @param {number} play_time - 游玩时间
+     * @returns {boolean} - 记录是否存在
+     */
+    const isHistoryRecordExists = (targetArr, sheetId, play_time) => targetArr.some(r => r.type === 'history' && r.sheetId === sheetId && r.play_time === play_time);
 
-    // =============== 核心逻辑 ===============
+    /**
+     * 检查 best 记录是否存在
+     * @param {Array} targetArr - 目标数组
+     * @param {string} sheetId - 曲目主键
+     * @param {number} achievement - 达成率
+     * @returns {boolean} - 记录是否存在
+     */
+    const isBestRecordExists = (targetArr, sheetId, achievement) => targetArr.some(r => r.type === 'best' && r.sheetId === sheetId && r.achievement === achievement);
 
-    const processCurrentPage = async () => {
+
+    /**
+     * ***lyra-maisync* 核心逻辑：** 处理当前页面
+     * @param {string} mode - 模式 (`best` 或 `history`)
+     * @param {number} capturePlayTime - 捕获的游玩时间
+     * @returns {Promise<number>} - 新增记录数
+     */
+    const processCurrentPage = async (mode, capturePlayTime) => {
         LOG('🔄 处理当前页...');
         const target = getCurrentArray();
         let cnt = 0, dup = 0;
-        const rawRecords = parseVisibleRecords();
-        
+        const rawRecords = parseVisibleRecords(mode, capturePlayTime);
+
         rawRecords.forEach(rec => {
-            if (isRecordExists(target, rec.sheetId, rec.play_time)) {
-                LOG('🌐 存储中已存在，跳过:', `${rec.sheetId}_${rec.play_time}`);
+            const exists = mode === 'best'
+                ? isBestRecordExists(target, rec.sheetId, rec.achievement)
+                : isHistoryRecordExists(target, rec.sheetId, rec.play_time);
+            if (exists) {
+                const key = mode === 'best' ? `${rec.sheetId}_${rec.achievement}` : `${rec.sheetId}_${rec.play_time}`;
+                LOG('🌐 存储中已存在，跳过:', key);
                 dup++;
                 return;
             }
             target.push(rec);
             cnt++;
         });
-        
+
         await saveStore();
         LOG(`📈 本页结果: 新增 ${cnt}, 重复 ${dup}, 总计 ${target.length}`);
         return cnt;
     };
 
-    const capturePage = async () => {
+    /**
+     * ***lyra-maisync* 核心逻辑：** 捕获当前页面
+     * @param {string} mode - 模式 (`best` 或 `history`)
+     * @param {number} capturePlayTime - 捕获的游玩时间
+     * @returns {Promise<number>} - 新增记录数
+     */
+    const capturePage = async (mode, capturePlayTime) => {
         LOG('🎬 开始捕获单页');
         window.scrollTo(0, 0);
         await waitForScrollLoad();
-        
+
         let lastH = 0, stable = 0;
         while (stable < SCROLL_STABLE_COUNT) {
             window.scrollBy(0, SCROLL_STEP);
@@ -374,11 +519,14 @@ const CONFIG = {
             const h = document.documentElement.scrollHeight;
             if (h === lastH) stable++; else { stable = 0; lastH = h; }
         }
-        return await processCurrentPage();
+        return await processCurrentPage(mode, capturePlayTime);
     };
 
     // =============== UI 组件 ===============
 
+    /**
+     * *[UI]* 创建 Control Bar 面板
+     */
     const createPanel = () => {
         if (document.getElementById('lyra-panel')) return;
         const p = document.createElement('div'); p.id = 'lyra-panel'; p.style = STYLES.PANEL;
@@ -408,8 +556,17 @@ const CONFIG = {
         document.body.appendChild(p);
     };
 
+    /**
+     * *[UI]* 切换更多菜单的显示状态
+     * @param {HTMLElement} menu - 更多菜单元素
+     */
     const toggleMoreMenu = (menu) => { menu.style.display = menu.style.display === 'none' ? 'flex' : 'none'; };
 
+    /**
+     * *[UI]* 显示 ID 选择弹窗
+     * @param {boolean} startCapture - 是否在显示后立即开始捕获
+     * @returns {void}
+     */
     const showIdModal = (startCapture) => {
         if (isCapturing) return;
         const m = document.createElement('div'); m.style = STYLES.MODAL_BG;
@@ -442,22 +599,39 @@ const CONFIG = {
         m.addEventListener('click', e => { if (e.target === m) cleanup(); });
     };
 
+    /**
+     * 执行捕获流程
+     */
     const doCapture = async () => {
         LOG('🚀 开始捕获流程');
         isCapturing = true;
         loadStore();
-        const cnt = await capturePage();
+        currentCaptureMode = detectCaptureMode();
+        if (!currentCaptureMode) {
+            WARN('❌ 未识别到 history / best 页面');
+            alert('未识别到 history / best 页面');
+            isCapturing = false;
+            return;
+        }
+        const capturePlayTime = Math.floor(Date.now() / 1000);
+        const cnt = await capturePage(currentCaptureMode, capturePlayTime);
         LOG('🎉 捕获完成, 新增:', cnt);
-        showResultModal(cnt);
+        showResultModal(cnt, currentCaptureMode);
     };
 
-    const showResultModal = (newCnt) => {
+    /**
+     * *[UI]* 显示结果弹窗
+     * @param {number} newCnt - 新增记录数
+     * @param {string} mode - 捕获模式 (`best` 或 `history`)
+     */
+    const showResultModal = (newCnt, mode) => {
         LOG('🪟 显示结果弹窗, newCnt:', newCnt);
         const m = document.createElement('div'); m.style = STYLES.MODAL_BG;
-        const hasNext = newCnt > 0;
+        const hasNext = mode === 'history';
+        const modeText = mode === 'history' ? 'history' : 'best';
         m.innerHTML = `
             <div style="${STYLES.MODAL_BOX}">
-                <h4 style="margin:0 0 10px;font-size:15px;">ID#${currentTargetId} · 捕获完成</h4>
+                <h4 style="margin:0 0 10px;font-size:15px;">ID#${currentTargetId} · ${modeText} 捕获完成</h4>
                 <p style="margin:0 0 14px;color:#555;font-size:13px;">
                     本页新增: <strong style="color:#27ae60;">${newCnt}</strong> | 总计: <strong>${getCurrentArray().length}</strong>
                 </p>
@@ -475,31 +649,28 @@ const CONFIG = {
             m.remove();
         };
         const stopCap = () => { LOG('🛑 用户点击【停止】'); isCapturing = false; cleanup(); };
-        
+
         const goNext = async () => {
             LOG('➡️ 用户点击【下一页】');
             cleanup();
             window.scrollTo(0, 0);
             await new Promise(r => setTimeout(r, 500));
-            
-            const firstBox = document.querySelector('.mai-music-box');
-            const prevTitle = firstBox?.querySelector('.mai-music-title')?.innerText?.trim();
-            const prevTime = firstBox?.querySelector('.sub_title span:last-child')?.innerText?.trim();
-            const prevKey = `${prevTitle}_${prevTime}`;
+
+            const prevKey = getHistoryFingerprint();
             LOG('📋 当前页标识:', prevKey);
-            
+
             const nextBtn = getNextPageButton();
             if (nextBtn) {
                 LOG('🔘 点击下一页按钮');
                 nextBtn.click();
-                const loaded = await waitForPageLoad();
+                const loaded = await waitForPageLoad('history');
                 if (!loaded) {
                     WARN('❌ 页面加载超时');
                     alert('页面加载超时，请手动刷新后重试');
                     isCapturing = false;
                     return;
                 }
-                const changed = await verifyPageChanged(prevKey);
+                const changed = await verifyHistoryPageChanged(prevKey);
                 if (changed) {
                     LOG('✅ 页面切换验证成功，继续捕获');
                     await doCapture();
@@ -514,15 +685,18 @@ const CONFIG = {
                 isCapturing = false;
             }
         };
-        
+
         const goExport = () => { LOG('📤 用户点击【前往导出】'); cleanup(); showExportModal(); };
-        
+
         document.getElementById('lyra-res-stop')?.addEventListener('click', stopCap);
         if (hasNext) document.getElementById('lyra-res-next')?.addEventListener('click', goNext);
         document.getElementById('lyra-res-export')?.addEventListener('click', goExport);
         m.addEventListener('click', e => { if (e.target === m) stopCap(); });
     };
 
+    /**
+     * *[UI]* 显示导出弹窗
+     */
     const showExportModal = () => {
         LOG('🪟 显示导出弹窗');
         const m = document.createElement('div'); m.style = STYLES.MODAL_BG;
@@ -542,17 +716,18 @@ const CONFIG = {
         
         document.getElementById('lyra-exp-dx')?.addEventListener('click', () => {
             LOG('📊 导出 dxrating 格式');
-            const deduped = dedupeForDxRating(getCurrentArray());
-            const arr = deduped.map(r => ({ sheetId: r.sheetId, achievementRate: r.achievementRate }));
+            const deduped = dedupeForDXRating(getCurrentArray());
+            const arr = deduped.map(r => ({ sheetId: r.sheetId, achievementRate: r.achievement }));
             LOG('📦 导出数据预览:', arr.slice(0, 3));
-            download(EXPORT_NAMES.DX(currentTargetId), JSON.stringify(arr, null, 2)); cleanup();
+            download(EXPORT_NAMES.DXRATING(currentTargetId), JSON.stringify(arr, null, 2)); cleanup();
         });
         
         // gzip 导出使用 Base64+普通下载，兼容所有浏览器
         document.getElementById('lyra-exp-gz')?.addEventListener('click', async () => {
             LOG('🗜️ 导出 gzip 压缩格式');
             try {
-                const json = JSON.stringify(getCurrentArray());
+                const backupRecords = stripSheetIdForBackup(getCurrentArray());
+                const json = JSON.stringify(backupRecords);
                 const gzipped = pako.gzip(json, { level: 9 });
                 LOG('📦 原始大小:', json.length, '→ 压缩后:', gzipped.length, `(${Math.round(gzipped.length/json.length*100)}%)`);
                 
@@ -564,11 +739,11 @@ const CONFIG = {
 
                 const base64 = btoa(binary);
                 const payload = MAI_SYNC_DESC_HEADER + base64;
-                const ok = download(EXPORT_NAMES.GZIP(currentTargetId), payload);
+                const ok = download(EXPORT_NAMES.GZIP_BASE64(currentTargetId), payload);
 
                 if (ok) {
                     LOG('✅ gzip 导出成功 (Base64 格式)');
-                    alert(`导出成功!\n📁 ${EXPORT_NAMES.GZIP(currentTargetId)}\n📊 ${getCurrentArray().length} 条记录\n💡 文件名含 .b64，导入时请移除该后缀`);
+                    alert(`导出成功!\n📁 ${EXPORT_NAMES.GZIP_BASE64(currentTargetId)}\n📊 ${getCurrentArray().length} 条记录\n💡 文件名含 .b64，导入时请移除该后缀`);
                 } else {
                     WARN('❌ 下载失败');
                     alert('下载失败，请检查浏览器是否拦截弹窗');
@@ -584,7 +759,12 @@ const CONFIG = {
         m.addEventListener('click', e => { if (e.target === m) cleanup(); });
     };
 
-    // 普通下载函数，返回是否成功
+    /**
+     * 触发浏览器下载
+     * @param {string} name 
+     * @param {*} content 
+     * @returns {boolean}
+     */
     const download = (name, content) => {
         try {
             LOG('💾 下载文件:', name, '大小:', content.length);
@@ -600,21 +780,23 @@ const CONFIG = {
         }
     };
 
-    // =============== 更多菜单功能 ===============
-
+    /**
+     * *[UI]* 更多 - 使用说明
+     */
     const showUsage = () => {
         const m = document.createElement('div'); m.style = STYLES.MODAL_BG;
         m.innerHTML = `
             <div style="${STYLES.MODAL_BOX}">
                 <h4 style="margin:0 0 12px;">使用说明</h4>
                 <ul style="margin:0 0 16px;padding-left:18px;color:#555;font-size:13px;line-height:1.6;">
-                    <li>点击【捕获】→ 输入 ID → 自动滚动加载当前页</li>
-                    <li>捕获结束后：可【下一页】继续 /【前往导出】/【停止】</li>
+                    <li>点击【捕获】→ 输入 ID → 自动识别 history / best 页面</li>
+                    <li>history 支持【下一页】继续，best 为单页捕获</li>
+                    <li>best 的 play_time 使用当前捕获时间</li>
+                    <li>记录元素新增 type 字段：history 或 best</li>
                     <li>【导出】支持 dxrating 格式 / gzip 压缩备份</li>
                     <li>dxrating 导出会自动去重，相同曲目取最高达成率</li>
                     <li>gzip 备份使用 pako 库压缩，体积更小，文件名为 .b64 后缀</li>
                     <li>导入 gzip 备份时，请先移除文件名末尾的 .b64</li>
-                    <li>【更多】→【清除数据】需手动输入 ID 确认</li>
                 </ul>
                 <button onclick="this.closest('.lyra-modal')?.remove()" style="${STYLES.BTN}background:${COLORS.CONFIRM};width:100%;">知道了</button>
             </div>`;
@@ -623,8 +805,14 @@ const CONFIG = {
         m.addEventListener('click', e => { if (e.target === m) m.remove(); });
     };
 
+    /**
+     * *[UI]* ~显示导入提示~ *当前版本不支持导入功能*
+     */
     const showImportHint = () => alert('该版本暂不支持导入功能');
 
+    /**
+     * *[UI]* 显示清除确认弹窗
+     */
     const showClearConfirm = () => {
         LOG('🗑️ 显示清除确认弹窗');
         const m = document.createElement('div'); m.style = STYLES.MODAL_BG;
@@ -679,8 +867,12 @@ const CONFIG = {
         m.addEventListener('click', e => { if (e.target === m) cleanup(); });
     };
 
-    // =============== 初始化 ===============
+    // =======================================
 
+    /**
+     * 初始化脚本
+     * @returns {Promise<void>}
+     */
     const init = async () => {
         LOG('🔧 初始化脚本 v' + VERSION + ' [RC]');
         // 验证 pako 是否加载成功
