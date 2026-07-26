@@ -12,7 +12,7 @@ from PIL import Image
 from loguru import logger
 
 from .calculator import get_dxrating, get_dxscore_max
-from ..constants import server, ASIA_SHANGHAI, DEFAULT_DATETIME
+from ..constants import server, DEFAULT_DATETIME
 
 
 __all__ = [
@@ -94,7 +94,7 @@ class MaiChartAch:
         self.dxscore = max(self.dxscore, other.dxscore)
         self.combo = max(self.combo, other.combo)
         self.sync = max(self.sync, other.sync)
-        self.update_time = datetime.now(ASIA_SHANGHAI)
+        self.update_time = datetime.now()
 
     def __add__(self, other: MaiChartAch) -> MaiChartAch:
         """合并两个 MaiChartAch 对象，返回新的对象"""
@@ -108,7 +108,7 @@ class MaiChartAch:
             dxscore_max=max(self.dxscore_max, other.dxscore_max),
             combo=max(self.combo, other.combo),
             sync=max(self.sync, other.sync),
-            update_time=datetime.now(ASIA_SHANGHAI),
+            update_time=datetime.now(),
             user_id=self.user_id,
         )
 

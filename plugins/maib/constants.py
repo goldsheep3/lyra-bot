@@ -20,8 +20,7 @@ except ImportError:
 __all__ = [
     # 服务器类型标识
     "server",
-    # 时区及默认时间
-    "ASIA_SHANGHAI",
+    # 默认时间
     "DEFAULT_DATETIME",
     # 常量映射表
     "RATE_ALIAS",
@@ -37,9 +36,8 @@ __all__ = [
 
 # 服务器类型标识
 server = Literal["JP", "CN"]
-# 默认 UTC+8 时区，及默认时间 (1970-11-01 00:00:00)
-ASIA_SHANGHAI = timezone(timedelta(hours=8), name="Asia/Shanghai")
-DEFAULT_DATETIME = datetime(1970, 11, 1, 0, 0, 0, tzinfo=ASIA_SHANGHAI)
+# 默认时间 (1970-11-01 00:00:00)
+DEFAULT_DATETIME = datetime(1970, 11, 1, 0, 0, 0)
 
 # --- 基础路径 ---
 PLUGIN_BASE_PATH = Path(__file__).parent

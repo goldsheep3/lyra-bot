@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import Optional
 
-from ..constants import ASIA_SHANGHAI, COMBO_MAP, SYNC_MAP
+from ..constants import COMBO_MAP, SYNC_MAP
 from ..utils.models import MaiChartAch, MaiData
 
 
@@ -30,7 +30,7 @@ def _parse_single_sy_record(record: dict) -> Optional[MaiChartAch]:
         dxscore=record.get("dxScore", 0),
         combo=COMBO_MAP.key(record.get("fc", "").lower()) or 0,
         sync=SYNC_MAP.key(record.get("fs", "").lower()) or 0,
-        update_time=datetime.now(ASIA_SHANGHAI)
+        update_time=datetime.now()
     )
 
 def parse_sy_player_record(maidata: MaiData, records: list) -> MaiData:

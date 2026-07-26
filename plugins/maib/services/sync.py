@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from .. import utils
-from ..constants import ASIA_SHANGHAI, server as Server
+from ..constants import server as Server
 from . import execute_func
 from .models import MaiChart, MaiChartAch, MaiUser
 from .refresh import rfs_mu_dxra_with_mct_batch
@@ -166,7 +166,7 @@ async def upd_ach_batch(
 
             existing_mca = existing_map.get((shortid, difficulty, target_server))
             if existing_mca is None:
-                incoming.update_time = datetime.now(ASIA_SHANGHAI)
+                incoming.update_time = datetime.now()
                 session.add(MaiChartAch.from_utils(incoming, chart_id=chart.id))
                 report.new_song.append(_build_diff(chart, incoming, None))
                 affected_chart_keys[target_server].add((shortid, difficulty))

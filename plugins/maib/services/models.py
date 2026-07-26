@@ -8,11 +8,11 @@ from typing import Any, Literal, Optional
 
 from nonebot_plugin_datastore import get_plugin_data
 from nonebot_plugin_localstore import get_plugin_data_dir
-from sqlalchemy import BigInteger, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import String, Integer, Float, BigInteger, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from .. import utils
-from ..constants import ASIA_SHANGHAI, DEFAULT_DATETIME, server
+from ..constants import DEFAULT_DATETIME, server
 
 
 __all__ = [
@@ -27,19 +27,15 @@ __all__ = [
 Model = get_plugin_data().Model
 
 
-def _now() -> datetime:
-    return datetime.now(ASIA_SHANGHAI)
-
-
 def _as_datetime(value: datetime | int | float | None, *, default: datetime | None = None) -> datetime:
     if value is None:
-        return default or _now()
+        return default or datetime.now()
     if isinstance(value, datetime):
         return value
     if isinstance(value, (int, float)):
         if value <= 0:
             return DEFAULT_DATETIME
-        return datetime.fromtimestamp(value, ASIA_SHANGHAI)
+        return datetime.fromtimestamp(value)
     raise TypeError(f"Unsupported datetime value: {value!r}")
 
 
@@ -78,8 +74,7 @@ class MaiAlias(Model):
     shortid: Mapped[int] = mapped_column(ForeignKey("maib_maidatas.shortid", ondelete="RESTRICT"), index=True)
     alias: Mapped[str] = mapped_column(index=True)
 
-    # MIGRATE: 生产库当前为 Integer Unix 时间戳；目标 schema 迁移到 DateTime(timezone=True)。
-    create_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    create_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.now)
     create_qq: Mapped[int] = mapped_column(BigInteger)
     create_qq_group: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
 
@@ -95,7 +90,7 @@ class MaiAlias(Model):
         return cls(
             shortid=_get(source, "shortid"),
             alias=_get(source, "alias"),
-            create_time=_as_datetime(_get(source, "create_time"), default=_now()),
+            create_time=_as_datetime(_get(source, "create_time"), default=datetime.now()),
             create_qq=_get(source, "create_qq"),
             create_qq_group=_get(source, "create_qq_group"),
         )
@@ -126,8 +121,7 @@ class MaiChartAch(Model):
     dxscore: Mapped[int] = mapped_column(default=0)
     combo: Mapped[int] = mapped_column(default=0)
     sync: Mapped[int] = mapped_column(default=0)
-    # MIGRATE: 生产库当前为 Integer Unix 时间戳；目标 schema 迁移到 DateTime(timezone=True)。
-    update_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+    update_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.now, onupdate=datetime.now)
     dxrating: Mapped[int] = mapped_column(default=0)
 
     user_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
@@ -155,7 +149,7 @@ class MaiChartAch(Model):
             dxscore=_get(ach, "dxscore", 0),
             combo=_get(ach, "combo", 0),
             sync=_get(ach, "sync", 0),
-            update_time=_as_datetime(_get(ach, "update_time"), default=_now()),
+            update_time=_as_datetime(_get(ach, "update_time"), default=datetime.now()),
             dxrating=dxrating or 0,
             user_id=_get(ach, "user_id", -1),
         )
@@ -181,7 +175,7 @@ class MaiChartAch(Model):
         self.dxscore = max(self.dxscore, ach.dxscore)
         self.combo = max(self.combo, ach.combo)
         self.sync = max(self.sync, ach.sync)
-        self.update_time = _now()
+        self.update_time = datetime.now()
 
 
 class MaiChart(Model):
@@ -394,42 +388,24 @@ class MaiUser(Model):
     plate_version: Mapped[Optional[int]] = mapped_column(default=None, nullable=True)
     plate_code: Mapped[Optional[int]] = mapped_column(default=None, nullable=True)
 
-    # MIGRATE: 新增列；用于持久化 utils.MaiUser.jp_current_version。
     jp_current_version: Mapped[int] = mapped_column(default=0)
-    # MIGRATE: 生产库当前为 Integer Unix 时间戳；目标 schema 迁移到 DateTime(timezone=True)。
     jp_update_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: DEFAULT_DATETIME)
-    # MIGRATE: 由 jp_dxrating 重命名为 jp_dxra_total。
     jp_dxra_total: Mapped[int] = mapped_column(default=0)
-    # MIGRATE: 新增列；可由现有成绩缓存重算。
     jp_dxra_b35_total: Mapped[int] = mapped_column(default=0)
-    # MIGRATE: 由 jp_dxrating_b35_first 重命名为 jp_dxra_b35_max。
     jp_dxra_b35_max: Mapped[int] = mapped_column(default=0)
-    # MIGRATE: 由 jp_dxrating_b35_last 重命名为 jp_dxra_b35_min。
     jp_dxra_b35_min: Mapped[int] = mapped_column(default=0)
-    # MIGRATE: 新增列；可由现有成绩缓存重算。
     jp_dxra_b15_total: Mapped[int] = mapped_column(default=0)
-    # MIGRATE: 由 jp_dxrating_b15_first 重命名为 jp_dxra_b15_max。
     jp_dxra_b15_max: Mapped[int] = mapped_column(default=0)
-    # MIGRATE: 由 jp_dxrating_b15_last 重命名为 jp_dxra_b15_min。
     jp_dxra_b15_min: Mapped[int] = mapped_column(default=0)
 
-    # MIGRATE: 新增列；用于持久化 utils.MaiUser.cn_current_version。
     cn_current_version: Mapped[int] = mapped_column(default=0)
-    # MIGRATE: 生产库当前为 Integer Unix 时间戳；目标 schema 迁移到 DateTime(timezone=True)。
     cn_update_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: DEFAULT_DATETIME)
-    # MIGRATE: 由 cn_dxrating 重命名为 cn_dxra_total。
     cn_dxra_total: Mapped[int] = mapped_column(default=0)
-    # MIGRATE: 新增列；可由现有成绩缓存重算。
     cn_dxra_b35_total: Mapped[int] = mapped_column(default=0)
-    # MIGRATE: 由 cn_dxrating_b35_first 重命名为 cn_dxra_b35_max。
     cn_dxra_b35_max: Mapped[int] = mapped_column(default=0)
-    # MIGRATE: 由 cn_dxrating_b35_last 重命名为 cn_dxra_b35_min。
     cn_dxra_b35_min: Mapped[int] = mapped_column(default=0)
-    # MIGRATE: 新增列；可由现有成绩缓存重算。
     cn_dxra_b15_total: Mapped[int] = mapped_column(default=0)
-    # MIGRATE: 由 cn_dxrating_b15_first 重命名为 cn_dxra_b15_max。
     cn_dxra_b15_max: Mapped[int] = mapped_column(default=0)
-    # MIGRATE: 由 cn_dxrating_b15_last 重命名为 cn_dxra_b15_min。
     cn_dxra_b15_min: Mapped[int] = mapped_column(default=0)
 
     # lyra-sync 字段: 在 sync_allow_time 有效期内，可以使用 sync-hash 验证身份并同步成绩。

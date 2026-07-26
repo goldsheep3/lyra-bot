@@ -5,7 +5,6 @@ from typing import Optional
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..constants import ASIA_SHANGHAI
 from . import execute_func
 from .models import MaiAlias, MaiData
 
@@ -44,7 +43,7 @@ async def add_ma(shortid: int, alias_text: str, create_qq: int, create_qq_group:
             return False
         session.add(MaiAlias(
             shortid=shortid, alias=alias_text, create_qq=create_qq,
-            create_qq_group=create_qq_group, create_time=datetime.now(ASIA_SHANGHAI)
+            create_qq_group=create_qq_group, create_time=datetime.now()
         ))
         return True
 
@@ -64,7 +63,7 @@ async def add_ma_batch(data: list[tuple[int, str]], create_qq: int,
         chunk_size = 512
         for i in range(0, len(data), chunk_size):
             chunk = data[i:i + chunk_size]
-            create_time = datetime.now(ASIA_SHANGHAI)
+            create_time = datetime.now()
             
             existing_ids = set(
                 (await session.execute(
