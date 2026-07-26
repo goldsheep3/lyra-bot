@@ -408,9 +408,9 @@ class MaiUser(Model):
     cn_dxra_b15_max: Mapped[int] = mapped_column(default=0)
     cn_dxra_b15_min: Mapped[int] = mapped_column(default=0)
 
-    # lyra-sync 字段: 在 sync_allow_time 有效期内，可以使用 sync-hash 验证身份并同步成绩。
-    sync_hash: Mapped[Optional[str]] = mapped_column(default=None, nullable=True)
-    sync_allow_time: Mapped[Optional[int]] = mapped_column(default=None, nullable=True)
+    # lyra-sync 字段: 在可以使用 sync-hash 验证身份并同步成绩。
+    maisync_hash: Mapped[Optional[str]] = mapped_column(default=None, nullable=True)
+    # Diving-Fish 字段: 通过水鱼获取到的数据的 hash 确认是否为最新数据，已经最新就直接跳过更新.
     last_sy_hash: Mapped[Optional[str]] = mapped_column(default=None, nullable=True)
 
     @validates("jp_update_time", "cn_update_time")
@@ -453,8 +453,7 @@ class MaiUser(Model):
             cn_dxra_b15_total=cn_data.b15.total,
             cn_dxra_b15_max=cn_data.b15.max,
             cn_dxra_b15_min=cn_data.b15.min,
-            sync_hash=_get(source, "sync_hash"),
-            sync_allow_time=_get(source, "sync_allow_time"),
+            maisync_hash=_get(source, "maisync_hash"),
             last_sy_hash=_get(source, "last_sy_hash"),
         )
 
@@ -488,6 +487,30 @@ class MaiUser(Model):
                 b15_min=self.cn_dxra_b15_min,
             ),
         )
+
+
+class MaiRecord(Model):
+    """maimai 成绩记录数据"""
+
+    __tablename__ = "maib_mairecords"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(Integer, index=True)
+    
+    shortid: Mapped[int] = mapped_column(Integer, index=True, nullable=True)  # 可能会导入当前不存在的曲目 shortid，进行兼容操作
+    title: Mapped[str] = mapped_column(String(256), default="")
+    cabinet: Mapped[Literal["SD", "DX"]] = mapped_column(String(2), default="SD")
+    difficulty: Mapped[int] = mapped_column(Integer)
+    server: Mapped[server] = mapped_column(String(16))
+    achievement: Mapped[float] = mapped_column(Float, default=0.0)
+    dxscore: Mapped[int] = mapped_column(Integer, default=0)
+    combo: Mapped[int] = mapped_column(Integer, default=0)
+    sync: Mapped[int] = mapped_column(Integer, default=0)
+    update_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.now, onupdate=datetime.now)
+
+    @validates("update_time")
+    def _validate_update_time(self, _key: str, value: datetime | int | float | None) -> datetime:
+        return _as_datetime(value)
 
 
 class MaiIDMap(Model):

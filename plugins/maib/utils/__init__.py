@@ -7,6 +7,8 @@ from .models import MaiAlias, MaiChartAch, MaiChart, MaiData, DXRatingData, MaiU
 from .report import MaiChartAchDiff, MaiChartAchDiffReport, build_diff_report
 from .simai import SimaiNoteCount
 
+from . import sync
+
 
 __all__ = [
     # calculator
@@ -23,4 +25,7 @@ __all__ = [
     "MaiChartAchDiff", "MaiChartAchDiffReport", "build_diff_report",
     # simai
     "SimaiNoteCount",
+    
+    # sync
+    "sync",
 ]
