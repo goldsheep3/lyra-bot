@@ -24,6 +24,11 @@ __all__ = [
     "normalize_legacy_lyra_record",
     "build_legacy_lyra_ach_list",
     "LegacyLyraImportResult",
+    "LyraRecordV030",
+    "LyraRecordImportResultV030",
+    "build_record_hash",
+    "normalize_lyra_record_v030",
+    "build_lyra_records_v030",
 ]
 
 
@@ -52,6 +57,33 @@ class LegacyLyraImportResult:
 
     ach_list: list[MaiChartAch] = field(default_factory=list)
     unmatched_titles: list[str] = field(default_factory=list)
+    invalid_diff_items: list[str] = field(default_factory=list)
+    parse_failed_items: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class LyraRecordV030:
+    """v0.3.0 成绩记录的标准化结果。"""
+
+    title: str
+    cabinet: str
+    record_type: str
+    difficulty: int
+    server: server
+    achievement: float
+    dxscore: int
+    combo: int
+    sync: int
+    play_time: datetime
+    play_timestamp: int
+    record_hash: str
+
+
+@dataclass(slots=True)
+class LyraRecordImportResultV030:
+    """v0.3.0 成绩记录导入的解析结果。"""
+
+    records: list[LyraRecordV030] = field(default_factory=list)
     invalid_diff_items: list[str] = field(default_factory=list)
     parse_failed_items: list[str] = field(default_factory=list)
 
@@ -100,10 +132,150 @@ def normalize_legacy_lyra_record(record: Mapping[str, Any]) -> LegacyLyraRecord:
     )
 
 
+def _normalize_cabinet(value: Any) -> str:
+    cabinet = str(value or 'sd').strip().upper()
+    if cabinet == 'DX':
+        return 'DX'
+    if cabinet == 'SD':
+        return 'SD'
+    raise ValueError(f'非法 cabinet: {value!r}')
+
+
+def _normalize_record_type(value: Any) -> str:
+    record_type = str(value or 'history').strip().lower()
+    if record_type in ('history', 'best'):
+        return record_type
+    raise ValueError(f'非法记录类型: {value!r}')
+
+
+def _normalize_server(value: Any) -> server:
+    server_text = str(value or 'JP').strip().upper()
+    if server_text not in ('JP', 'CN'):
+        raise ValueError(f'非法服务器类型: {value!r}')
+    return cast(server, server_text)
+
+
+def _normalize_combo_text(value: Any) -> str:
+    text = str(value or '').strip().lower()
+    return '' if text in ('', 'fc_dummy') else text
+
+
+def _normalize_sync_text(value: Any) -> str:
+    text = str(value or '').strip().lower()
+    return '' if text in ('', 'sync_dummy') else text
+
+
+def build_record_hash(
+    *,
+    user_id: int,
+    title: str,
+    cabinet: str,
+    difficulty: int,
+    server: server,
+    record_type: str,
+    achievement: float,
+    dxscore: int,
+    combo: int,
+    sync: int,
+    play_timestamp: int,
+) -> str:
+    payload = {
+        'user_id': user_id,
+        'title': title.strip(),
+        'cabinet': cabinet.upper(),
+        'difficulty': difficulty,
+        'server': server,
+        'type': record_type,
+        'achievement': f'{achievement:.4f}',
+        'dxscore': dxscore,
+        'combo': combo,
+        'sync': sync,
+        'play_time': play_timestamp,
+    }
+    return hashlib.sha256(orjson.dumps(payload, option=orjson.OPT_SORT_KEYS)).hexdigest()
+
+
+def normalize_lyra_record_v030(record: Mapping[str, Any], *, user_id: int) -> LyraRecordV030:
+    title = str(record.get('title', '')).strip()
+    if not title:
+        raise ValueError('空标题记录')
+
+    difficulty = DIFFICULTY_MAP.key(str(record.get('diff', '')).lower()) or -1
+    if difficulty < 0:
+        raise KeyError(f"{title}[{record.get('diff', '?')}]")
+
+    play_timestamp = int(record.get('play_time', 0))
+    if play_timestamp <= 0:
+        raise ValueError(f'非法游玩时间: {record.get("play_time")!r}')
+
+    cabinet = _normalize_cabinet(record.get('cabinet', 'sd'))
+    record_type = _normalize_record_type(record.get('type', 'history'))
+    target_server = _normalize_server(record.get('server', 'JP'))
+    combo = COMBO_MAP.key(_normalize_combo_text(record.get('combo', ''))) or 0
+    sync = SYNC_MAP.key(_normalize_sync_text(record.get('sync', ''))) or 0
+    achievement = float(f"{float(record.get('achievement', 0)):.4f}")
+
+    return LyraRecordV030(
+        title=title,
+        cabinet=cabinet,
+        record_type=record_type,
+        difficulty=difficulty,
+        server=target_server,
+        achievement=achievement,
+        dxscore=int(record.get('dxscore', 0)),
+        combo=combo,
+        sync=sync,
+        play_time=datetime.fromtimestamp(play_timestamp),
+        play_timestamp=play_timestamp,
+        record_hash=build_record_hash(
+            user_id=user_id,
+            title=title,
+            cabinet=cabinet,
+            difficulty=difficulty,
+            server=target_server,
+            record_type=record_type,
+            achievement=achievement,
+            dxscore=int(record.get('dxscore', 0)),
+            combo=combo,
+            sync=sync,
+            play_timestamp=play_timestamp,
+        ),
+    )
+
+
+def _format_parse_failed_title(record: Mapping[str, Any]) -> str:
+    return str(record.get('title', '')).strip() or '(无标题)'
+
+
+def _format_invalid_diff_title(record: Mapping[str, Any]) -> str:
+    title = str(record.get('title', '')).strip() or 'Unknown'
+    return f"{title}[{record.get('diff', '?')}]"
+
+
 def _append_unique(items: list[str], value: str) -> None:
     value = value.strip()
     if value and value not in items:
         items.append(value)
+
+
+def build_lyra_records_v030(
+    file_data: Sequence[Mapping[str, Any]],
+    *,
+    user_id: int,
+) -> LyraRecordImportResultV030:
+    result = LyraRecordImportResultV030()
+
+    for record in file_data:
+        try:
+            result.records.append(normalize_lyra_record_v030(record, user_id=user_id))
+        except KeyError:
+            if isinstance(record, Mapping):
+                _append_unique(result.invalid_diff_items, _format_invalid_diff_title(record))
+        except Exception:
+            if isinstance(record, Mapping):
+                _append_unique(result.parse_failed_items, _format_parse_failed_title(record))
+
+    return result
 
 
 async def build_legacy_lyra_ach_list(

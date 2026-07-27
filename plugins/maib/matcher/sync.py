@@ -18,7 +18,7 @@ from nonebot.adapters.telegram.event import PrivateMessageEvent as TGPrivateMess
 
 from .. import config, utils, services, image_gen, network
 from ..utils.report import MaiChartAchDiffReport, build_diff_report
-from ..utils.sync import build_legacy_lyra_ach_list, parse_lyra_maisync_data
+from ..utils.sync import build_legacy_lyra_ach_list, build_lyra_records_v030, parse_lyra_maisync_data
 from . import i18n_data, i18n, reply, rule_is_private
 from .context import get_maiuser
 from .message import build_msg
@@ -70,16 +70,27 @@ async def onebotv11_read_json(bot: OneBotV11Bot, file_id_or_bytes: str | bytes) 
             return None
     return None
 
-async def tg_read_json(bot: TGBot, file_id: str) -> Optional[Any]:
-    """Telegram JSON 文件解析"""
+async def tg_read_file(bot: TGBot, file_id: str) -> Optional[bytes]:
+    """Telegram 文件解析为原始字节。"""
     try:
         tg_file_info = await bot.get_file(file_id=file_id)
         if tg_file_info.file_path:
-            token = bot.bot_config.token  
+            token = bot.bot_config.token
             file_url = f"https://api.telegram.org/file/bot{token}/{tg_file_info.file_path}"
-            return await network.request_json(file_url)
+            return await network.request_image(file_url)
     except Exception as e:
         logger.error(f"Telegram 远程文件解析失败: {e}")
+    return None
+
+
+async def tg_read_json(bot: TGBot, file_id: str) -> Optional[Any]:
+    """Telegram JSON 文件解析"""
+    file_bytes = await tg_read_file(bot, file_id)
+    if file_bytes is not None:
+        try:
+            return orjson.loads(file_bytes)
+        except Exception as e:
+            logger.debug(f"Telegram JSON 解析失败: {e}")
     return None
 
 async def _build_sy_records_hash(records: list[dict[str, Any]]) -> str:
@@ -183,9 +194,16 @@ async def file_receiver_handled(bot: Bot, event: Event, matcher: Matcher, _i18n 
             return
         file_name = tg_msg.document.file_name or ""
 
-        if not file_name.endswith(".json"):
-            return
-        file_data = await tg_read_json(bot, tg_msg.document.file_id)
+        if file_name.endswith(".json"):
+            file_data = await tg_read_json(bot, tg_msg.document.file_id)
+        else:
+            file_bytes = await tg_read_file(bot, tg_msg.document.file_id)
+            if file_bytes is not None:
+                try:
+                    file_data, file_version = parse_lyra_maisync_data(file_bytes)
+                except Exception as e:
+                    logger.debug(f"Telegram lyra-maisync 数据解析失败: {e}")
+                    return
 
     else:
         return  # 静默退出未被捕获的其他情况
@@ -274,4 +292,34 @@ async def file_receiver_handled(bot: Bot, event: Event, matcher: Matcher, _i18n 
     if file_version.startswith("v0.3.0"):
         # v0.3.0 / *.json.gz.b64 版本的导入逻辑
         await matcher.send("lyra-maisync v0.3.0 脚本数据导入中~请稍等片刻~")
+
+        parsed_result = build_lyra_records_v030(file_data, user_id=user_id)
+
+        try:
+            record_keys, unmatched_items = await services.add_record_batch(user_id, parsed_result.records)
+            ach_list = await services.get_record_achs(user_id, list(record_keys))
+            report = await services.upd_ach_batch(user_id, ach_list) if ach_list else MaiChartAchDiffReport()
+        except Exception as e:
+            logger.error(f"v0.3.0 成绩记录入库失败: {e}")
+            await matcher.finish("同步到数据库时出错了……请联系监护人确认情况哦qwq")
+            return
+
+        for title, difficulty in unmatched_items:
+            report.no_data_song.append((0, title, difficulty))
+        for title_diff in parsed_result.invalid_diff_items:
+            report.other_error_song.append({"type": "invalid_diff", "msg": title_diff})
+        for title_failed in parsed_result.parse_failed_items:
+            report.other_error_song.append({"type": "parse_failed", "msg": title_failed})
+
+        summary_text, diff_img = build_diff_report(
+            report,
+            file_count=len(file_data),
+            parsed_count=len(parsed_result.records),
+        )
+
+        payload: list[tuple[str, Any]] = [("text", summary_text)]
+        if diff_img:
+            payload.append(("image", image_gen.get_image_bytes(diff_img)))
+
+        await build_msg(matcher, event, payload, tag='finish')
         return

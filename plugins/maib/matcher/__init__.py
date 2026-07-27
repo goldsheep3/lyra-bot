@@ -1,7 +1,6 @@
 import time
 
 from .. import services
-from ..sync import link_cache, link_hash_index
 from ..constants import ASSETS_PATH
 
 from nonebot import on_regex, on_message, on_notice
@@ -48,6 +47,9 @@ def rule_is_self(event: OneBotV11Event) -> bool:
 
 link = on_regex(r"^(查询|获取|绑定|解除|解绑)?link(?:\s+(\S+))?$", priority=5, block=True)
 
+
+link_cache = {}
+link_hash_index = {}
 
 @link.handle()
 async def link_handled(event: Event, matcher: Matcher, groups: tuple = RegexGroup(), _i18n = i18n):

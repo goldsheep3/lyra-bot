@@ -21,6 +21,7 @@ __all__ = [
     "MaiChart",
     "MaiData",
     "MaiUser",
+    "MaiRecord",
     "MaiIDMap",
 ]
 
@@ -495,21 +496,24 @@ class MaiRecord(Model):
     __tablename__ = "maib_mairecords"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(Integer, index=True)
-    
-    shortid: Mapped[int] = mapped_column(Integer, index=True, nullable=True)  # 可能会导入当前不存在的曲目 shortid，进行兼容操作
+    user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+
+    record_hash: Mapped[str] = mapped_column(String(64), index=True, unique=True)
+    shortid: Mapped[Optional[int]] = mapped_column(Integer, index=True, nullable=True)  # 可能会导入当前不存在的曲目 shortid，进行兼容操作
     title: Mapped[str] = mapped_column(String(256), default="")
     cabinet: Mapped[Literal["SD", "DX"]] = mapped_column(String(2), default="SD")
+    type: Mapped[Literal["history", "best"]] = mapped_column(String(16), default="history")
     difficulty: Mapped[int] = mapped_column(Integer)
     server: Mapped[server] = mapped_column(String(16))
     achievement: Mapped[float] = mapped_column(Float, default=0.0)
     dxscore: Mapped[int] = mapped_column(Integer, default=0)
     combo: Mapped[int] = mapped_column(Integer, default=0)
     sync: Mapped[int] = mapped_column(Integer, default=0)
+    play_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.now)
     update_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.now, onupdate=datetime.now)
 
-    @validates("update_time")
-    def _validate_update_time(self, _key: str, value: datetime | int | float | None) -> datetime:
+    @validates("play_time", "update_time")
+    def _validate_datetimes(self, _key: str, value: datetime | int | float | None) -> datetime:
         return _as_datetime(value)
 
 
