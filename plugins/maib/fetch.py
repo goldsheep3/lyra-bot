@@ -10,6 +10,7 @@ from typing import Any, TypeVar, overload
 from nonebot import logger
 from nonebot_plugin_localstore import get_plugin_data_dir, get_plugin_cache_dir
 from nonebot_plugin_datastore.db import post_db_init
+from sqlalchemy import select
 
 from . import config, utils, services, network
 from .constants import GENRE_MAP, VERSION_MAP
@@ -319,6 +320,13 @@ async def _sync_changed_charts(
             services.MaiData.from_utils(maidata)
             for maidata in maidata_dict.values()
         ])
+
+        # 曲库补齐后，自动处理此前因找不到曲目而暂存的在线上传记录。
+        affected_by_user = await services.backfill_record_shortids()
+        for user_id, record_keys in affected_by_user.items():
+            ach_list = await services.get_record_achs(user_id, list(record_keys))
+            if ach_list:
+                await services.upd_ach_batch(user_id, ach_list)
     except Exception as e:
         logger.error(f"maib-fetch Step 3/6: 数据库同步失败，原因: {e}")
         return False
@@ -525,6 +533,13 @@ async def maintenance_task():
     chart_stat = _load_chart_stat(stat_cache_file)
     results = _classify_chart_files(files, data_dir, chart_stat)
     change_files = results["Updated"] + results["New"]
+    if not change_files:
+        # 数据库被清空或首次迁移后，不能把旧 stat 缓存误当成曲库已入库。
+        async with services.get_session() as session:
+            has_maidata = (await session.execute(select(services.MaiData.shortid).limit(1))).scalar_one_or_none() is not None
+        if not has_maidata:
+            change_files = [(str(path.relative_to(data_dir)), get_file_stat_identity(path)) for path in files]
+            logger.warning("maib-fetch Step 1/6: 曲库为空，忽略 stat 缓存并重新解析现有谱面")
 
     logger.debug(f"maib-fetch Step 1/6: 找到 {len(files)} 个谱面文件")
     logger.info(

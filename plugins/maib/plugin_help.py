@@ -27,10 +27,12 @@ LyraHELP | maib (小梨音游核心)
    完成率可以使用“鸟家”“sss+”等表达方式
 
 【lyra-sync】
-1. 私聊发送 JSON 文件
-   通过 lyra-sync 获取 JSON 后，私聊发送进行解析
+1. 私聊发送 JSON / gzip 备份文件
+   通过 lyra-sync 获取 JSON 或 v0.3.0 压缩备份后，私聊发送进行解析
 2. 私聊发送「获取同步码」
-   获取 lyra-sync 的同步 code
+   获取在线同步配对码 `maisync3:...`，5 分钟内一次性有效
+3. 用户脚本可配置在线上传
+   在脚本“更多”中填写服务器地址并查看当前绑定/网络信息
 
 【lyra-link】
 1. 查询link

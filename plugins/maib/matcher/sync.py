@@ -157,6 +157,26 @@ async def sytb_handled(event: Event, matcher: Matcher, _i18n = i18n):
     await build_msg(matcher, event, payload, tag='finish')
 
 
+@get_sync_code.handle()
+async def get_sync_code_handled(event: Event, matcher: Matcher, _i18n = i18n):
+    i18n_data.set(_i18n)
+
+    try:
+        maiuser = await get_maiuser(event)
+    except Exception as e:
+        await matcher.finish(str(e))
+        return
+
+    issue = await services.create_pairing_code(maiuser.user_id)
+    expires_text = issue.expires_at.strftime("%Y-%m-%d %H:%M:%S")
+    await matcher.finish(
+        "在线同步配对码如下，5 分钟内仅可使用一次。\n"
+        "重新获取同步码会立即使旧 token 失效。\n\n"
+        f"{issue.code}\n\n"
+        f"过期时间：{expires_text}"
+    )
+
+
 # --- JP 更新线路 ---
 
 @file_receiver.handle()

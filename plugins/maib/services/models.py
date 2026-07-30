@@ -8,7 +8,7 @@ from typing import Any, Literal, Optional
 
 from nonebot_plugin_datastore import get_plugin_data
 from nonebot_plugin_localstore import get_plugin_data_dir
-from sqlalchemy import String, Integer, Float, BigInteger, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import String, Integer, Float, BigInteger, DateTime, ForeignKey, UniqueConstraint, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from .. import utils
@@ -23,6 +23,8 @@ __all__ = [
     "MaiUser",
     "MaiRecord",
     "MaiIDMap",
+    "MaiSyncPairingCode",
+    "MaiSyncToken",
 ]
 
 Model = get_plugin_data().Model
@@ -409,8 +411,6 @@ class MaiUser(Model):
     cn_dxra_b15_max: Mapped[int] = mapped_column(default=0)
     cn_dxra_b15_min: Mapped[int] = mapped_column(default=0)
 
-    # lyra-sync 字段: 在可以使用 sync-hash 验证身份并同步成绩。
-    maisync_hash: Mapped[Optional[str]] = mapped_column(default=None, nullable=True)
     # Diving-Fish 字段: 通过水鱼获取到的数据的 hash 确认是否为最新数据，已经最新就直接跳过更新.
     last_sy_hash: Mapped[Optional[str]] = mapped_column(default=None, nullable=True)
 
@@ -454,7 +454,6 @@ class MaiUser(Model):
             cn_dxra_b15_total=cn_data.b15.total,
             cn_dxra_b15_max=cn_data.b15.max,
             cn_dxra_b15_min=cn_data.b15.min,
-            maisync_hash=_get(source, "maisync_hash"),
             last_sy_hash=_get(source, "last_sy_hash"),
         )
 
@@ -514,6 +513,51 @@ class MaiRecord(Model):
 
     @validates("play_time", "update_time")
     def _validate_datetimes(self, _key: str, value: datetime | int | float | None) -> datetime:
+        return _as_datetime(value)
+
+
+class MaiSyncPairingCode(Model):
+    """maimai 在线同步一次性配对码"""
+
+    __tablename__ = "maib_maisync_pairing_codes"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    code_hash: Mapped[str] = mapped_column(String(64), index=True, unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), default=None, nullable=True)
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False)
+    create_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.now)
+
+    @validates("expires_at", "used_at", "create_time")
+    def _validate_datetimes(self, _key: str, value: datetime | int | float | None) -> Optional[datetime]:
+        if value is None:
+            return None
+        return _as_datetime(value)
+
+
+class MaiSyncToken(Model):
+    """maimai 在线同步访问令牌（每用户单设备）"""
+
+    __tablename__ = "maib_maisync_tokens"
+    __table_args__ = (
+        UniqueConstraint("user_id"),
+        UniqueConstraint("token_hash"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), index=True)
+    device_id: Mapped[str] = mapped_column(String(64), default="")
+    device_name: Mapped[str] = mapped_column(String(128), default="")
+    create_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.now)
+    last_used_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.now)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), default=None, nullable=True)
+
+    @validates("create_time", "last_used_at", "revoked_at")
+    def _validate_datetimes(self, _key: str, value: datetime | int | float | None) -> Optional[datetime]:
+        if value is None:
+            return None
         return _as_datetime(value)
 
 

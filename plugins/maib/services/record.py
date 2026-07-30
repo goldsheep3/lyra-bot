@@ -10,12 +10,13 @@ from .. import utils
 from ..constants import server as Server
 from . import execute_func
 from .minfo import get_mdt
-from .models import MaiRecord
+from .models import MaiData, MaiRecord
 
 
 __all__ = [
     "add_record_batch",
     "get_record_achs",
+    "backfill_record_shortids",
 ]
 
 
@@ -185,3 +186,34 @@ async def get_record_achs(
         return list(merged.values())
 
     return await execute_func.select(_query, session=session)
+
+
+async def backfill_record_shortids(
+    *,
+    session: Optional[AsyncSession] = None,
+) -> dict[int, set[_RecordKey]]:
+    """为曲库已收录的历史记录补填 shortid，并按用户返回受影响谱面。"""
+
+    async def _action(session: AsyncSession) -> dict[int, set[_RecordKey]]:
+        unresolved = (
+            await session.execute(
+                select(MaiRecord).where(MaiRecord.shortid.is_(None))
+            )
+        ).scalars().all()
+        if not unresolved:
+            return {}
+
+        songs = (await session.execute(select(MaiData))).scalars().all()
+        song_map = {(song.title, song.cabinet): song.shortid for song in songs}
+        affected: dict[int, set[_RecordKey]] = {}
+        for record in unresolved:
+            shortid = song_map.get((record.title, record.cabinet))
+            if shortid is None:
+                continue
+            record.shortid = shortid
+            affected.setdefault(record.user_id, set()).add(
+                (shortid, record.difficulty, record.server)
+            )
+        return affected
+
+    return await execute_func.action(_action, session=session)

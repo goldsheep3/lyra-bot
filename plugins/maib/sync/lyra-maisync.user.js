@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         Lyra Mai Sync (Beta)
-// @description  用于捕获「电棍」版本的舞萌数据 - 重构版 [RC]
-// @version      0.3.0-rc3
+// @name         Lyra MaiSync V3
+// @description  用于捕获「电棍」版本的舞萌数据
+// @version      0.3.0
 // @author       GoldSheep3 with Gemini
 // @match        https://*/maimai/music
 // @match        https://*/maimai/music?*
@@ -9,15 +9,13 @@
 // @downloadURL  https://github.com/goldsheep3/lyra-bot/raw/refs/heads/main/plugins/maib/sync/lyra-maisync.user.js
 // @grant        GM_setValue
 // @grant        GM_getValue
-// @grant        GM_deleteValue
-// @grant        GM_download
 // @require      https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js
 // ==/UserScript==
 
 // =============== 🔧 配置区域 (可修改) ===============
 const CONFIG = {
     // 调试模式: true=显示日志, false=静默运行
-    DEBUG: true,
+    DEBUG: false,
     
     /**
      * 脚本版本号
@@ -28,6 +26,10 @@ const CONFIG = {
     
     // 存储键名
     STORE_KEY: 'lyra_mai_multistore',
+    ACCESS_TOKEN_KEY: 'lyra_mai_access_token',
+    DEVICE_ID_KEY: 'lyra_mai_device_id',
+    API_BASE_KEY: 'lyra_mai_api_base',
+    DEFAULT_API_BASE: '',
     
     // 目标 ID 范围
     ID_MIN: 1,
@@ -38,6 +40,7 @@ const CONFIG = {
     TIMEOUT_PAGE: 6000,        // 页面切换等待
     TIMEOUT_VERIFY: 3000,      // 页面验证等待
     TIMEOUT_STORAGE: 2000,     // 存储验证等待
+    TIMEOUT_API: 20000,        // 在线接口超时
     
     // 滚动参数
     SCROLL_STEP: 1500,         // 每次滚动像素
@@ -70,8 +73,8 @@ const CONFIG = {
     
     // 导出文件名模板
     EXPORT_NAMES: {
-        DXRATING: (id) => `lyra-dxrating-import-id${id}.json`,
-        GZIP_BASE64: (id) => `lyra-maisync-data-id${id}.json.gz.b64`,
+        DXRATING: (id) => `maisync-dxrating-import-id${id}.json`,
+        GZIP_BASE64: (id) => `maisync-data-id${id}.json.gz.b64`,
     },
 };
 
@@ -81,8 +84,8 @@ const CONFIG = {
     'use strict';
 
     // 从 CONFIG 解构常用项
-    const { DEBUG, VERSION, STORE_KEY, ID_MIN, ID_MAX, TIMEOUT_SCROLL, TIMEOUT_PAGE, 
-            TIMEOUT_VERIFY, TIMEOUT_STORAGE, SCROLL_STEP, SCROLL_INTERVAL, SCROLL_STABLE_COUNT, 
+    const { DEBUG, VERSION, STORE_KEY, ACCESS_TOKEN_KEY, DEVICE_ID_KEY, API_BASE_KEY, DEFAULT_API_BASE, ID_MIN, ID_MAX, TIMEOUT_SCROLL, TIMEOUT_PAGE, 
+            TIMEOUT_VERIFY, TIMEOUT_STORAGE, TIMEOUT_API, SCROLL_STEP, SCROLL_INTERVAL, SCROLL_STABLE_COUNT, 
             STYLES, COLORS, EXPORT_NAMES } = CONFIG;
 
     // 导出文件头部标识，用于区分 lyra-maisync 导出的 gzip base64 文件，内含脚本版本号
@@ -421,6 +424,104 @@ const CONFIG = {
         return records;
     };
 
+
+    const normalizeApiBase = (value) => String(value || '').trim().replace(/\/+$/, '');
+    const getApiBase = () => normalizeApiBase(GM_getValue(API_BASE_KEY, DEFAULT_API_BASE));
+    const setApiBase = (value) => GM_setValue(API_BASE_KEY, normalizeApiBase(value));
+    const getAccessToken = () => String(GM_getValue(ACCESS_TOKEN_KEY, '') || '').trim();
+    const clearAccessToken = () => GM_deleteValue(ACCESS_TOKEN_KEY);
+
+    const ensureDeviceId = () => {
+        let deviceId = String(GM_getValue(DEVICE_ID_KEY, '') || '').trim();
+        if (!deviceId) {
+            deviceId = (window.crypto?.randomUUID?.() || `lyra-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
+            GM_setValue(DEVICE_ID_KEY, deviceId);
+        }
+        return deviceId;
+    };
+
+    const buildCompressedPayload = (records) => {
+        const backupRecords = stripSheetIdForBackup(records);
+        const json = JSON.stringify(backupRecords);
+        const gzipped = pako.gzip(json, { level: 9 });
+        LOG('📦 原始大小:', json.length, '→ 压缩后:', gzipped.length, `(${Math.round(gzipped.length / Math.max(json.length, 1) * 100)}%)`);
+
+        let binary = '';
+        for (let i = 0; i < gzipped.length; i++) {
+            binary += String.fromCharCode(gzipped[i]);
+        }
+        return MAI_SYNC_DESC_HEADER + btoa(binary);
+    };
+
+    const ensureBound = async () => {
+        const apiBase = getApiBase();
+        if (!apiBase) throw new Error('请先在【更多 → 在线上传网络信息】中填写 API 地址');
+
+        let token = getAccessToken();
+        if (token) return token;
+
+        const code = prompt('请输入 Bot 提供的同步码（形如 maisync3:xxxxxxxxxxxx）');
+        if (!code) throw new Error('已取消绑定');
+
+        const deviceId = ensureDeviceId();
+        const res = await fetch(`${apiBase}/api/pair`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+                code: code.trim(),
+                device_id: deviceId,
+                device_name: navigator.userAgent.slice(0, 120),
+            }),
+        });
+
+        if (!res.ok) {
+            const text = await res.text();
+            throw new Error(`绑定失败 (${res.status}): ${text}`);
+        }
+
+        const data = await res.json();
+        token = String(data?.access_token || '').trim();
+        if (!token) throw new Error('服务端未返回 access_token');
+        GM_setValue(ACCESS_TOKEN_KEY, token);
+        return token;
+    };
+
+    const uploadCurrentData = async () => {
+        const apiBase = getApiBase();
+        if (!apiBase) throw new Error('请先配置 API 地址');
+
+        const records = getCurrentArray();
+        if (!records.length) throw new Error('当前 ID 没有可上传的数据');
+
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), TIMEOUT_API);
+        try {
+            const token = await ensureBound();
+            const payload = buildCompressedPayload(records);
+            const res = await fetch(`${apiBase}/api/upload`, {
+                method: 'POST',
+                headers: {
+                    'content-type': 'application/json',
+                    'authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify({ payload }),
+                signal: controller.signal,
+            });
+
+            if (res.status === 401) {
+                clearAccessToken();
+                throw new Error('令牌失效，请重新绑定');
+            }
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error(`上传失败 (${res.status}): ${text}`);
+            }
+            return await res.json();
+        } finally {
+            clearTimeout(timer);
+        }
+    };
+
     /**
      * 加载存储数据
      * @return {void}
@@ -547,6 +648,7 @@ const CONFIG = {
         moreMenu.style = "position:absolute;bottom:calc(100% + 8px);right:0;background:#fff;padding:8px;border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,0.18);display:none;flex-direction:column;gap:6px;min-width:140px;z-index:10001;";
         moreMenu.innerHTML = `
             <button style="${STYLES.BTN_SM}background:${COLORS.DX};text-align:left;">📖 使用说明</button>
+            <button id="lyra-more-network" style="${STYLES.BTN_SM}background:${COLORS.MORE};text-align:left;">🌐 在线上传网络信息</button>
             <button id="lyra-more-import" style="${STYLES.BTN_SM}background:${COLORS.GZIP};text-align:left;">📥 导入数据</button>
             <button id="lyra-more-clear" style="${STYLES.BTN_SM}background:${COLORS.CLEAR};text-align:left;">🗑️ 清除数据</button>
         `;
@@ -707,7 +809,7 @@ const CONFIG = {
                 <div style="display:flex;flex-direction:column;gap:8px;">
                     <button id="lyra-exp-dx" style="${STYLES.BTN}background:${COLORS.DX};text-align:left;">📊 dxrating.net 导入</button>
                     <button id="lyra-exp-gz" style="${STYLES.BTN}background:${COLORS.GZIP};text-align:left;">🗜️ gzip 压缩备份</button>
-                    <button id="lyra-exp-up" style="${STYLES.BTN}background:${COLORS.MORE};text-align:left;opacity:0.7;" disabled>☁️ 在线上传 (预留)</button>
+                    <button id="lyra-exp-up" style="${STYLES.BTN}background:${COLORS.MORE};text-align:left;">☁️ 在线上传</button>
                     <button id="lyra-exp-cancel" style="${STYLES.BTN}background:${COLORS.CANCEL};">取消</button>
                 </div>
             </div>`;
@@ -755,6 +857,22 @@ const CONFIG = {
             cleanup();
         });
         
+        document.getElementById('lyra-exp-up')?.addEventListener('click', async () => {
+            LOG('☁️ 在线上传当前数据');
+            try {
+                const result = await uploadCurrentData();
+                alert(`在线上传成功!
+📊 已接收 ${result.received} 条
+✅ 解析 ${result.parsed} 条
+🆕 新增 ${result.new_song_count} 条
+🔄 更新 ${result.updated_song_count} 条`);
+            } catch (e) {
+                ERR('在线上传异常:', e);
+                alert('在线上传失败: ' + e.message);
+            }
+            cleanup();
+        });
+
         document.getElementById('lyra-exp-cancel')?.addEventListener('click', cleanup);
         m.addEventListener('click', e => { if (e.target === m) cleanup(); });
     };
@@ -780,6 +898,54 @@ const CONFIG = {
         }
     };
 
+
+    /**
+     * *[UI]* 在线上传网络信息
+     */
+    const showNetworkInfo = () => {
+        const m = document.createElement('div'); m.style = STYLES.MODAL_BG;
+        const currentApiBase = getApiBase();
+        const token = getAccessToken();
+        const deviceId = ensureDeviceId();
+        m.innerHTML = `
+            <div style="${STYLES.MODAL_BOX}">
+                <h4 style="margin:0 0 12px;">在线上传网络信息</h4>
+                <p style="margin:0 0 10px;color:#666;font-size:13px;line-height:1.6;">
+                    API 地址填写到站点根路径，例如 https://example.com 。<br>
+                    首次在线上传时会要求输入 Bot 提供的同步码。
+                </p>
+                <div style="display:flex;flex-direction:column;gap:8px;">
+                    <label style="font-size:13px;color:#444;">API Base</label>
+                    <input id="lyra-net-api" type="text" value="${currentApiBase}" placeholder="https://example.com" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+                    <div style="font-size:12px;color:#666;line-height:1.6;">
+                        <div>绑定状态: <strong>${token ? '已绑定' : '未绑定'}</strong></div>
+                        <div>Device ID: <code>${deviceId}</code></div>
+                    </div>
+                </div>
+                <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:14px;">
+                    <button id="lyra-net-clear-token" style="${STYLES.BTN}background:${COLORS.CLEAR};">清除 Token</button>
+                    <button id="lyra-net-save" style="${STYLES.BTN}background:${COLORS.CONFIRM};">保存</button>
+                    <button id="lyra-net-close" style="${STYLES.BTN}background:${COLORS.CANCEL};">关闭</button>
+                </div>
+            </div>`;
+        document.body.appendChild(m);
+        const cleanup = () => m.remove();
+
+        document.getElementById('lyra-net-save')?.addEventListener('click', () => {
+            const value = document.getElementById('lyra-net-api').value;
+            setApiBase(value);
+            alert(`已保存 API 地址: ${getApiBase() || '(空)'}`);
+            cleanup();
+        });
+        document.getElementById('lyra-net-clear-token')?.addEventListener('click', () => {
+            clearAccessToken();
+            alert('本地 access_token 已清除，下次在线上传会重新绑定');
+            cleanup();
+        });
+        document.getElementById('lyra-net-close')?.addEventListener('click', cleanup);
+        m.addEventListener('click', e => { if (e.target === m) cleanup(); });
+    };
+
     /**
      * *[UI]* 更多 - 使用说明
      */
@@ -793,10 +959,11 @@ const CONFIG = {
                     <li>history 支持【下一页】继续，best 为单页捕获</li>
                     <li>best 的 play_time 使用当前捕获时间</li>
                     <li>记录元素新增 type 字段：history 或 best</li>
-                    <li>【导出】支持 dxrating 格式 / gzip 压缩备份</li>
+                    <li>【导出】支持 dxrating 格式 / gzip 压缩备份 / 在线上传</li>
                     <li>dxrating 导出会自动去重，相同曲目取最高达成率</li>
-                    <li>gzip 备份使用 pako 库压缩，体积更小，文件名为 .b64 后缀</li>
+                    <li>gzip 备份与在线上传都使用带描述头的 Base64 压缩载荷</li>
                     <li>导入 gzip 备份时，请先移除文件名末尾的 .b64</li>
+                    <li>在线上传前，请先在【更多】中填写 API 地址</li>
                 </ul>
                 <button onclick="this.closest('.lyra-modal')?.remove()" style="${STYLES.BTN}background:${COLORS.CONFIRM};width:100%;">知道了</button>
             </div>`;
@@ -887,6 +1054,7 @@ const CONFIG = {
         setTimeout(() => {
             document.getElementById('lyra-more-import')?.addEventListener('click', (e) => { e.stopPropagation(); showImportHint(); });
             document.getElementById('lyra-more-clear')?.addEventListener('click', (e) => { e.stopPropagation(); showClearConfirm(); });
+            document.getElementById('lyra-more-network')?.addEventListener('click', (e) => { e.stopPropagation(); showNetworkInfo(); });
             document.querySelector('#lyra-panel button:first-of-type + button + button + div button:first-of-type')?.addEventListener('click', (e) => { e.stopPropagation(); showUsage(); });
         }, 100);
         LOG('✅ 初始化完成');
