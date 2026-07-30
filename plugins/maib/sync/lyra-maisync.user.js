@@ -1,8 +1,9 @@
 // ==UserScript==
 // @name         Lyra MaiSync V3
+// @namespace    https://github.com/goldsheep3/lyra-bot
 // @description  用于捕获「电棍」版本的舞萌数据
 // @version      0.3.0
-// @author       GoldSheep3 with Gemini
+// @author       GoldSheep3
 // @match        https://*/maimai/music
 // @match        https://*/maimai/music?*
 // @updateURL    https://github.com/goldsheep3/lyra-bot/raw/refs/heads/main/plugins/maib/sync/lyra-maisync.user.js
@@ -22,7 +23,7 @@ const CONFIG = {
      * 
      * 接受 `0-9a-z.-` 的版本号格式
      */
-    VERSION: '0.3.0-rc3',
+    VERSION: '0.3.0',
     
     // 存储键名
     STORE_KEY: 'lyra_mai_multistore',
