@@ -24,11 +24,11 @@ __all__ = [
     "normalize_legacy_lyra_record",
     "build_legacy_lyra_ach_list",
     "LegacyLyraImportResult",
-    "LyraRecordV030",
-    "LyraRecordImportResultV030",
+    "LyraRecordV3",
+    "LyraRecordImportResultV3",
     "build_record_hash",
-    "normalize_lyra_record_v030",
-    "build_lyra_records_v030",
+    "normalize_lyra_record_v3",
+    "build_lyra_records_v3",
 ]
 
 
@@ -62,7 +62,7 @@ class LegacyLyraImportResult:
 
 
 @dataclass(slots=True)
-class LyraRecordV030:
+class LyraRecordV3:
     """v0.3.0 成绩记录的标准化结果。"""
 
     title: str
@@ -80,10 +80,10 @@ class LyraRecordV030:
 
 
 @dataclass(slots=True)
-class LyraRecordImportResultV030:
+class LyraRecordImportResultV3:
     """v0.3.0 成绩记录导入的解析结果。"""
 
-    records: list[LyraRecordV030] = field(default_factory=list)
+    records: list[LyraRecordV3] = field(default_factory=list)
     invalid_diff_items: list[str] = field(default_factory=list)
     parse_failed_items: list[str] = field(default_factory=list)
 
@@ -195,7 +195,7 @@ def build_record_hash(
     return hashlib.sha256(orjson.dumps(payload, option=orjson.OPT_SORT_KEYS)).hexdigest()
 
 
-def normalize_lyra_record_v030(record: Mapping[str, Any], *, user_id: int) -> LyraRecordV030:
+def normalize_lyra_record_v3(record: Mapping[str, Any], *, user_id: int) -> LyraRecordV3:
     title = str(record.get('title', '')).strip()
     if not title:
         raise ValueError('空标题记录')
@@ -215,7 +215,7 @@ def normalize_lyra_record_v030(record: Mapping[str, Any], *, user_id: int) -> Ly
     sync = SYNC_MAP.key(_normalize_sync_text(record.get('sync', ''))) or 0
     achievement = float(f"{float(record.get('achievement', 0)):.4f}")
 
-    return LyraRecordV030(
+    return LyraRecordV3(
         title=title,
         cabinet=cabinet,
         record_type=record_type,
@@ -258,16 +258,16 @@ def _append_unique(items: list[str], value: str) -> None:
         items.append(value)
 
 
-def build_lyra_records_v030(
+def build_lyra_records_v3(
     file_data: Sequence[Mapping[str, Any]],
     *,
     user_id: int,
-) -> LyraRecordImportResultV030:
-    result = LyraRecordImportResultV030()
+) -> LyraRecordImportResultV3:
+    result = LyraRecordImportResultV3()
 
     for record in file_data:
         try:
-            result.records.append(normalize_lyra_record_v030(record, user_id=user_id))
+            result.records.append(normalize_lyra_record_v3(record, user_id=user_id))
         except KeyError:
             if isinstance(record, Mapping):
                 _append_unique(result.invalid_diff_items, _format_invalid_diff_title(record))

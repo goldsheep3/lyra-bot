@@ -2,7 +2,7 @@
 // @name         Lyra MaiSync V3
 // @namespace    https://github.com/goldsheep3/lyra-bot
 // @description  用于捕获「电棍」版本的舞萌数据
-// @version      0.3.0
+// @version      0.3.1
 // @author       GoldSheep3
 // @match        https://*/maimai/music
 // @match        https://*/maimai/music?*
@@ -10,6 +10,9 @@
 // @downloadURL  https://github.com/goldsheep3/lyra-bot/raw/refs/heads/main/plugins/maib/sync/lyra-maisync.user.js
 // @grant        GM_setValue
 // @grant        GM_getValue
+// @grant        GM_deleteValue
+// @grant        GM_xmlhttpRequest
+// @connect      *
 // @require      https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js
 // ==/UserScript==
 
@@ -17,37 +20,37 @@
 const CONFIG = {
     // 调试模式: true=显示日志, false=静默运行
     DEBUG: false,
-    
+
     /**
      * 脚本版本号
      * 
      * 接受 `0-9a-z.-` 的版本号格式
      */
-    VERSION: '0.3.0',
-    
+    VERSION: '0.3.1',
+
     // 存储键名
     STORE_KEY: 'lyra_mai_multistore',
     ACCESS_TOKEN_KEY: 'lyra_mai_access_token',
     DEVICE_ID_KEY: 'lyra_mai_device_id',
     API_BASE_KEY: 'lyra_mai_api_base',
     DEFAULT_API_BASE: '',
-    
+
     // 目标 ID 范围
     ID_MIN: 1,
     ID_MAX: 99,
-    
+
     // 超时设置 (毫秒)
-    TIMEOUT_SCROLL: 4000,      // 滚动加载等待
-    TIMEOUT_PAGE: 6000,        // 页面切换等待
-    TIMEOUT_VERIFY: 3000,      // 页面验证等待
-    TIMEOUT_STORAGE: 2000,     // 存储验证等待
-    TIMEOUT_API: 20000,        // 在线接口超时
-    
+    TIMEOUT_SCROLL: 4000, // 滚动加载等待
+    TIMEOUT_PAGE: 6000, // 页面切换等待
+    TIMEOUT_VERIFY: 3000, // 页面验证等待
+    TIMEOUT_STORAGE: 2000, // 存储验证等待
+    TIMEOUT_API: 20000, // 在线接口超时
+
     // 滚动参数
-    SCROLL_STEP: 1500,         // 每次滚动像素
-    SCROLL_INTERVAL: 200,      // 滚动间隔毫秒
-    SCROLL_STABLE_COUNT: 2,    // 稳定判定次数
-    
+    SCROLL_STEP: 1500, // 每次滚动像素
+    SCROLL_INTERVAL: 200, // 滚动间隔毫秒
+    SCROLL_STABLE_COUNT: 2, // 稳定判定次数
+
     // UI 样式配置
     STYLES: {
         BTN: "padding:7px 14px;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;font-size:13px;transition:all 0.15s;",
@@ -57,21 +60,21 @@ const CONFIG = {
         MODAL_BOX: "background:#fff;padding:18px 22px;border-radius:14px;min-width:300px;max-width:460px;box-shadow:0 6px 24px rgba(0,0,0,0.22);",
         BADGE: "background:linear-gradient(135deg,#e84393,#fd79a8);color:#fff;padding:5px 10px;border-radius:8px;font-weight:800;font-size:13px;",
     },
-    
+
     // 按钮颜色配置
     COLORS: {
-        CATCH: '#00b8a9',      // 捕获按钮
-        EXPORT: '#3775de',     // 导出按钮
-        MORE: '#7f8c8d',       // 更多按钮
-        STOP: '#e74c3c',       // 停止按钮
-        NEXT: '#3498db',       // 下一页按钮
-        DX: '#34495e',         // dxrating 导出
-        GZIP: '#9b59b6',       // gzip 导出
-        CLEAR: '#e74c3c',      // 清除数据
-        CANCEL: '#95a5a6',     // 取消按钮
-        CONFIRM: '#27ae60',    // 确认按钮
+        CATCH: '#00b8a9', // 捕获按钮
+        EXPORT: '#3775de', // 导出按钮
+        MORE: '#7f8c8d', // 更多按钮
+        STOP: '#e74c3c', // 停止按钮
+        NEXT: '#3498db', // 下一页按钮
+        DX: '#34495e', // dxrating 导出
+        GZIP: '#9b59b6', // gzip 导出
+        CLEAR: '#e74c3c', // 清除数据
+        CANCEL: '#95a5a6', // 取消按钮
+        CONFIRM: '#27ae60', // 确认按钮
     },
-    
+
     // 导出文件名模板
     EXPORT_NAMES: {
         DXRATING: (id) => `maisync-dxrating-import-id${id}.json`,
@@ -91,10 +94,10 @@ const CONFIG = {
 
     // 导出文件头部标识，用于区分 lyra-maisync 导出的 gzip base64 文件，内含脚本版本号
     const MAI_SYNC_DESC_HEADER = `lyra_maisync:json.gz.base64:v${VERSION};`;
-    
-    const LOG = (...args) => { if (DEBUG) console.log('[LyraMai]', ...args); };
-    const WARN = (...args) => console.warn('[LyraMai⚠️]', ...args);
-    const ERR = (...args) => console.error('[LyraMai❌]', ...args);
+
+    const LOG = (...args) => { if (DEBUG) console.log('[maisync]', ...args); };
+    const WARN = (...args) => console.warn('[maisync⚠️]', ...args);
+    const ERR = (...args) => console.error('[maisync❌]', ...args);
 
     const multiDataStore = {};
     let currentTargetId = 1;
@@ -432,6 +435,40 @@ const CONFIG = {
     const getAccessToken = () => String(GM_getValue(ACCESS_TOKEN_KEY, '') || '').trim();
     const clearAccessToken = () => GM_deleteValue(ACCESS_TOKEN_KEY);
 
+    /**
+     * 通过篡改猴扩展上下文请求 API，避免页面本身的 CORS 与 Mixed Content 限制。
+     * @param {string} apiBase API 基址
+     * @param {string} path API 路径
+     * @param {object} options 请求选项
+     * @return {Promise<{status: number, text: string, data: unknown}>}
+     */
+    const requestApi = (apiBase, path, { method = 'GET', headers = {}, body } = {}) => new Promise((resolve, reject) => {
+        GM_xmlhttpRequest({
+            method,
+            url: `${apiBase}${path}`,
+            headers: {
+                accept: 'application/json',
+                ...headers,
+            },
+            data: body === undefined ? undefined : JSON.stringify(body),
+            timeout: TIMEOUT_API,
+            onload: (response) => {
+                const text = response.responseText || '';
+                let data = null;
+                if (text) {
+                    try {
+                        data = JSON.parse(text);
+                    } catch {
+                        // 非 JSON 错误响应仍交由调用方带状态码展示。
+                    }
+                }
+                resolve({ status: response.status, text, data });
+            },
+            onerror: () => reject(new Error('API 网络请求失败')),
+            ontimeout: () => reject(new Error(`API 请求超时（${Math.ceil(TIMEOUT_API / 1000)} 秒）`)),
+        });
+    });
+
     const ensureDeviceId = () => {
         let deviceId = String(GM_getValue(DEVICE_ID_KEY, '') || '').trim();
         if (!deviceId) {
@@ -465,22 +502,21 @@ const CONFIG = {
         if (!code) throw new Error('已取消绑定');
 
         const deviceId = ensureDeviceId();
-        const res = await fetch(`${apiBase}/api/pair`, {
+        const res = await requestApi(apiBase, '/api/pair', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({
+            body: {
                 code: code.trim(),
                 device_id: deviceId,
                 device_name: navigator.userAgent.slice(0, 120),
-            }),
+            },
         });
 
-        if (!res.ok) {
-            const text = await res.text();
-            throw new Error(`绑定失败 (${res.status}): ${text}`);
+        if (res.status < 200 || res.status >= 300) {
+            throw new Error(`绑定失败 (${res.status}): ${res.text}`);
         }
 
-        const data = await res.json();
+        const data = res.data;
         token = String(data?.access_token || '').trim();
         if (!token) throw new Error('服务端未返回 access_token');
         GM_setValue(ACCESS_TOKEN_KEY, token);
@@ -494,33 +530,25 @@ const CONFIG = {
         const records = getCurrentArray();
         if (!records.length) throw new Error('当前 ID 没有可上传的数据');
 
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), TIMEOUT_API);
-        try {
-            const token = await ensureBound();
-            const payload = buildCompressedPayload(records);
-            const res = await fetch(`${apiBase}/api/upload`, {
-                method: 'POST',
-                headers: {
-                    'content-type': 'application/json',
-                    'authorization': `Bearer ${token}`,
-                },
-                body: JSON.stringify({ payload }),
-                signal: controller.signal,
-            });
+        const token = await ensureBound();
+        const payload = buildCompressedPayload(records);
+        const res = await requestApi(apiBase, '/api/upload', {
+            method: 'POST',
+            headers: {
+                'content-type': 'application/json',
+                'authorization': `Bearer ${token}`,
+            },
+            body: { payload },
+        });
 
-            if (res.status === 401) {
-                clearAccessToken();
-                throw new Error('令牌失效，请重新绑定');
-            }
-            if (!res.ok) {
-                const text = await res.text();
-                throw new Error(`上传失败 (${res.status}): ${text}`);
-            }
-            return await res.json();
-        } finally {
-            clearTimeout(timer);
+        if (res.status === 401) {
+            clearAccessToken();
+            throw new Error('令牌失效，请重新绑定');
         }
+        if (res.status < 200 || res.status >= 300) {
+            throw new Error(`上传失败 (${res.status}): ${res.text}`);
+        }
+        return { ...res.data, queuedRecords: records.length };
     };
 
     /**
@@ -632,19 +660,19 @@ const CONFIG = {
     const createPanel = () => {
         if (document.getElementById('lyra-panel')) return;
         const p = document.createElement('div'); p.id = 'lyra-panel'; p.style = STYLES.PANEL;
-        
+
         const badge = document.createElement('div'); badge.innerText = 'mai'; badge.style = STYLES.BADGE; p.appendChild(badge);
-        
+
         const btnCatch = document.createElement('button'); btnCatch.innerText = '捕获'; btnCatch.style = STYLES.BTN + `background:${COLORS.CATCH};`;
         btnCatch.onclick = () => showIdModal(true); p.appendChild(btnCatch);
-        
+
         const btnExport = document.createElement('button'); btnExport.innerText = '导出'; btnExport.style = STYLES.BTN + `background:${COLORS.EXPORT};`;
         btnExport.onclick = () => showExportModal(); p.appendChild(btnExport);
-        
+
         const btnMore = document.createElement('button'); btnMore.innerText = '更多'; btnMore.style = STYLES.BTN + `background:${COLORS.MORE};`;
         btnMore.onclick = (e) => { e.stopPropagation(); toggleMoreMenu(moreMenu); };
         p.appendChild(btnMore);
-        
+
         const moreMenu = document.createElement('div');
         moreMenu.style = "position:absolute;bottom:calc(100% + 8px);right:0;background:#fff;padding:8px;border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,0.18);display:none;flex-direction:column;gap:6px;min-width:140px;z-index:10001;";
         moreMenu.innerHTML = `
@@ -655,7 +683,7 @@ const CONFIG = {
         `;
         p.appendChild(moreMenu);
         document.addEventListener('click', () => { moreMenu.style.display = 'none'; });
-        
+
         document.body.appendChild(p);
     };
 
@@ -816,7 +844,7 @@ const CONFIG = {
             </div>`;
         document.body.appendChild(m);
         const cleanup = () => m.remove();
-        
+
         document.getElementById('lyra-exp-dx')?.addEventListener('click', () => {
             LOG('📊 导出 dxrating 格式');
             const deduped = dedupeForDXRating(getCurrentArray());
@@ -824,7 +852,7 @@ const CONFIG = {
             LOG('📦 导出数据预览:', arr.slice(0, 3));
             download(EXPORT_NAMES.DXRATING(currentTargetId), JSON.stringify(arr, null, 2)); cleanup();
         });
-        
+
         // gzip 导出使用 Base64+普通下载，兼容所有浏览器
         document.getElementById('lyra-exp-gz')?.addEventListener('click', async () => {
             LOG('🗜️ 导出 gzip 压缩格式');
@@ -833,7 +861,7 @@ const CONFIG = {
                 const json = JSON.stringify(backupRecords);
                 const gzipped = pako.gzip(json, { level: 9 });
                 LOG('📦 原始大小:', json.length, '→ 压缩后:', gzipped.length, `(${Math.round(gzipped.length/json.length*100)}%)`);
-                
+
                 // Uint8Array → Binary String → Base64
                 let binary = '';
                 for (let i = 0; i < gzipped.length; i++) {
@@ -857,16 +885,14 @@ const CONFIG = {
             }
             cleanup();
         });
-        
+
         document.getElementById('lyra-exp-up')?.addEventListener('click', async () => {
             LOG('☁️ 在线上传当前数据');
             try {
                 const result = await uploadCurrentData();
-                alert(`在线上传成功!
-📊 已接收 ${result.received} 条
-✅ 解析 ${result.parsed} 条
-🆕 新增 ${result.new_song_count} 条
-🔄 更新 ${result.updated_song_count} 条`);
+                alert(`在线上传已受理!
+📊 已提交 ${result.queuedRecords} 条
+⌛ 服务端正在后台解析、写入成绩并更新 DX Rating`);
             } catch (e) {
                 ERR('在线上传异常:', e);
                 alert('在线上传失败: ' + e.message);
@@ -996,7 +1022,7 @@ const CONFIG = {
                 </div>
             </div>`;
         document.body.appendChild(m);
-        
+
         const countEl = document.getElementById('lyra-clear-count');
         const inp = document.getElementById('lyra-clear-inp');
         const updateCount = () => {
@@ -1012,13 +1038,13 @@ const CONFIG = {
         };
         inp.addEventListener('input', updateCount);
         inp.addEventListener('change', updateCount);
-        
+
         const cleanup = () => {
             inp.removeEventListener('input', updateCount);
             inp.removeEventListener('change', updateCount);
             m.remove();
         };
-        
+
         document.getElementById('lyra-clear-do')?.addEventListener('click', () => {
             const id = parseInt(document.getElementById('lyra-clear-inp').value);
             LOG('🔢 用户输入清除 ID:', id);

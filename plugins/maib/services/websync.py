@@ -5,7 +5,7 @@ import hashlib
 import secrets
 import string
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy import select
@@ -103,7 +103,7 @@ async def create_pairing_code(
     async def _action(session: AsyncSession) -> PairingCodeIssueResult:
         await check_mu(user_id, session=session)
 
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         expires_at = now + timedelta(seconds=ttl_seconds)
 
         existing_codes = (
@@ -159,7 +159,7 @@ async def exchange_pairing_code(
     code_hash = _hash_text(normalized_code)
 
     async def _action(session: AsyncSession) -> tuple[int, str]:
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         pairing = (
             await session.execute(
                 select(MaiSyncPairingCode).where(MaiSyncPairingCode.code_hash == code_hash)
@@ -240,7 +240,7 @@ async def authenticate_access_token(
         if token is None or token.revoked_at is not None:
             raise AccessTokenError("invalid_token")
 
-        token.last_used_at = datetime.now()
+        token.last_used_at = datetime.now(timezone.utc)
         return token.user_id
 
     return await execute_func.action(_action, session=session)

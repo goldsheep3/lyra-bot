@@ -18,7 +18,7 @@ from nonebot.adapters.telegram.event import PrivateMessageEvent as TGPrivateMess
 
 from .. import config, utils, services, image_gen, network
 from ..utils.report import MaiChartAchDiffReport, build_diff_report
-from ..utils.sync import build_legacy_lyra_ach_list, build_lyra_records_v030, parse_lyra_maisync_data
+from ..utils.sync import build_legacy_lyra_ach_list, build_lyra_records_v3, parse_lyra_maisync_data
 from . import i18n_data, i18n, reply, rule_is_private
 from .context import get_maiuser
 from .message import build_msg
@@ -309,18 +309,18 @@ async def file_receiver_handled(bot: Bot, event: Event, matcher: Matcher, _i18n 
         await build_msg(matcher, event, payload, tag='finish')
         return
 
-    if file_version.startswith("v0.3.0"):
+    if file_version.startswith("v0.3."):
         # v0.3.0 / *.json.gz.b64 版本的导入逻辑
-        await matcher.send("lyra-maisync v0.3.0 脚本数据导入中~请稍等片刻~")
+        await matcher.send("lyra-maisync3 脚本数据导入中~请稍等片刻~")
 
-        parsed_result = build_lyra_records_v030(file_data, user_id=user_id)
+        parsed_result = build_lyra_records_v3(file_data, user_id=user_id)
 
         try:
             record_keys, unmatched_items = await services.add_record_batch(user_id, parsed_result.records)
             ach_list = await services.get_record_achs(user_id, list(record_keys))
             report = await services.upd_ach_batch(user_id, ach_list) if ach_list else MaiChartAchDiffReport()
         except Exception as e:
-            logger.error(f"v0.3.0 成绩记录入库失败: {e}")
+            logger.error(f"成绩记录入库失败: {e}")
             await matcher.finish("同步到数据库时出错了……请联系监护人确认情况哦qwq")
             return
 

@@ -5,14 +5,13 @@ import time
 from collections import defaultdict, deque
 from typing import Optional
 
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from nonebot import get_app, logger
 
 from . import services
-from .utils.report import MaiChartAchDiffReport
-from .utils.sync import build_lyra_records_v030, parse_lyra_maisync_data
+from .utils.sync import build_lyra_records_v3, parse_lyra_maisync_data
 
 
 router = APIRouter(tags=["maib-sync"])
@@ -74,6 +73,32 @@ def _raise_pair_error(exc: Exception) -> None:
     raise HTTPException(status_code=400, detail="pairing_failed")
 
 
+async def _process_uploaded_payload(user_id: int, payload: str) -> None:
+    """在响应已返回后解析上传数据、写入记录并刷新派生成绩。"""
+    try:
+        file_data, file_version = parse_lyra_maisync_data(payload.encode("utf-8"))
+        if not isinstance(file_data, list) or len(file_data) == 0:
+            raise ValueError("empty_payload")
+        if not file_version.startswith("v0.3."):
+            raise ValueError(f"unsupported_version:{file_version}")
+
+        parsed_result = build_lyra_records_v3(file_data, user_id=user_id)
+        record_keys, unmatched_items = await services.add_record_batch(user_id, parsed_result.records)
+        ach_list = await services.get_record_achs(user_id, list(record_keys))
+        if ach_list:
+            await services.upd_ach_batch(user_id, ach_list)
+        logger.info(
+            "maib 在线同步后台处理完成: user_id=%s, received=%s, parsed=%s, affected=%s, unmatched=%s",
+            user_id,
+            len(file_data),
+            len(parsed_result.records),
+            len(record_keys),
+            len(unmatched_items),
+        )
+    except Exception:
+        logger.exception("maib 在线同步后台处理失败: user_id=%s", user_id)
+
+
 @router.post("/api/pair")
 async def pair_device(payload: PairRequest, request: Request) -> dict[str, str]:
     client_ip = _client_ip(request)
@@ -90,6 +115,7 @@ async def pair_device(payload: PairRequest, request: Request) -> dict[str, str]:
         )
     except Exception as exc:
         _raise_pair_error(exc)
+        return {}
 
     return {
         "access_token": access_token,
@@ -97,9 +123,10 @@ async def pair_device(payload: PairRequest, request: Request) -> dict[str, str]:
     }
 
 
-@router.post("/api/upload")
+@router.post("/api/upload", status_code=status.HTTP_202_ACCEPTED)
 async def upload_records(
     payload: UploadRequest,
+    background_tasks: BackgroundTasks,
     authorization: Optional[str] = Header(default=None),
 ) -> dict[str, object]:
     access_token = _extract_bearer_token(authorization)
@@ -108,46 +135,11 @@ async def upload_records(
     except services.AccessTokenError as exc:
         raise HTTPException(status_code=401, detail=str(exc) or "invalid_token") from exc
 
-    try:
-        file_data, file_version = parse_lyra_maisync_data(payload.payload.encode("utf-8"))
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"invalid_payload:{exc}") from exc
-
-    if not isinstance(file_data, list) or len(file_data) == 0:
-        raise HTTPException(status_code=400, detail="empty_payload")
-    if not file_version.startswith("v0.3.0"):
-        raise HTTPException(status_code=400, detail="unsupported_version")
-
-    parsed_result = build_lyra_records_v030(file_data, user_id=user_id)
-
-    try:
-        record_keys, unmatched_items = await services.add_record_batch(user_id, parsed_result.records)
-        ach_list = await services.get_record_achs(user_id, list(record_keys))
-        report = await services.upd_ach_batch(user_id, ach_list) if ach_list else MaiChartAchDiffReport()
-    except Exception as exc:
-        logger.exception("maib 在线同步上传失败")
-        raise HTTPException(status_code=500, detail="upload_failed") from exc
-
-    for title, difficulty in unmatched_items:
-        report.no_data_song.append((0, title, difficulty))
-    for title_diff in parsed_result.invalid_diff_items:
-        report.other_error_song.append({"type": "invalid_diff", "msg": title_diff})
-    for title_failed in parsed_result.parse_failed_items:
-        report.other_error_song.append({"type": "parse_failed", "msg": title_failed})
+    background_tasks.add_task(_process_uploaded_payload, user_id, payload.payload)
 
     return {
         "ok": True,
-        "version": file_version,
-        "received": len(file_data),
-        "parsed": len(parsed_result.records),
-        "records_affected": len(record_keys),
-        "has_changes": report.has_changes,
-        "new_song_count": len(report.new_song),
-        "updated_song_count": len(report.updated_song),
-        "no_update_song_count": report.no_update_song_count,
-        "unmatched_count": len(unmatched_items),
-        "invalid_diff_count": len(parsed_result.invalid_diff_items),
-        "parse_failed_count": len(parsed_result.parse_failed_items),
+        "processing": True,
     }
 
 

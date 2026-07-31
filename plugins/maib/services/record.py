@@ -53,7 +53,7 @@ async def _resolve_shortid(title: str, cabinet: str, *, session: AsyncSession) -
 
 async def add_record_batch(
     user_id: int,
-    records: Sequence[utils.sync.LyraRecordV030],
+    records: Sequence[utils.sync.LyraRecordV3],
     *,
     session: Optional[AsyncSession] = None,
 ) -> tuple[set[_RecordKey], list[tuple[str, int]]]:
