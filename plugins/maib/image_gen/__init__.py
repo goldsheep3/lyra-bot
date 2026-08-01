@@ -3,6 +3,7 @@ from .tools import get_image_bytes
 from .builder import (
     draw_info_box,
     draw_b50,
+    draw_grid_list,
     simple_list,
 )
 
@@ -13,5 +14,6 @@ __all__ = [
     # builder
     "draw_info_box",
     "draw_b50",
+    "draw_grid_list",
     "simple_list"
 ]

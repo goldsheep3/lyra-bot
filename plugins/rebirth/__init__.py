@@ -31,7 +31,7 @@ rebirth = on_regex(r"^投胎$", rule=to_me())
 
 @rebirth.handle()
 async def _(event: MessageEvent, matcher: Matcher):
-    # 获取基本信息S
+    # 获取基本信息
     user_id: int = event.user_id
     now_time: datetime = datetime.now()
     # 读取冷却配置

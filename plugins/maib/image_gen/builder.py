@@ -332,6 +332,82 @@ def draw_b50(b35_entries: list[tuple[MaiData, int]], b15_entries: list[tuple[Mai
     result_img.paste(board_last, (0, all_height_msed - board_last.height), board_last)
     return result_img.convert("RGB")
 
+def draw_grid_list(entries: list[tuple[MaiData, int]],
+                   *,
+                   dxrating: int, server: server,
+                   user_name: str, user_avatar: Optional[Union[bytes, Image.Image]] = None,
+                   update_time: str = "Unknown Update Time", line_width: int = 6,
+                   ms: MS = MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+    """绘制网格列表看板"""
+    margin = 10
+    temp_box = ImageUnit.mini_box(None, 0, "JP", ms=ms, cn_level=cn_level)
+    if isinstance(temp_box, tuple):
+        box_w, _ = temp_box
+    else:
+        w, h = temp_box.size
+        box_w, _ = round(ms.rev(w)), round(ms.rev(h))
+        temp_box.close()
+
+    inner_width = line_width * box_w + (line_width - 1) * 5
+    width = inner_width + margin * 2
+
+    board_title = _user_header_board(
+        inner_width=inner_width,
+        dxrating=dxrating,
+        server=server,
+        user_name=user_name,
+        user_avatar=user_avatar,
+        update_time=update_time,
+        ms=ms,
+        cn_level=cn_level,
+    )
+
+    shared_zip_handles: dict[Path, zipfile.ZipFile] = {}
+    try:
+        for maidata, _ in entries:
+            zip_path = maidata.zip_path
+            if zip_path and zip_path not in shared_zip_handles:
+                shared_zip_handles[zip_path] = zipfile.ZipFile(zip_path, "r")
+
+        grid_imgs = [
+            ImageUnit.b50_box(
+                maidata,
+                diff,
+                server,
+                0,
+                index,
+                False,
+                ms,
+                cn_level,
+                shared_zip=shared_zip_handles.get(maidata.zip_path) if maidata.zip_path else None,
+            )
+            for index, (maidata, diff) in enumerate(entries, start=1)
+        ]
+        grid_imgs = [img for img in grid_imgs if img is not None]
+        board_grid = _image_grid_board(grid_imgs, cols=line_width, gap=ms.x(5), skip_first=False, auto_close=True)
+    finally:
+        for zip_handle in shared_zip_handles.values():
+            zip_handle.close()
+
+    board_last = ImageUnit.copyright_bar(width=width, ms=ms, cn_level=cn_level)
+
+    boards = [board for board in (board_title, board_grid) if board is not None]
+    all_height_msed = ms.x(margin) * 2 + sum(b.height for b in boards) + ms.x(margin) * (len(boards) - 1) + board_last.height
+    result_img = Image.new("RGBA", (ms.x(width), all_height_msed), COLOR_THEME)
+
+    if bg_img := ImageManager.background(size=result_img.size):
+        result_img.paste(bg_img, (0, 0))
+
+    curr_y = ms.x(margin)
+    for board in boards:
+        result_img.paste(board, (ms.x(margin), curr_y), board)
+        curr_y += board.height + ms.x(margin)
+        board.close()
+
+    result_img.paste(board_last, (0, all_height_msed - board_last.height), board_last)
+    return result_img.convert("RGB")
+
+
 
 def simple_list(text: str) -> Image.Image:
     """生成一个简单的文本列表图。"""
