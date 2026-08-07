@@ -96,30 +96,59 @@ async def mai_what_song_handled(event: Event, matcher: Matcher, groups: tuple = 
         await matcher.finish(reply("info.found_none", keyword=keyword))
         return
 
-    def generate_single_info_box(mdt) -> bytes:
-        """生成单首乐曲的 info box 图片字节"""
+    def _inject_matched_alias(mdt, keyword: str) -> str | None:
+        """检查 ORM 对象的别名是否匹配关键词，返回匹配的别名或 None"""
+        kw_lower = keyword.lower()
+        if kw_lower == mdt.title.lower():
+            return None  # 标题本身匹配，不是别名匹配
+        for alias in mdt.aliases:
+            if kw_lower in alias.alias.lower() or alias.alias.lower() == kw_lower:
+                return alias.alias
+        return None
+
+    def generate_single_info_box(mdt, matched_alias: str | None = None) -> tuple[bytes, str | None]:
+        """生成单首乐曲的 info box 图片字节，返回 (图片字节, 别名匹配提示)"""
         maidata = mdt.to_utils(achs_user_id=qq)
+        if matched_alias:
+            maidata._matched_alias = matched_alias
         s = server if maidata.version_cn is not None else "JP"
         info_box = image_gen.draw_info_box(maidata, server=s, maiuser=maiuser, cn_level=1 if s == 'CN' else 0)
-        return image_gen.get_image_bytes(info_box)
+        info_bytes = image_gen.get_image_bytes(info_box)
+        alias_hint = f"（别名: {matched_alias}）" if matched_alias else None
+        return info_bytes, alias_hint
 
     # 输出结果
     payload = []
     
     if len(mdt_list) == 1:
         mdt = mdt_list[0]
+        matched_alias = _inject_matched_alias(mdt, keyword)
         payload.append(("text", reply("info.found_single", shortid=mdt.shortid, title=mdt.title)))
-        payload.append(("image", generate_single_info_box(mdt)))
+        img_bytes, alias_hint = generate_single_info_box(mdt, matched_alias)
+        payload.append(("image", img_bytes))
+        if alias_hint:
+            payload.append(("text", alias_hint))
 
     elif len(mdt_list) <= 4:
         payload.append(("text", reply("info.found_multiple", count=len(mdt_list))))
         for mdt in mdt_list:
-            payload.append(("image", generate_single_info_box(mdt)))
+            matched_alias = _inject_matched_alias(mdt, keyword)
+            img_bytes, alias_hint = generate_single_info_box(mdt, matched_alias)
+            payload.append(("image", img_bytes))
+            if alias_hint:
+                payload.append(("text", alias_hint))
 
     elif len(mdt_list) <= 40:
         # 结果大于 4 首，采用简要列表图承载
         # TODO 创建独立的列表图生成函数
-        img = image_gen.simple_list("\n".join([f"{maidata.shortid}.\t{maidata.title}" for maidata in mdt_list]))
+        lines = []
+        for mdt in mdt_list:
+            alias_hint = _inject_matched_alias(mdt, keyword)
+            if alias_hint:
+                lines.append(f"{mdt.shortid}.	{mdt.title} (别名: {alias_hint})")
+            else:
+                lines.append(f"{mdt.shortid}.	{mdt.title}")
+        img = image_gen.simple_list("\n".join(lines))
         
         img_bytes = image_gen.get_image_bytes(img)
         payload.append(("text", reply("info.found_many", count=len(mdt_list))))

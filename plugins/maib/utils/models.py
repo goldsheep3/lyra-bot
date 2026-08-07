@@ -209,6 +209,7 @@ class MaiData:
     img_path: Path
     zip_path: Optional[Path] = None
     _cached_image: Optional[Image.Image] = None
+    _matched_alias: Optional[str] = None  # 搜索时触发的别名缓存
     tg_file_id_cache: Optional[str] = None
     is_utage: bool = False
     utage_tag: str = ""
