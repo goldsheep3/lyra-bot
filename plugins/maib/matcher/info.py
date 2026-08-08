@@ -4,6 +4,7 @@ from nonebot import on_regex
 from nonebot.params import RegexGroup
 from nonebot.internal.matcher import Matcher
 from nonebot.adapters import Event
+from nonebot.adapters.onebot.v11 import Event as OneBotV11Event
 
 from .. import services, image_gen
 from ..utils import NoLinkQQError
@@ -40,9 +41,27 @@ async def mai_info_handled(event: Event, matcher: Matcher, groups: tuple = Regex
         await matcher.finish(str(e))
         return
     
-    _, server = get_args(args)
+    parsed_uid, server = get_args(args)
+    
+    # 检查消息中的 at 提醒，优先级高于文本传参
+    at_qq = None
+    if isinstance(event, OneBotV11Event):
+        for segment in event.get_message():
+            if segment.type == "at":
+                at_qq = int(segment.data["qq"])
+                break
+    if at_qq is not None:
+        parsed_uid = at_qq
     
     server = server if (server != 'ALL' and server is not None) else default_server  # 暂不支持 ALL
+    # 如果传入了目标用户 ID，则覆盖当前查询用户
+    if parsed_uid is not None:
+        qq = parsed_uid
+        # 同时获取目标用户的 MaiUser 信息
+        try:
+            maiuser = await get_maiuser(event, user_id=qq)
+        except (NoLinkQQError, ValueError):
+            maiuser = None
     # 查询乐曲信息
     mdt: Optional[services.MaiData] = await services.get_mdt.id(shortid, qq)
     if mdt is None:
