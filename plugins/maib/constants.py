@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping as ABCMapping
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone, timedelta, timezone
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Callable, Generic, Optional, TypeVar, Literal, Iterator, Union
 from pathlib import Path
@@ -37,7 +37,7 @@ __all__ = [
 # 服务器类型标识
 server = Literal["JP", "CN"]
 # 默认时间 (1970-11-01 00:00:00)
-DEFAULT_DATETIME = datetime(1970, 11, 1, 0, 0, 0)
+DEFAULT_DATETIME = datetime(1970, 11, 1, 0, 0, 0, tzinfo=timezone.utc)
 
 # --- 基础路径 ---
 PLUGIN_BASE_PATH = Path(__file__).parent
