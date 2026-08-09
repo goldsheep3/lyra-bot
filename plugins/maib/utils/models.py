@@ -181,9 +181,9 @@ class MaiChart:
 
     def get_dxrating(self, server: server = "JP", ap_bonus: int = 0) -> int:
         """根据成就率和定数计算 DX Rating"""
-        ach = self.get_ach(server).achievement
+        ach_obj = self.get_ach(server)
         level = self.lv_cn if server == "CN" and self.lv_cn is not None else self.lv
-        return get_dxrating(achievement=ach, level=level, ap_bonus=ap_bonus)
+        return get_dxrating(achievement=ach_obj.achievement, level=level, ap_bonus=ap_bonus, combo=ach_obj.combo)
 
     def set_notes(self, tap: int, hold: int, slide: int, touch: int, break_note: int):
         """根据参数设置谱面 Note 数量"""
