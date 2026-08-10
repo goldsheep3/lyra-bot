@@ -164,6 +164,8 @@ from . import dxrating_calc as _dxrating_calc_handlers
 from . import info as _info_handlers
 from . import info_list as _info_list_handlers
 from . import sync as _sync_handlers
+# maime - Aime 卡片绑定
+from . import maime as _maime_handlers
 
 # temp - 临时管理命令，可能随时移除
 from . import temp as _temp_handlers
