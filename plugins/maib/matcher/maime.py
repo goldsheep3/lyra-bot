@@ -74,7 +74,10 @@ async def maime_unlink_handled(event: Event, matcher: Matcher, groups: tuple = R
         await matcher.finish(reply("maime.unlink.error.not_owner"))
         return
 
-    await services.unlink_aime(access)
+    result = await services.unlink_aime(access)
+    if not result:
+        await matcher.finish(reply("maime.unlink.error.not_found"))
+        return
     await matcher.finish(reply("maime.unlink.success"))
 
 
