@@ -16,16 +16,16 @@ from .context import get_maiuser
 
 
 
-maime_link = on_regex(r'^绑定(aime|卡号)\s+(\d{16})$', priority=5, block=True)
+maime_link = on_regex(r'^绑定(aime|卡号|卡片)\s+(\d{20})$', priority=5, block=True)
 
-maime_unlink = on_regex(r'^解绑(aime|卡号)\s+(\d{16})$', priority=5, block=True)
+maime_unlink = on_regex(r'^解绑(aime|卡号|卡片)\s+(\d{20})$', priority=5, block=True)
 
-maime_lost = on_regex(r'^(挂失|捡到|拾获)(aime|卡号)\s+(\d{4}|\d{16})$', priority=5, block=True)
+maime_lost = on_regex(r'^(挂失|捡到|拾获)(aime|卡号|卡片)\s+(\d{4}|\d{20})$', priority=5, block=True)
 
 
 @maime_link.handle()
 async def maime_link_handled(event: Event, matcher: Matcher, groups: tuple = RegexGroup(), _i18n = i18n):
-    """处理命令: 绑定(aime|卡号) <aime卡号>"""
+    """处理命令: 绑定(aime|卡号|卡片) <aime卡号>"""
     i18n_data.set(_i18n)
     
     _, access = groups
@@ -53,7 +53,7 @@ async def maime_link_handled(event: Event, matcher: Matcher, groups: tuple = Reg
 
 @maime_unlink.handle()
 async def maime_unlink_handled(event: Event, matcher: Matcher, groups: tuple = RegexGroup(), _i18n = i18n):
-    """处理命令: 解绑(aime|卡号) <aime卡号>"""
+    """处理命令: 解绑(aime|卡号|卡片) <aime卡号>"""
     i18n_data.set(_i18n)
     
     _, access = groups
@@ -83,7 +83,7 @@ async def maime_unlink_handled(event: Event, matcher: Matcher, groups: tuple = R
 
 @maime_lost.handle()
 async def maime_lost_handled(event: Event, matcher: Matcher, groups: tuple = RegexGroup(), _i18n = i18n):
-    """处理命令: 拾获(aime|卡号) <aime卡号>"""
+    """处理命令: 拾获(aime|卡号|卡片) <aime卡号>"""
     i18n_data.set(_i18n)
     
     _, _, access = groups
