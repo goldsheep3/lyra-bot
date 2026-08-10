@@ -116,13 +116,14 @@ async def maime_lost_handled(event: Event, matcher: Matcher, groups: tuple = Reg
     return
 
 
-maime_list = on_regex(r'^查看卡片$', priority=5, block=True)
+maime_list = on_regex(r'^(查看卡片|查看完整卡片)$', priority=5, block=True)
 
 
 @maime_list.handle()
-async def maime_list_handled(event: Event, matcher: Matcher, _i18n = i18n):
+async def maime_list_handled(event: Event, matcher: Matcher, groups: tuple = RegexGroup(), _i18n = i18n):
     """处理命令: 查看卡片"""
     i18n_data.set(_i18n)
+    full = (groups[0] == "查看完整卡片")
 
     try:
         maiuser = await get_maiuser(event)
@@ -140,8 +141,14 @@ async def maime_list_handled(event: Event, matcher: Matcher, _i18n = i18n):
     lines = [reply("maime.list.header")]
     for m in maimes:
         time_str = m.create_at.strftime("%Y-%m-%d %H:%M")
+        if full:
+            card_display = m.access
+            item_key = "maime.list.item_full"
+        else:
+            card_display = m.access[:4] + "************" + m.access[-4:]
+            item_key = "maime.list.item"
         lines.append(
-            reply("maime.list.item", access4=m.access4, create_at=time_str)
+            reply(item_key, access=card_display, masked=card_display, create_at=time_str)
         )
 
     await matcher.finish("\n".join(lines))

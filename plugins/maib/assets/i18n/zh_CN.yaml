@@ -97,7 +97,8 @@ maime:
   list:
     empty: "你还没有绑定任何卡片哦~"
     header: "你绑定了以下卡片："
-    item: "{access4} | {create_at}"
+    item: "{masked} ({create_at})"
+    item_full: "{access} ({create_at})"
 
 # Exception Tip
 error:
