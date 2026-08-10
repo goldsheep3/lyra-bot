@@ -16,11 +16,11 @@ from .context import get_maiuser
 
 
 
-maime_link = on_regex(r'^绑定(aime|卡号|卡片)\s+(\d{20})$', priority=5, block=True)
+maime_link = on_regex(r'^绑定(aime|卡号|卡片)\s+(\d{4}(?:\s?\d{4}){4})$', priority=5, block=True)
 
-maime_unlink = on_regex(r'^解绑(aime|卡号|卡片)\s+(\d{20})$', priority=5, block=True)
+maime_unlink = on_regex(r'^解绑(aime|卡号|卡片)\s+(\d{4}(?:\s?\d{4}){4})$', priority=5, block=True)
 
-maime_lost = on_regex(r'^(挂失|捡到|拾获)(aime|卡号|卡片)\s+(\d{4}|\d{20})$', priority=5, block=True)
+maime_lost = on_regex(r'^(挂失|捡到|拾获)(aime|卡号|卡片)\s+(\d{4}|\d{4}(?:\s?\d{4}){4})$', priority=5, block=True)
 
 
 @maime_link.handle()
@@ -29,6 +29,7 @@ async def maime_link_handled(event: Event, matcher: Matcher, groups: tuple = Reg
     i18n_data.set(_i18n)
     
     _, access = groups
+    access = access.replace(" ", "")
 
     maime = await services.get_aime(access)
     if maime is not None:
@@ -57,6 +58,7 @@ async def maime_unlink_handled(event: Event, matcher: Matcher, groups: tuple = R
     i18n_data.set(_i18n)
     
     _, access = groups
+    access = access.replace(" ", "")
 
     maime = await services.get_aime(access)
     if maime is None:
@@ -88,6 +90,7 @@ async def maime_lost_handled(event: Event, matcher: Matcher, groups: tuple = Reg
     
     _, _, access = groups
     
+    access = access.replace(" ", "")
     if len(access) == 4:
         maimes = await services.get_aime_with_access4(access)
         if not maimes:
