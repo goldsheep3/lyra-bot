@@ -114,4 +114,34 @@ async def maime_lost_handled(event: Event, matcher: Matcher, groups: tuple = Reg
 
     await matcher.finish(reply("maime.lost.success", qq=maime_user_id))
     return
-    
+
+
+maime_list = on_regex(r'^查看卡片$', priority=5, block=True)
+
+
+@maime_list.handle()
+async def maime_list_handled(event: Event, matcher: Matcher, _i18n = i18n):
+    """处理命令: 查看卡片"""
+    i18n_data.set(_i18n)
+
+    try:
+        maiuser = await get_maiuser(event)
+    except ValueError as e:
+        await matcher.finish(str(e))
+        return
+
+    qq = maiuser.user_id
+    maimes = await services.get_user_aimes(qq)
+
+    if not maimes:
+        await matcher.finish(reply("maime.list.empty"))
+        return
+
+    lines = [reply("maime.list.header")]
+    for m in maimes:
+        time_str = m.create_at.strftime("%Y-%m-%d %H:%M")
+        lines.append(
+            reply("maime.list.item", access4=m.access4, create_at=time_str)
+        )
+
+    await matcher.finish("\n".join(lines))

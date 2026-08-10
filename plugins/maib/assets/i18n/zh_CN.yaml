@@ -94,6 +94,11 @@ maime:
       not_found: "这张卡片还没在这里绑定过，或者是被解绑的状态喵（"
       multiple_found: "这张卡片被绑定到了多个账户，只能麻烦你用完整 access 重试一次了qwq"
 
+  list:
+    empty: "你还没有绑定任何卡片哦~"
+    header: "你绑定了以下卡片："
+    item: "{access4} | {create_at}"
+
 # Exception Tip
 error:
   low_memory: "当前为低内存模式，暂停了这项功能的图片生成喵( ๑ŏ ﹏ ŏ๑ )"
