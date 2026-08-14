@@ -133,7 +133,7 @@ def build_diff_report(
         return text, None
 
     # 图片生成
-    detail_lines = ["乐曲成绩变更详情:"]
+    detail_lines = [f"{report.maib} [{report.server}] 乐曲成绩变更详情:"]
     if report.new_song:
         detail_lines.append("\n【NEW / 新增成绩】")
         for diff in report.new_song:
