@@ -1,4 +1,6 @@
-# lyra-plugin-help
+"""plugin_help.py 帮助信息"""
+# 该插件不在 unpack 重构计划中。等待 locales 重构计划进行支持 i18n 的重构。
+
 from nonebot import on_regex
 
 _help = on_regex(r"^(帮助|help)\s*(maib|舞萌|mai|maimai)$", priority=10, block=True)
@@ -9,7 +11,7 @@ async def _():
     await _help.finish("""
 LyraHELP | maib (小梨音游核心)
 
-1. 下载谱面
+1. 下载谱面（或下载铺面）
    下载指定的谱面（下载谱面 11951）
    不带 ID 回复小梨的唯一谱面 INFO 消息也可以下载回复消息中的谱面
 2. xxx是什么歌
@@ -23,11 +25,23 @@ LyraHELP | maib (小梨音游核心)
 5. ra
    计算 DXRating，参数为 ra <定数> <完成率>
    完成率可以使用“鸟家”“sss+”等表达方式
-6. 【lyra-sync】私聊发送 JSON 文件
-   (测试中 / Beta)
-   通过 lyra-sync 获取 JSON 后，私聊发送进行解析
-7. 【lyra-sync】私聊发送 获取code
-   (测试中 / Beta)
-   获取 lyra-sync 的同步 code
+
+【lyra-sync】
+1. 私聊发送 JSON / gzip 数据文件
+   通过 lyra-maisync 获取的新版压缩数据后，私聊发送进行解析
+   也可以解析 dxrating.net 的 JSON 数据文件（该解析路径同时兼容 0.2.3 数据）
+2. 私聊发送「获取同步码」
+   获取在线同步配对码 `maisync3:...`，5 分钟内一次性有效
+3. 用户脚本可配置在线上传
+   在脚本“更多”中填写服务器地址并查看当前绑定/网络信息
+
+【lyra-link】
+1. 查询link
+   可以查询该 QQ 号当前绑定的平台信息。
+2. 获取link（或绑定link）
+   获取一串固定的绑定数据，将对应的内容复制粘贴给其他平台的 LyraBot 进行绑定。
+   需要通过 QQ 或绑定过 QQ 的平台进行。
+3. 解除link（或解绑link）
+   非 QQ 平台可以通过此命令解除绑定关系。QQ 端使用该命令会一次性解除所有其他平台的 link 关系。
 
 """.strip())

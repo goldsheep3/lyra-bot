@@ -84,4 +84,4 @@ class RebirthHistory:
 
     def get_province_index(self, province: str) -> int:
         """返回省份对应的索引，若不存在则返回 -1"""
-        return self.province_map.get(province)
+        return self.province_map.get(province) or -1

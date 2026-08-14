@@ -1,0 +1,10 @@
+{
+    "python.analysis.indexing": true,
+    "python.terminal.activateEnvironment": false,
+    "python.terminal.useEnvFile": true,
+    "files.exclude": {
+        ".venv": true,
+        "**/__pycache__": true,
+    },
+    "python.analysis.diagnosticMode": "workspace"
+}
