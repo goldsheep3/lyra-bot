@@ -489,6 +489,17 @@ class MaiUser(Model):
         )
 
 
+class Maime(Model):
+    """maimai aime 绑定数据"""
+    
+    __tablename__ = "maib_maimes"
+    
+    access: Mapped[str] = mapped_column(String(20), primary_key=True, comment="Aime卡号")
+    user_id: Mapped[Optional[int]] = mapped_column(BigInteger, index=True, comment="用户id")
+    access4: Mapped[str] = mapped_column(String(4), index=True, comment="Aime卡号后四位缓存")
+    create_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.now)
+
+
 class MaiRecord(Model):
     """maimai 成绩记录数据"""
 

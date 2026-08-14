@@ -90,7 +90,7 @@ class get_mdt:
                     selectinload(MaiData.aliases),
                 )
                 .outerjoin(MaiAlias)
-                .where(MaiData.title == title)
+                .where(func.lower(MaiData.title) == title.lower())
                 .distinct()
             )
             return (await session.execute(stmt)).scalars().all()
@@ -110,7 +110,7 @@ class get_mdt:
                     selectinload(MaiData.aliases),
                 )
                 .outerjoin(MaiAlias)
-                .where(or_(MaiData.title == keyword, MaiAlias.alias == keyword))
+                .where(or_(func.lower(MaiData.title) == keyword.lower(), func.lower(MaiAlias.alias) == keyword.lower()))
                 .distinct()
             )
             return (await session.execute(stmt)).scalars().all()
@@ -122,7 +122,7 @@ class get_mdt:
                     *, session: Optional[AsyncSession] = None) -> Sequence[MaiData]:
         """通过 曲名/别名 模糊获取 `MaiData`（列表）"""
         async def _query(session: AsyncSession):
-            filters = or_(MaiData.title.contains(keyword), MaiAlias.alias.contains(keyword))
+            filters = or_(func.lower(MaiData.title).contains(keyword.lower()), func.lower(MaiAlias.alias).contains(keyword.lower()))
             count = (await session.execute(
                 select(func.count()).select_from(
                     select(MaiData.shortid).outerjoin(MaiAlias).where(filters).distinct().subquery()

@@ -196,7 +196,7 @@ async def b50_handled(event: Event, matcher: Matcher, groups: dict = RegexDict()
     # extra. 查询内容含国服，强制刷新水鱼数据
     if server in ['CN', 'ALL']:
         try:
-            report = await sync.get_sy_and_upload(target_qq)
+            report = await sync.get_sy_and_upload(target_qq, server)
             if report.has_changes:
                 # 有变化，考虑查询者是否在查询自己，展示不同的报告细节
                 if is_querying_self:

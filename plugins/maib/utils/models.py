@@ -11,7 +11,7 @@ from typing import Optional, Literal
 from PIL import Image
 from loguru import logger
 
-from .calculator import get_dxrating, get_dxscore_max
+from .calculator import get_dxrating, get_dxscore_max, get_dxscore_star_count
 from ..constants import server, DEFAULT_DATETIME
 
 
@@ -53,14 +53,7 @@ class MaiChartAch:
     @property
     def dxscore_star_count(self) -> int:
         """根据 DXScore 和 DXScoreMax 计算星数"""
-        if self.dxscore_max < self.dxscore or self.dxscore_max <= 0 or self.dxscore <= 0:
-            return 0
-        pct = self.dxscore / self.dxscore_max * 100
-        thresholds = [85, 90, 93, 95, 97, 100]
-        for i, t in enumerate(thresholds):
-            if pct < t:
-                return i
-        return 5
+        return get_dxscore_star_count(self.dxscore, self.dxscore_max)
 
     @property
     def star(self) -> int:
@@ -181,9 +174,9 @@ class MaiChart:
 
     def get_dxrating(self, server: server = "JP", ap_bonus: int = 0) -> int:
         """根据成就率和定数计算 DX Rating"""
-        ach = self.get_ach(server).achievement
+        ach_obj = self.get_ach(server)
         level = self.lv_cn if server == "CN" and self.lv_cn is not None else self.lv
-        return get_dxrating(achievement=ach, level=level, ap_bonus=ap_bonus)
+        return get_dxrating(achievement=ach_obj.achievement, level=level, ap_bonus=ap_bonus, combo=ach_obj.combo)
 
     def set_notes(self, tap: int, hold: int, slide: int, touch: int, break_note: int):
         """根据参数设置谱面 Note 数量"""
@@ -209,6 +202,7 @@ class MaiData:
     img_path: Path
     zip_path: Optional[Path] = None
     _cached_image: Optional[Image.Image] = None
+    _matched_alias: Optional[str] = None  # 搜索时触发的别名缓存
     tg_file_id_cache: Optional[str] = None
     is_utage: bool = False
     utage_tag: str = ""

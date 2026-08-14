@@ -1,6 +1,6 @@
 """utils/ 工具模块"""
 from .avatar import get_avatar
-from .calculator import get_ap_bonus_value, get_dxrating, get_dxscore_max
+from .calculator import get_ap_bonus_value, get_dxrating, get_dxscore_max, get_dxscore_star_count
 from .exceptions import NoLinkQQError, BlurSearchTooManyResultsError
 from .file_api import OneBotV11FileAPI
 from .git import get_git_head_hash
@@ -15,7 +15,7 @@ __all__ = [
     # avatar
     "get_avatar",
     # calculator
-    "get_ap_bonus_value", "get_dxrating", "get_dxscore_max",
+    "get_ap_bonus_value", "get_dxrating", "get_dxscore_max", "get_dxscore_star_count",
     # exceptions
     "NoLinkQQError", "BlurSearchTooManyResultsError",
     # file_api

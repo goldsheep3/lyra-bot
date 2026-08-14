@@ -41,7 +41,7 @@ def _calc_mca_dxrating(mca: MaiChartAch, current_version: Optional[int] = None) 
         if level is None:
             return 0
 
-    return utils.get_dxrating(mca.achievement, level, ap_bonus)
+    return utils.get_dxrating(mca.achievement, level, ap_bonus, combo=mca.combo)
 
 
 def _dxrating_stats(achs: Sequence[MaiChartAch]) -> tuple[int, int, int]:

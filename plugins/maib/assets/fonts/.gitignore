@@ -1,7 +1,10 @@
 **/*.ttf
 **/*.otf
 
-# --- 以下排除(根据 FontCode 自动生成) ---
+# --- 以下排除 ---
+
+# SmileySans (得意黑) 字体
+!SmileySans/SmileySans-Oblique.ttf
 
 # Electrolize 字体
 # !Electrolize/Electrolize-Regular.ttf
@@ -72,10 +75,3 @@
 # !Oxanium/static/Oxanium-SemiBold.ttf
 # !Oxanium/static/Oxanium-Bold.ttf
 # !Oxanium/static/Oxanium-ExtraBold.ttf
-
-# 1. 无论是枚举还是普通字符串，StrEnum 的 value 直接就是路径字符串
-# 如果传入的是枚举，通过 font_code.value 获取路径；如果是普通文本则直接作为路径
-
-# 2. 拼接完整路径
-
-# 3. 兜底：如果路径不存在，尝试拼 .ttf 或是绝对路径（兼容你原本的灵活性）

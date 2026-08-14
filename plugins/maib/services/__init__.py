@@ -74,6 +74,7 @@ from .alias import get_ma, add_ma, add_ma_batch, del_ma
 from .fetch import set_mct_level, set_mct_level_batch, set_mct_version, set_mdt_version_batch, sync_mdt_list
 from .file import upd_mdt_tg_fileid
 from .id_remapper import get_pending_mappings, resolve_id_mapping
+from .maime import get_user_aimes, get_aime, get_aime_with_access4, add_aime, unlink_aime
 from .mlist import get_b50, get_mdt_list, get_mct_list, get_mca_list
 from .record import add_record_batch, get_record_achs, backfill_record_shortids
 from .minfo import get_mdt, add_mdt, add_mct, get_mca
@@ -105,6 +106,8 @@ __all__ = [
     "upd_mdt_tg_fileid",
     # id_remapper
     "get_pending_mappings", "resolve_id_mapping",
+    # maime
+    "get_user_aimes", "get_aime", "get_aime_with_access4", "add_aime", "unlink_aime",
     # mlist
     "get_b50", "get_mdt_list", "get_mct_list", "get_mca_list",
     # record

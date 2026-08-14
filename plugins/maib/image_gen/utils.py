@@ -85,6 +85,9 @@ MS_DEFAULT = MS(5)  # 默认倍率
 class FontCode(StrEnum):
     """字体名称枚举"""
     
+    # SmileySans (得意黑) 字体
+    SmileySans = "SmileySans/SmileySans-Oblique.ttf"
+    
     # Electrolize 字体
     # Electrolize = "Electrolize/Electrolize-Regular.ttf"
     
