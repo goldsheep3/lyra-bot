@@ -266,7 +266,7 @@ async def b50_handled(event: Event, matcher: Matcher, groups: dict = RegexDict()
         current_version=current_version,
         server=server,
         user_name=target_maiuser.username,
-        user_avatar=await utils.get_avatar(target_qq, spec=100),
+        user_avatar=await utils.get_qq_avatar(target_qq, spec=100),
         dxrating=dxrating,
         update_time=target_maiuser.get_formated_time(server),
         cn_level=1 if server == 'CN' else 0
