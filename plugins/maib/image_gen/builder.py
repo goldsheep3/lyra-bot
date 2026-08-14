@@ -11,7 +11,7 @@ from PIL import Image, ImageDraw, ImageFont
 from ..constants import server, VERSION_MAP
 from ..utils.models import MaiData, MaiUser
 from .models import COLOR_THEME, EMP_COLOR
-from .utils import MS, MS_DEFAULT, FontCode, FontManager, ImageManager, DrawUnit, ImageUnit
+from .utils import MS, FontCode, FontManager, ImageManager, DrawUnit, ImageUnit
 from .tools import FullWidthConverter, get_dxra_frame_filename, get_genre
 
 
@@ -51,7 +51,7 @@ def _image_grid_board(image_list: list[Image.Image], cols: int = 4, gap: int = 0
 def _user_header_board(inner_width: int, dxrating: int, server: server,
                        user_name: str, user_avatar: Optional[Union[bytes, Image.Image]] = None,
                        update_time: str = "Unknown Time", dxra_cirp_frame: bool = True,
-                       ms: MS = MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Optional[Image.Image]:
+                       ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0) -> Optional[Image.Image]:
     """生成用户信息看板"""
     header_h = 32
     board_title = Image.new("RGBA", ms.xy(inner_width, header_h), EMP_COLOR)
@@ -107,7 +107,7 @@ def _user_header_board(inner_width: int, dxrating: int, server: server,
 
 
 def draw_info_box(maidata: MaiData, server: server, maiuser: Optional[MaiUser] = None,
-                  ms: MS = MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+                  ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
     """绘制 mai_info 看板"""
     width, fw = 220, 10
     all_width = width + fw * 2
@@ -245,7 +245,7 @@ def draw_b50(b35_entries: list[tuple[MaiData, int]], b15_entries: list[tuple[Mai
              dxrating: int, current_version: int, server: server,
              user_name: str, user_avatar: Optional[Union[bytes, Image.Image]] = None,
              update_time: str = "Unknown Update Time", line_width: Literal[4, 5] = 5,
-             ms: MS = MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+             ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
     """绘制 mai_b50 看板"""
     margin = 10
     temp_box = ImageUnit.mini_box(None, 0, "JP", ms=ms, cn_level=cn_level)
@@ -337,7 +337,7 @@ def draw_grid_list(entries: list[tuple[MaiData, int]],
                    dxrating: int, server: server,
                    user_name: str, user_avatar: Optional[Union[bytes, Image.Image]] = None,
                    update_time: str = "Unknown Update Time", line_width: int = 6,
-                   ms: MS = MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+                   ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
     """绘制网格列表看板"""
     margin = 10
     temp_box = ImageUnit.mini_box(None, 0, "JP", ms=ms, cn_level=cn_level)

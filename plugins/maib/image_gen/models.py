@@ -43,6 +43,10 @@ class Diff:
     @property
     def level_text(self) -> str:
         return self._level_text if self._level_text else self.text
+    
+    def __int__(self) -> int:
+        return self.code
+
 
 class Difficulty(Enum):
     """难度枚举"""
@@ -60,7 +64,7 @@ class Difficulty(Enum):
         """根据难度代码获取难度信息"""
         ob = cls.NONE
         for item in cls:
-            if item.value.code == code:
+            if int(item.value) == code:
                 ob = item
                 break
         return ob.value
@@ -113,6 +117,9 @@ class EvalInfo:
     def __iter__(self) -> Iterator[Any]:
         return iter((self.color, self.full_name, self.short_name, self.cn_name))
 
+    def __int__(self) -> int:
+        return self.code
+
 class Combo(Enum):
     """Combo 类型 (FC, AP 等)"""
     NONE = EvalInfo(0, _EVAL_GN, '', '', '')
@@ -126,7 +133,7 @@ class Combo(Enum):
         """根据代码获取组合评价"""
         ob = cls.NONE
         for item in cls:
-            if item.value.code == code:
+            if int(item.value) == code:
                 ob = item
                 break
         return ob.value
@@ -145,7 +152,7 @@ class Sync(Enum):
         """根据代码获取同步评价"""
         ob = cls.NONE
         for item in cls:
-            if item.value.code == code:
+            if int(item.value) == code:
                 ob = item
                 break
         return ob.value

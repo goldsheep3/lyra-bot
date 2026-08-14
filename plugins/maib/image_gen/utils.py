@@ -21,7 +21,7 @@ from .tools import bcm, limit_text, get_dxra_frame_filename
 
 __all__ = [
     # 缩放工具类
-    "MS", "MS_DEFAULT",
+    "MS",
     # 字体
     "FontCode", "FontManager",
     # 图像
@@ -35,51 +35,57 @@ __all__ = [
 # --- 坐标倍率缩放器 ---
 class MS:
     """倍率缩放器"""
+    # 全局缓存，按倍率分组
+    # {multiple: {val_int: scaled_value, ...}, ...}
+    _cache: dict[float, dict[float, int]] = {}
     
-    def __init__(self, multiple: float):
-        self.multiple = multiple
-        self._cache: dict[float, int] = {}  # 计算缓存
+    def __init__(self, multiple: float = 5.0):
+        self.multiple = round(multiple, 2)
 
-    def set_multiple(self, multiple: float):
-        """重新设置倍率"""
-        self.multiple = multiple
-        self._cache = {}
+    def x(self, mpx: float) -> int:
+        """根据 mpx 值计算单个 px 值"""
+        val_int = round(float(mpx), 2)
+        # 获取或创建该倍率对应的子缓存字典
+        sub_cache = self._cache.setdefault(self.multiple, {})
+        if val_int in sub_cache:
+            return sub_cache[val_int]
+        scaled = round(val_int * self.multiple)
+        sub_cache[val_int] = scaled
+        return scaled
 
-    def x(self, val: int | float) -> int:
-        """缩放单个值"""
-        val = float(val)
-        if result := self._cache.get(val):
-            return result
-        self._cache[val] = round(val * self.multiple)
-        return self._cache[val]
+    def xy(self, mpx_x: float, mpx_y: float) -> tuple[int, int]:
+        """计算 `x`,`y` 坐标 px 值"""
+        return self.x(mpx_x), self.x(mpx_y)
 
-    def xy(self, x: int | float, y: int | float) -> tuple[int, int]:
-        """缩放坐标对"""
-        return self.x(x), self.x(y)
+    def size(self, mpx_x: float, mpx_y: float, mpx_w: float, mpx_h: float) -> tuple[int, int, int, int]:
+        """计算 `x`,`y`,`x+w`,`y+h` 坐标 px 值"""
+        return self.x(mpx_x), self.x(mpx_y), self.x(mpx_x + mpx_w), self.x(mpx_y + mpx_h)
 
-    def size(self, x: int | float, y: int | float, w: int | float, h: int | float) -> tuple[int, int, int, int]:
-        """缩放矩形框 (x, y, x+w, y+h)"""
-        return self.x(x), self.x(y), self.x(x + w), self.x(y + h)
+    def rev(self, px: int) -> float:
+        """将 px 值还原为 mpx 值"""
+        return px / self.multiple
 
-    def rev(self, x: float) -> float:
-        """反向缩放（从缩放后的值恢复原始值）"""
-        return x / self.multiple
+    @property
+    def key(self) -> str:
+        """返回可用于缓存的字符串键"""
+        return f"{self.multiple:.2f}"
 
-    def __repr__(self):
+    def __repr__(self): 
         return f"MS(multiple={self.multiple})"
 
-    def __mul__(self, other: int | float) -> 'MS':
-        """倍数相乘"""
+    def __mul__(self, other: float) -> 'MS':
         if not isinstance(other, (int, float)):
             return NotImplemented
         return MS(self.multiple * other)
 
-    def __hash__(self):
-        # 仅根据 multiple 计算哈希值，忽略缓存
+    def __hash__(self): 
         return hash(self.multiple)
 
+    def __int__(self): 
+        raise NotImplementedError("MS Object cannot be converted to int directly.")
 
-MS_DEFAULT = MS(5)  # 默认倍率
+    def __float__(self): 
+        return float(self.multiple)
 
 
 class FontCode(StrEnum):
@@ -279,7 +285,7 @@ ImageManager.init(ASSETS_PATH)
 class DrawUnit:
     """绘图适配器，持有 `Image.Image` 对象并操作"""
     
-    def __init__(self, img: Image.Image, multiple: MS | int = MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0):
+    def __init__(self, img: Image.Image, multiple: MS | int = MS(), cn_level: Literal[0, 1, 2] = 0):
         from .components import BaseDrawer
 
         self.img = img
@@ -410,7 +416,7 @@ class ImageUnit:
     @classmethod
     @lru_cache(maxsize=8)
     def get_mask(cls, w: int, h: int, radius: float,
-                 ms: MS = MS_DEFAULT) -> Image.Image:
+                 ms: MS = MS()) -> Image.Image:
         # 画布大小应包含完整的 w 和 h
         mask = Image.new('L', ms.xy(w, h), 0)
         draw = ImageDraw.Draw(mask)
@@ -420,7 +426,7 @@ class ImageUnit:
 
     # 难度式文本样式
     @classmethod
-    def diff_text(cls, diff: Diff, text: Optional[str] = None, limit_width: float = -1, ms: MS = MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0):
+    def diff_text(cls, diff: Diff, text: Optional[str] = None, limit_width: float = -1, ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0):
         # 处理文字长度并计算位置
         font = FontManager.font(FontCode.MiSans_Heavy, size=ms.x(4.8))
         if text:
@@ -435,18 +441,18 @@ class ImageUnit:
             # 特殊处理中文默认难度标题的位置
             cn_font = FontManager.font(FontCode.MiSans_Heavy, size=ms.x(3.3))
             cn_x1, _cn_y1, cn_x2, _cn_y2 = cn_font.getbbox(diff.text_title_cn, anchor='lm', stroke_width=ms.x(0.8))
-            cn_width = ms.rev(cn_x2 - cn_x1)
+            cn_width = ms.rev(round(cn_x2 - cn_x1))
         else:
             cn_width = 0
-        width = (ms.rev(x2 - x1) + cn_width) * 1.2
-        height = ms.rev(y2 - y1) * 1.2
+        width = (ms.rev(round(x2 - x1)) + cn_width) * 1.2
+        height = ms.rev(round(y2 - y1)) * 1.2
 
         # 实际渲染逻辑
         img = Image.new('RGBA', ms.xy(width, height), '#FFFFFF00')
         du = DrawUnit(img, multiple=ms, cn_level=cn_level)
         du.text(1, height / 2, display_text, diff.text, 'lm', font, shadow=(0.8, diff.deep), shadow2=(0.8, diff.frame, 0.7))
         if cn_width:
-            du.text(ms.rev(x2 - x1) * 1.1, ms.rev(y2 - y1) * 1.1, diff.text_title_cn, diff.text, 'ld', FontManager.font(FontCode.MiSans_Heavy, size=ms.x(3.3)),
+            du.text(ms.rev(round(x2 - x1)) * 1.1, ms.rev(round(y2 - y1)) * 1.1, diff.text_title_cn, diff.text, 'ld', FontManager.font(FontCode.MiSans_Heavy, size=ms.x(3.3)),
                     shadow=(0.8, diff.deep), shadow2=(0.8, diff.frame, 0.7))
 
         return img
@@ -454,13 +460,13 @@ class ImageUnit:
     # 难度文本
     @classmethod
     @lru_cache(maxsize=10)
-    def difficulty(cls, diff: Diff, ms: MS = MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+    def difficulty(cls, diff: Diff, ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
         return cls.diff_text(diff=diff, text=None, limit_width=-1, ms=ms, cn_level=cn_level)
 
     # FC / FS 评定文本
     @classmethod
     @lru_cache(maxsize=18)
-    def evaluate(cls, eval: EvalInfo | None, mini: bool = False, ms: MS = MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+    def evaluate(cls, eval: EvalInfo | None, mini: bool = False, ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
         size = ms.xy(20, 5) if mini else ms.xy(40, 5)
         img = Image.new('RGBA', size, "#FFFFFF00")
         if eval:
@@ -472,7 +478,7 @@ class ImageUnit:
 
     # 谱面类型标记（标准）
     @classmethod
-    def draw_sd_badge(cls, ms: MS = MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+    def draw_sd_badge(cls, ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
         img = Image.new('RGBA', ms.xy(20, 5), "#FFFFFF00")
         du = DrawUnit(img, multiple=ms, cn_level=cn_level)
 
@@ -486,7 +492,7 @@ class ImageUnit:
 
     # 谱面类型标记（DX）
     @classmethod
-    def draw_dx_badge(cls, ms: MS = MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+    def draw_dx_badge(cls, ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
         img = Image.new('RGBA', ms.xy(20, 5), "#FFFFFF00")
         du = DrawUnit(img, multiple=ms, cn_level=cn_level)
 
@@ -500,27 +506,27 @@ class ImageUnit:
         else:
             font = FontManager.font(FontCode.MiSans_Heavy, size=ms.x(3.2))
             text = "でらっくす"
-            total_text_width = ms.rev(font.getlength(text))
+            total_text_width = ms.rev(round(font.getlength(text)))
             start_x = (10) - (total_text_width / 2)
             current_x = start_x
             center_y = 2.5
             for char, color in zip(text, COLOR_DELUXE):
                 du.text(current_x, center_y, char, color, 'lm', font)
-                char_width = ms.rev(font.getlength(char))
+                char_width = ms.rev(round(font.getlength(char)))
                 current_x += char_width
         return img
 
     # 谱面类型标记
     @classmethod
     @lru_cache(maxsize=4)
-    def draw_badge(cls, is_cabinet_dx: bool, ms: MS = MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+    def draw_badge(cls, is_cabinet_dx: bool, ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
         return cls.draw_dx_badge(ms=ms, cn_level=cn_level) if is_cabinet_dx else cls.draw_sd_badge(ms=ms, cn_level=cn_level)
 
     # 版权信息栏
     @classmethod
     @lru_cache(maxsize=4)
     def copyright_bar(cls, width: int, lines: list[str] | None = None,
-                      ms: MS = MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+                      ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
         if lines is None:
             lines = [
                 "Powered by LyraBot (@GoldSheep3)",
@@ -566,7 +572,7 @@ class ImageUnit:
     # 谱面信息框
     @classmethod
     def chart_box(cls, chart: MaiChart, cabinet_dx: bool, server: server, plus_level: int = 6, is_utage: bool = False,
-                  ms: MS = MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+                  ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
         """组件：谱面信息框"""
         w, h, ow = 108, 36, 1  # w, h, outline_width
         diff = Difficulty.get(chart.difficulty)
@@ -600,7 +606,7 @@ class ImageUnit:
 
     @classmethod
     def chart_box_lite(cls, chart: MaiChart, cabinet_dx: bool, server: server, plus_level: int = 6, is_utage: bool = False,
-                       ms: MS = MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+                       ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
         """组件：谱面信息框 Lite"""
         w, h, ow = 108, 25, 1  # w, h, outline_width
         diff = Difficulty.get(chart.difficulty)
@@ -625,7 +631,7 @@ class ImageUnit:
     @classmethod
     @lru_cache(maxsize=32)
     def chart_box_base(cls, diff: Diff, cabinet_dx: bool, w: int, h: int, ow: int,
-                       ms: MS = MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+                       ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
         img = Image.new('RGBA', ms.xy(w + ow * 2, h + ow * 2), '#FFFFFF00')
         du = DrawUnit(img, multiple=ms, cn_level=cn_level)
 
@@ -640,22 +646,22 @@ class ImageUnit:
         return img
 
     @classmethod
-    def mini_box(cls, data: MaiData | None, diff_number: int, server: server,
-                 ms: MS = MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0,
+    def mini_box(cls, maidata: MaiData | None, difficulty: int, server: server,
+                 ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0,
                  shared_zip: zipfile.ZipFile | None = None) -> Image.Image | tuple[int, int]:
         w, h, ow = 97, 36, 1  # w, h, outline_width
         width, height = w + ow * 2, h + ow * 2
-        diff = Difficulty.get(diff_number)
+        diff = Difficulty.get(difficulty)
 
-        chart = data.get_chart(diff_number) if data else None
-        if not chart or data is None:
+        chart = maidata.get_chart(difficulty) if maidata else None
+        if not chart or maidata is None:
             return width, height  # 视为占位，返回尺寸供布局使用
         ach = chart.get_ach(server=server)
 
         img = cls.mini_box_base(
             diff=diff,
-            is_cabinet_dx=data.is_cabinet_dx,
-            shortid=data.shortid,
+            is_cabinet_dx=maidata.is_cabinet_dx,
+            shortid=maidata.shortid,
             w=w,
             h=h,
             ow=ow,
@@ -664,7 +670,7 @@ class ImageUnit:
         ).copy()
         du = DrawUnit(img, multiple=ms, cn_level=cn_level)
         # 曲绘
-        cover = data.get_image(shared_zip=shared_zip)
+        cover = maidata.get_image(shared_zip=shared_zip)
         if cover:
             mask = cls.get_mask(w=32, h=32, radius=1.5, ms=ms)
             cover_img = cover.resize(ms.xy(32, 32), Image.Resampling.LANCZOS)
@@ -683,7 +689,7 @@ class ImageUnit:
     @classmethod
     @lru_cache(maxsize=12)
     def mini_box_base(cls, diff: Diff, is_cabinet_dx: bool, shortid: int, w: int, h: int, ow: int,
-                      ms: MS = MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+                      ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
         img = Image.new('RGBA', ms.xy(w + ow * 2, h + ow * 2), '#FFFFFF00')
         du = DrawUnit(img, multiple=ms, cn_level=cn_level)
 
@@ -693,24 +699,24 @@ class ImageUnit:
         badge = cls.draw_badge(is_cabinet_dx=is_cabinet_dx, ms=ms, cn_level=cn_level)
         img.paste(badge, ms.xy(ow + 75, ow + 2), badge)
         shortid_img = cls.diff_text(diff=diff, text=f'#{shortid}', ms=ms, cn_level=cn_level)
-        img.paste(shortid_img, ms.xy(ow + 35, ow + 4.2 - ms.rev(shortid_img.size[1] / 2)), shortid_img)
+        img.paste(shortid_img, ms.xy(ow + 35, ow + 4.2 - ms.rev(round(shortid_img.size[1] / 2))), shortid_img)
         return img
 
     @classmethod
-    def b50_box(cls, data: MaiData, diff_number: int, server: server,
+    def b50_box(cls, maidata: MaiData, difficulty: int, server: server,
                 current_version: int, index: int, is_b15: Optional[bool] = None,
-                ms: MS = MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0,
+                ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0,
                 shared_zip: zipfile.ZipFile | None = None) -> Image.Image | None:
-        chart = data.get_chart(diff_number)
+        chart = maidata.get_chart(difficulty)
         if not chart:
             return None
-        img = cls.mini_box(data=data, diff_number=diff_number, server=server, ms=ms, cn_level=cn_level, shared_zip=shared_zip)
+        img = cls.mini_box(maidata=maidata, difficulty=difficulty, server=server, ms=ms, cn_level=cn_level, shared_zip=shared_zip)
         if isinstance(img, tuple):
             return None
         du = DrawUnit(img, multiple=ms, cn_level=cn_level)
-        du.rounded_rect(54, 25, 42, 5, fill=bcm(Difficulty.get(diff_number).bg, '#0009'), radius=4)
+        du.rounded_rect(54, 25, 42, 5, fill=bcm(Difficulty.get(difficulty).bg, '#0009'), radius=4)
         du.rounded_rect(54, 25, 16, 5, fill='#006', radius=4)
         b_type = '15' if is_b15 else '35'
         du.text(62, 27.5, f"b{b_type} #{index}", fill='#FFF', anchor='mm', font=FontManager.font(FontCode.MiSans_Demibold, size=ms.x(3)))
-        du.text(74, 27.5, f"{chart.lv:.1f} > {data.get_chart_dxrating(diff_number, server, current_version)}", fill='#FFF', anchor='lm', font=FontManager.font(FontCode.MiSans_Demibold, size=ms.x(3)))
+        du.text(74, 27.5, f"{chart.lv:.1f} > {maidata.get_chart_dxrating(difficulty, server, current_version)}", fill='#FFF', anchor='lm', font=FontManager.font(FontCode.MiSans_Demibold, size=ms.x(3)))
         return img

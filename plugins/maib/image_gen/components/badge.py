@@ -11,7 +11,7 @@ from functools import lru_cache
 from PIL import Image, ImageDraw, ImageFont
 
 from ..models import Diff
-from ..utils import MS, MS_DEFAULT, FontCode, FontManager, ImageManager
+from ..utils import MS, FontCode, FontManager, ImageManager
 from .base import TextStyle, BaseDrawer
 
 
@@ -72,7 +72,7 @@ class DifficultyBadge:
     """难度标签组件"""
     
     def __init__(self, diff: Diff, custom_text: Optional[str] = None, 
-                 limit_width: float = -1, ms: MS = MS_DEFAULT, 
+                 limit_width: float = -1, ms: MS = MS(), 
                  cn_level: Literal[0, 1, 2] = 0,):
         self.diff = diff
         self.custom_text = custom_text
@@ -82,7 +82,7 @@ class DifficultyBadge:
 
     @lru_cache(maxsize=10)
     def _get_diff_text_image(self, diff: Diff, text: Optional[str] = None, 
-                            limit_width: float = -1, ms: MS = MS_DEFAULT, 
+                            limit_width: float = -1, ms: MS = MS(), 
                             cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
         """生成难度文本图片（缓存版）"""
         from ..utils import limit_text
@@ -98,12 +98,12 @@ class DifficultyBadge:
         if cn_level == 2 and not text:
             cn_font = FontManager.font(FontCode.MiSans_Heavy, ms.x(3.3))
             cn_x1, _cn_y1, cn_x2, _cn_y2 = cn_font.getbbox(diff.text_title_cn, anchor='lm', stroke_width=ms.x(0.8))
-            cn_width = ms.rev(cn_x2 - cn_x1)
+            cn_width = ms.rev(round(cn_x2 - cn_x1))
         else:
             cn_width = 0
         
-        width = (ms.rev(x2 - x1) + cn_width) * 1.2
-        height = ms.rev(y2 - y1) * 1.2
+        width = (ms.rev(round(x2 - x1)) + cn_width) * 1.2
+        height = ms.rev(round(y2 - y1)) * 1.2
 
         img = Image.new('RGBA', ms.xy(width, height), '#FFFFFF00')
         draw = ImageDraw.Draw(img)
@@ -119,7 +119,7 @@ class DifficultyBadge:
                                font=FontManager.font(FontCode.MiSans_Heavy, ms.x(3.3)),
                                shadow_width=0.8, shadow_color=diff.deep,
                                shadow2_width=0.8, shadow2_color=diff.frame, shadow2_offset=0.7)
-            drawer.text(ms.rev(x2 - x1) * 1.1, ms.rev(y2 - y1) * 1.1, 
+            drawer.text(ms.rev(round(x2 - x1)) * 1.1, ms.rev(round(y2 - y1)) * 1.1, 
                        diff.text_title_cn, style_cn)
 
         return img
@@ -133,7 +133,7 @@ class DifficultyBadge:
 class DrawBadge:
     """谱面类型徽章组件 (标准/DX)"""
     
-    def __init__(self, is_cabinet_dx: bool, ms: MS = MS_DEFAULT, 
+    def __init__(self, is_cabinet_dx: bool, ms: MS = MS(), 
                  cn_level: Literal[0, 1, 2] = 0):
         self.is_cabinet_dx = is_cabinet_dx
         self.ms = ms
@@ -179,14 +179,14 @@ class DrawBadge:
         else:
             font = FontManager.font(FontCode.MiSans_Heavy, ms.x(3.2))
             text = "でらっくす"
-            total_text_width = ms.rev(font.getlength(text))
+            total_text_width = ms.rev(round(font.getlength(text)))
             start_x = 10 - (total_text_width / 2)
             current_x = start_x
             center_y = 2.5
             for char, color in zip(text, COLOR_DELUXE):
                 style = TextStyle(fill=color, anchor='lm', font=font)
                 drawer.text(current_x, center_y, char, style)
-                char_width = ms.rev(font.getlength(char))
+                char_width = ms.rev(round(font.getlength(char)))
                 current_x += char_width
         return img
 

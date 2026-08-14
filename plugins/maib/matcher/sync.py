@@ -26,7 +26,7 @@ from .message import build_msg
 
 sytb = on_regex(r'^sytb$', priority=5, block=True)
 
-file_receiver = on_message(priority=25, rule=rule_is_private)
+file_receiver = on_message(priority=25, rule=rule_is_private, block=False)
 
 get_sync_code = on_regex(r"^获取同步码$", priority=5, block=True)
 

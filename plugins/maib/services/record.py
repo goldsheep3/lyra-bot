@@ -110,7 +110,8 @@ async def add_record_batch(
         if backfill_rows:
             for backfill in backfill_rows:
                 await session.execute(
-                    MaiRecord.__table__.update()
+                    # 能正常运作，此处忽略错误提示
+                    MaiRecord.__table__.update()  # type: ignore
                     .where(
                         MaiRecord.record_hash == backfill["record_hash"],
                         MaiRecord.shortid.is_(None),

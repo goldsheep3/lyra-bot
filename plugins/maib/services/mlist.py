@@ -44,7 +44,7 @@ class get_mdt_list:
         return await execute_func.select(_query, session=session)
 
     @staticmethod
-    async def version(ver: int | tuple[int, int], achs_user_id: Optional[int] = None,
+    async def version(ver: int | tuple[int, int], achs_user_id: Optional[int] = None, allow_utage: bool = False,
                       *, session: Optional[AsyncSession] = None) -> Sequence[MaiData]:
         """通过 版本范围 获取 `MaiData`（列表）"""
         async def _query(session: AsyncSession):
@@ -59,9 +59,14 @@ class get_mdt_list:
                         .selectinload(MaiChart.achs.and_(MaiChartAch.user_id == achs_user_id)),
                     selectinload(MaiData.aliases),
                 )
-                .where(MaiData.version >= min_ver, MaiData.version <= max_ver)
+                .where(
+                    MaiData.version >= min_ver,
+                    MaiData.version <= max_ver
+                )
                 .order_by(MaiData.version.desc(), MaiData.shortid.asc())
             )
+            if not allow_utage:
+                stmt = stmt.where(MaiData.is_utage == False)
             return (await session.execute(stmt)).scalars().all()
 
         return await execute_func.select(_query, session=session)
@@ -70,7 +75,7 @@ class get_mdt_list:
 class get_mct_list:
     
     @staticmethod
-    async def level(lv: float | tuple[float, float], server: server, achs_user_id: Optional[int] = None,
+    async def level(lv: float | tuple[float, float], server: server, achs_user_id: Optional[int] = None, allow_utage: bool = False,
                     *, session: Optional[AsyncSession] = None) -> Sequence[MaiChart]:
         """通过 等级范围 获取 `MaiChart`（列表）"""
         async def _query(session: AsyncSession):
@@ -92,6 +97,8 @@ class get_mct_list:
                 .where(level_field >= min_lv, level_field <= max_lv)
                 .order_by(level_field.desc(), MaiChart.shortid.asc(), MaiChart.difficulty.asc())
             )
+            if not allow_utage:
+                stmt = stmt.join(MaiChart.maidata).where(MaiData.is_utage == False)
             return (await session.execute(stmt)).scalars().all()
 
         return await execute_func.select(_query, session=session)
@@ -100,7 +107,7 @@ class get_mct_list:
 class get_mca_list:
 
     @staticmethod
-    async def user(user_id: int, server: server,
+    async def user(user_id: int, server: server, allow_utage: bool = False,
                    *, session: Optional[AsyncSession] = None) -> Sequence[MaiChartAch]:
         """通过用户 ID 和服务器获取 `MaiChartAch`（列表）"""
         async def _query(session: AsyncSession):
@@ -108,6 +115,8 @@ class get_mca_list:
                 select(MaiChartAch)
                 .where(MaiChartAch.user_id == user_id, MaiChartAch.server == server)
             )
+            if not allow_utage:
+                stmt = stmt.join(MaiChartAch.chart).join(MaiChart.maidata).where(MaiData.is_utage == False)
             return (await session.execute(stmt)).scalars().all()
 
         return await execute_func.select(_query, session=session)
@@ -134,6 +143,7 @@ class get_mca_list:
                 .where(
                     MaiChartAch.user_id == user_id,
                     MaiChartAch.server == server,
+                    MaiData.is_utage == False
                 )
                 .order_by(MaiChartAch.dxrating.desc(), MaiChartAch.achievement.desc())
             )
@@ -160,7 +170,7 @@ class get_mca_list:
 
 
     @staticmethod
-    async def achievement(ach: float | tuple[float, float], server: server, achs_user_id: int,
+    async def achievement(ach: float | tuple[float, float], server: server, achs_user_id: int, allow_utage: bool = False,
                           *, session: Optional[AsyncSession] = None) -> Sequence[MaiChartAch]:
         """通过 完成率范围 获取 `MaiChartAch`（列表）"""
         async def _query(session: AsyncSession):
@@ -186,6 +196,8 @@ class get_mca_list:
                     MaiChartAch.difficulty.asc(),
                 )
             )
+            if not allow_utage:
+                stmt = stmt.join(MaiChartAch.chart).join(MaiChart.maidata).where(MaiData.is_utage == False)
             return (await session.execute(stmt)).scalars().all()
 
         return await execute_func.select(_query, session=session)
@@ -207,9 +219,13 @@ class get_mca_list:
                         .selectinload(MaiChart.maidata)
                         .selectinload(MaiData.aliases),
                 )
-                .where(MaiChartAch.user_id == achs_user_id)
-                .where(MaiChartAch.server == server)
-                .where(MaiChartAch.dxrating >= min_dxra, MaiChartAch.dxrating <= max_dxra)
+                .where(
+                    MaiChartAch.user_id == achs_user_id,
+                    MaiChartAch.server == server,
+                    MaiChartAch.dxrating >= min_dxra,
+                    MaiChartAch.dxrating <= max_dxra,
+                    MaiData.is_utage == False
+                )
                 .order_by(
                     MaiChartAch.dxrating.desc(),
                     MaiChartAch.achievement.desc(),

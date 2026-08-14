@@ -10,7 +10,7 @@ from functools import lru_cache
 
 from PIL import Image, ImageDraw, ImageFont
 
-from ..utils import MS, limit_text, MS_DEFAULT
+from ..utils import MS, limit_text
 
 
 @dataclass
@@ -33,11 +33,12 @@ class TextStyle:
 class BaseDrawer:
     """基础绘制工具类"""
     
-    def __init__(self, img: Image.Image, draw: ImageDraw.ImageDraw, ms: MS = MS_DEFAULT):
+    def __init__(self, img: Image.Image, draw: Optional[ImageDraw.ImageDraw] = None, ms: MS = MS()):
         """初始化绘制器"""
         self.img = img
-        self.draw = draw
+        self.draw = draw if draw is not None else ImageDraw.Draw(img)
         self.ms = ms
+
 
     def _text(self, x: float, y: float, text: Optional[str], fill: Optional[str], 
               anchor: str, font: ImageFont.FreeTypeFont,
@@ -83,7 +84,7 @@ class BaseDrawer:
             raise ValueError("TextStyle.font 不能为空")
             
         text_list = text.split('\n')
-        size = self.ms.rev(style.font.size)
+        size = self.ms.rev(round(style.font.size))
         line_count = len(text_list)
         first_y = (y - (line_count - 1) / 2 * (size + style.margin)) if style.anchor[1:] == 'm' else y
         

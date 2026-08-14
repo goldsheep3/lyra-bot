@@ -11,7 +11,7 @@ from functools import lru_cache
 from PIL import Image, ImageDraw, ImageFont
 
 from ..models import Diff, AchColor, Achievement, EvalInfo
-from ..utils import MS, MS_DEFAULT, FontCode, FontManager
+from ..utils import MS, FontCode, FontManager
 from ..tools import bcm
 from .base import TextStyle, BaseDrawer
 
@@ -20,7 +20,7 @@ class AchievementComponent:
     """达成率显示组件"""
     
     def __init__(self, ach_percent: float, diff: Diff, color: Optional[AchColor] = None,
-                 ms: MS = MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0):
+                 ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0):
         self.ach_percent = ach_percent
         self.diff = diff
         self.color = color
@@ -63,7 +63,7 @@ class DXScoreComponent:
     """DX 分数显示组件"""
     
     def __init__(self, score: int, max_score: int, star_count: int, diff: Diff,
-                 lite: bool = False, ms: MS = MS_DEFAULT, 
+                 lite: bool = False, ms: MS = MS(), 
                  cn_level: Literal[0, 1, 2] = 0):
         self.score = score
         self.max_score = max_score
@@ -131,7 +131,7 @@ class EvaluateComponent:
     """FC/FS/Sync 评价标签组件"""
     
     def __init__(self, eval: Optional[EvalInfo], mini: bool = False,
-                 ms: MS = MS_DEFAULT, cn_level: Literal[0, 1, 2] = 0,
+                 ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0,
                  FontManager: Optional[FontManager] = None):
         self.eval = eval
         self.mini = mini
