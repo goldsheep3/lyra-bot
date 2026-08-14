@@ -6,7 +6,7 @@ import zipfile
 from pathlib import Path
 from typing import Literal, Optional, Union
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 from ..constants import server, VERSION_MAP
 from ..utils.models import MaiData, MaiUser
@@ -333,9 +333,9 @@ def draw_b50(b35_entries: list[tuple[MaiData, int]], b15_entries: list[tuple[Mai
     return result_img.convert("RGB")
 
 
-def simple_list(text: str) -> Image.Image:
+def simple_list(text: str, font: Optional[ImageFont.FreeTypeFont] = None) -> Image.Image:
     """生成一个简单的文本列表图。"""
-    font = FontManager.font(FontCode.MiSans_Demibold, size=16)
+    font = font or FontManager.font(FontCode.MiSans_Demibold, size=16)
     x1, y1, x2, y2 = ImageDraw.Draw(Image.new("RGB", (1, 1), color="#FFF")).multiline_textbbox((0, 0), text=text, font=font)
     width, height = int(x2 - x1 + 10), int(y2 - y1 + 10)
     img = Image.new("RGB", (width, height), color="#FFF")

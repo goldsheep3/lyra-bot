@@ -3,10 +3,8 @@
     "python.terminal.activateEnvironment": false,
     "python.terminal.useEnvFile": true,
     "files.exclude": {
-        "**/*.rpyc": true,
-        "**/*.rpa": true,
-        "**/*.rpymc": true,
-        "**/cache/": true
+        ".venv": true,
+        "**/__pycache__": true,
     },
-    // "python.analysis.diagnosticMode": "workspace"
+    "python.analysis.diagnosticMode": "workspace"
 }

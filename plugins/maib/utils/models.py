@@ -11,7 +11,7 @@ from typing import Optional, Literal
 from PIL import Image
 from loguru import logger
 
-from .calculator import get_dxrating, get_dxscore_max
+from .calculator import get_dxrating, get_dxscore_max, get_dxscore_star_count
 from ..constants import server, DEFAULT_DATETIME
 
 
@@ -53,14 +53,7 @@ class MaiChartAch:
     @property
     def dxscore_star_count(self) -> int:
         """根据 DXScore 和 DXScoreMax 计算星数"""
-        if self.dxscore_max < self.dxscore or self.dxscore_max <= 0 or self.dxscore <= 0:
-            return 0
-        pct = self.dxscore / self.dxscore_max * 100
-        thresholds = [85, 90, 93, 95, 97, 100]
-        for i, t in enumerate(thresholds):
-            if pct < t:
-                return i
-        return 5
+        return get_dxscore_star_count(self.dxscore, self.dxscore_max)
 
     @property
     def star(self) -> int:

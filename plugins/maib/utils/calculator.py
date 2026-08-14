@@ -5,6 +5,7 @@ __all__ = [
     "get_ap_bonus_value",
     "get_dxrating",
     "get_dxscore_max",
+    "get_dxscore_star_count",
 ]
 
 
@@ -60,3 +61,15 @@ def get_dxrating(achievement: float, level: float, ap_bonus: int = 0, combo: int
 def get_dxscore_max(note_count: int) -> int:
     """根据 Note 数量计算 DX 分数上限"""
     return note_count * 3
+
+
+def get_dxscore_star_count(dxscore: int, dxscore_max: int) -> int:
+    """根据 DX 分数计算星数"""
+    if dxscore_max < dxscore or dxscore_max <= 0 or dxscore <= 0:
+        return 0
+    percent = dxscore / dxscore_max * 100
+    thresholds = [85, 90, 93, 95, 97, 100]
+    for i, t in enumerate(thresholds):
+        if percent < t:
+            return i
+    return 5

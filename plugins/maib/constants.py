@@ -374,6 +374,7 @@ SYNC_MAP = AliasMap[int]({
 })
 
 DIFFICULTY_MAP = AliasMap[int]({
+    0: ("？", "UNKNOWN", "unknown"),
     1: ("蓝", 'EASY', 'easy'),
     2: ("绿", 'BASIC', 'basic'),
     3: ("黄", 'ADVANCED', 'advanced'),

@@ -6,6 +6,7 @@ from PIL import Image
 
 from ..constants import server, DIFFICULTY_MAP as DiffMap, COMBO_MAP as ComboMap, SYNC_MAP as SyncMap
 from .models import MaiChartAch
+from .calculator import get_dxscore_star_count
 
 
 __all__ = [
@@ -25,33 +26,53 @@ class MaiChartAchDiff:
     new_ach: MaiChartAch
     old_ach: Optional[MaiChartAch] = None
 
-    def get_diff_text(self) -> str:
-        """获取变更文本"""
-        new = self.new_ach
-        old = self.old_ach
-        old_dxscore = old.dxscore if old else 0
-
-        infos = [
-            f"{self.shortid}. {self.title}【{DiffMap.label(self.difficulty) or str(self.difficulty)}】",
-            '  ',
-            "0.0000%(   )(    )",  # index = 2
-            '->',
-            f"{new.achievement:.4f}%({ComboMap.label(new.combo) or str(new.combo)})({SyncMap.label(new.sync) or str(new.sync)})"
-            ' | ',
-            f"DXSCORE: {old_dxscore}->{new.dxscore}"
-        ]
+    @property
+    def message(self) -> str:
+        """生成单条成绩变更的文本描述"""
+        # Line 1
+        text = (
+            f"{self.shortid}. "
+            f"{self.title if len(self.title) <= 20 else self.title[:20] + "..."} "
+            f"{DiffMap.label(self.difficulty, index=1) or str(self.difficulty)}\n"
+        )
+        # Line 2
+        text += ' '*4
+        # Line 2 - old achievement
+        if self.old_ach is None:
+            text += "0.0000%(    )(    )"
+        else:
+            text += (
+                f"{f"{self.old_ach.achievement:.4f}%":8}"
+                f"({f"{ComboMap.label(self.old_ach.combo) or str(self.old_ach.combo)}":4})"
+                f"({f"{SyncMap.label(self.old_ach.sync) or str(self.old_ach.sync)}":4})"
+            )
+        text += "  ->  "
+        # Line 2 - new achievement
+        text += (
+            f"{f"{self.new_ach.achievement:.4f}%":8}"
+            f"({f"{ComboMap.label(self.new_ach.combo) or str(self.new_ach.combo)}":4})"
+            f"({f"{SyncMap.label(self.new_ach.sync) or str(self.new_ach.sync)}":4})"
+        )
+        text += "  |  "
+        # Line 2 - dxscore
+        text += (
+            "DXSCORE: "
+            f"{self.old_ach.dxscore if self.old_ach is not None else 0}"
+            f"(✦{get_dxscore_star_count(self.old_ach.dxscore, self.old_ach.dxscore_max) if self.old_ach is not None else 0})"
+            "  ->  "
+            f"{self.new_ach.dxscore}"
+            f"(✦{get_dxscore_star_count(self.new_ach.dxscore, self.new_ach.dxscore_max)})"
+        )
         
-        if old is not None:
-            # 替换成实际旧值
-            infos[2] = f"{old.achievement:.4f}%({ComboMap.label(old.combo) or str(old.combo)})({SyncMap.label(old.sync) or str(old.sync)})"
-        
-        return ''.join(infos)
+        return text
 
 
 @dataclass
 class MaiChartAchDiffReport:
     """成绩变更报告（单次）"""
 
+    maib: str = "maimaiDX"
+    server: server = 'JP'
     no_update_song_count: int = 0
     updated_song: list[MaiChartAchDiff] = field(default_factory=list)
     new_song: list[MaiChartAchDiff] = field(default_factory=list)
@@ -69,6 +90,11 @@ class MaiChartAchDiffReport:
         return self.no_update_song_count + len(self.updated_song) + len(self.new_song) + len(self.no_data_song) + len(self.other_error_song)
 
 
+
+def diff_message_lite(shortid: int, title: str, difficulty: int, reason: str) -> str:
+    return f"{shortid}. {title} {DiffMap.label(difficulty, index=1) or str(difficulty)} \n    {reason}"
+
+
 def build_diff_report(
     report: MaiChartAchDiffReport, 
     *, 
@@ -80,60 +106,61 @@ def build_diff_report(
 
     # 快速确定：无变更直接结束
     if report.has_changes:
-        success_rate = parsed_count / file_count if file_count > 0 else 0
-        update_count = len(report.updated_song) + len(report.new_song)
-        update_rate = update_count / parsed_count if parsed_count > 0 else 0
-        lines = [
-            "乐曲成绩数据更新~",
-            f"· 解析了{file_count}条记录，其中成功{parsed_count}条，成功率{success_rate:.2%}",
-            f"· 记录更新{len(report.updated_song)}条，新增{len(report.new_song)}条，共计{update_count}条，更新率{update_rate:.2%}",
-            ]
+        new_count = len(report.new_song)
+        update_count = len(report.updated_song) + new_count
+        text = (
+            f"乐曲成绩数据更新~\n"
+            f"记录解析: {parsed_count}/{file_count}, "
+            f"更新{update_count}(新增{new_count}), "
+        )
     elif report.no_data_song or report.other_error_song:
-        lines = [
-            "乐曲数据没有发生变化喔~",
-            f"· 记录解析成功: {parsed_count}/{file_count}"
-        ]
+        text = (
+            f"乐曲数据没有发生变化喔~\n"
+            f"记录解析: {parsed_count}/{file_count}, "
+        )
     else:
-        return "乐曲数据没有发生变化喔~", None
+        enable_image = False
+        text = "乐曲数据没有发生变化喔~"
 
     if report.no_data_song:
-        lines.append(f"· 曲库未匹配或无数据: {len(report.no_data_song)}")
+        text += f"曲库未匹配或无数据: {len(report.no_data_song)}, "
     if report.other_error_song:
-        lines.append(f"· 记录解析异常: {len(report.other_error_song)}")
+        text += f"记录解析异常: {len(report.other_error_song)}, "
     
-    final_text = "\n".join(lines)
+    text = text.rstrip(", ")
     
     if not enable_image:
-        return final_text, None
+        return text, None
 
     # 图片生成
     detail_lines = ["乐曲成绩变更详情:"]
     if report.new_song:
-        detail_lines.append("\n【新增成绩】")
+        detail_lines.append("\n【NEW / 新增成绩】")
         for diff in report.new_song:
-            detail_lines.append(diff.get_diff_text())
+            detail_lines.append(diff.message)
     if report.updated_song:
-        detail_lines.append("\n【更新成绩】")
+        detail_lines.append("\n【UPDATE / 更新成绩】")
         for diff in report.updated_song:
-            detail_lines.append(diff.get_diff_text())
+            detail_lines.append(diff.message)
     if report.no_data_song:
-        detail_lines.append("\n【无数据曲目】")
-        for song_id, title, diff in report.no_data_song:
-            detail_lines.append(f"{song_id}. {title}【{DiffMap.label(diff) or str(diff)}】")
+        detail_lines.append("\n【NONE / 无数据曲目】")
+        for song_id, title, difficulty in report.no_data_song:
+            detail_lines.append(diff_message_lite(song_id, title, difficulty, "曲库中无该数据 (会在未来曲库更新后生效)"))
     if report.other_error_song:
-        detail_lines.append("\n【解析异常曲目】")
+        detail_lines.append("\n【ERROR / 解析异常曲目】")
         for error in report.other_error_song:
             song_id = error.get("song_id", "?????")
             title = error.get("title", "Unknown Music")
-            diff = error.get("difficulty", "??????")
-            detail_lines.append(f"{song_id}. {title}【{DiffMap.label(diff) or str(diff)}】 - 解析异常")
-            
+            difficulty = error.get("difficulty", "??????")
+            detail_lines.append(diff_message_lite(song_id, title, difficulty, "曲目解析异常 (可能是部分宴谱或其他异常数据)"))
+
     detail_text = "\n".join(detail_lines)
     if report.has_changes:
-        from ..image_gen import simple_list
+        from ..image_gen import simple_list, FontManager, FontCode
 
-        detail_image = simple_list(detail_text)
+        detail_image = simple_list(detail_text, font=FontManager.font(FontCode.SmileySans, size=16))
     else:
         detail_image = None
 
-    return final_text, detail_image
+    return text, detail_image
+
