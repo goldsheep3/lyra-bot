@@ -14,7 +14,7 @@ from nonebot.adapters.telegram import (Event as TGEvent,)
 from .. import config, utils, services, image_gen, network
 from ..utils.report import build_diff_report
 from ..constants import server, VERSION_MAP
-from . import i18n_data, i18n, reply,  sync
+from . import i18n_data, i18n, reply, sync
 from .context import get_args
 from .message import build_msg
 from ..services import get_mct_list
@@ -55,6 +55,7 @@ b50 = on_regex(r'^(?:b50|kkb)\s*(?P<args>.*)', priority=1, block=True)
 async def scorelist_handled(event: Event, matcher: Matcher, groups: dict = RegexDict(), _i18n = i18n):
     """处理命令: xxx完成表/xxx进度/xxx列表"""
     i18n_data.set(_i18n)
+    await matcher.finish("该功能尚未实现……比预想中难写很多，果咩纳塞（´・ω・｀）")
     
     target = groups.get("target", "").strip()
     args_text = groups.get("args", "").strip()
@@ -116,9 +117,12 @@ async def scorelist_handled(event: Event, matcher: Matcher, groups: dict = Regex
         await matcher.finish(reply("scorelist.no_data"))
         return
     
-    # ...
+    if config.LOW_MEMORY_MODE:
+        # 低内存模式，渲染 list_lite
+        return
     
-    # 低内存模式，渲染 list_lite(还没写，先短路)，否则渲染完整成绩列表网格图片
+    # 渲染完整成绩列表网格图片
+    return
 
 
 @b50.handle()

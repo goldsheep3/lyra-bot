@@ -646,6 +646,22 @@ class ImageUnit:
         return img
 
     @classmethod
+    @lru_cache(maxsize=12)
+    def mini_box_base(cls, diff: Diff, is_cabinet_dx: bool, shortid: int, w: int, h: int, ow: int,
+                      ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+        img = Image.new('RGBA', ms.xy(w + ow * 2, h + ow * 2), '#FFFFFF00')
+        du = DrawUnit(img, multiple=ms, cn_level=cn_level)
+
+        du.rounded_rect(ow, ow, w, h, diff.bg, radius=2.5, outline=diff.frame)
+        du.cut_line(ow, ow, w, h, radius=0, line_y=ow + 2, line_h=5, fill=diff.title_bg)
+        du.rounded_rect(ow, ow, w, h, None, radius=2.5, outline=diff.title_bg, width=1)
+        badge = cls.draw_badge(is_cabinet_dx=is_cabinet_dx, ms=ms, cn_level=cn_level)
+        img.paste(badge, ms.xy(ow + 75, ow + 2), badge)
+        shortid_img = cls.diff_text(diff=diff, text=f'#{shortid}', ms=ms, cn_level=cn_level)
+        img.paste(shortid_img, ms.xy(ow + 35, ow + 4.2 - ms.rev(round(shortid_img.size[1] / 2))), shortid_img)
+        return img
+
+    @classmethod
     def mini_box(cls, maidata: MaiData | None, difficulty: int, server: server,
                  ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0,
                  shared_zip: zipfile.ZipFile | None = None) -> Image.Image | tuple[int, int]:
@@ -684,22 +700,6 @@ class ImageUnit:
         img.paste(fc, ms.xy(ow + 36, ow + 24), fc)
         fs = cls.evaluate(Sync.get(ach.sync), mini=True, ms=ms, cn_level=cn_level)
         img.paste(fs, ms.xy(ow + 36, ow + 29), fs)
-        return img
-
-    @classmethod
-    @lru_cache(maxsize=12)
-    def mini_box_base(cls, diff: Diff, is_cabinet_dx: bool, shortid: int, w: int, h: int, ow: int,
-                      ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
-        img = Image.new('RGBA', ms.xy(w + ow * 2, h + ow * 2), '#FFFFFF00')
-        du = DrawUnit(img, multiple=ms, cn_level=cn_level)
-
-        du.rounded_rect(ow, ow, w, h, diff.bg, radius=2.5, outline=diff.frame)
-        du.cut_line(ow, ow, w, h, radius=0, line_y=ow + 2, line_h=5, fill=diff.title_bg)
-        du.rounded_rect(ow, ow, w, h, None, radius=2.5, outline=diff.title_bg, width=1)
-        badge = cls.draw_badge(is_cabinet_dx=is_cabinet_dx, ms=ms, cn_level=cn_level)
-        img.paste(badge, ms.xy(ow + 75, ow + 2), badge)
-        shortid_img = cls.diff_text(diff=diff, text=f'#{shortid}', ms=ms, cn_level=cn_level)
-        img.paste(shortid_img, ms.xy(ow + 35, ow + 4.2 - ms.rev(round(shortid_img.size[1] / 2))), shortid_img)
         return img
 
     @classmethod

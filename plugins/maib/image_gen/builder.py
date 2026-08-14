@@ -279,34 +279,22 @@ def draw_b50(b35_entries: list[tuple[MaiData, int]], b15_entries: list[tuple[Mai
 
         b35_imgs = [
             ImageUnit.b50_box(
-                maidata,
-                diff,
-                server,
-                current_version,
-                index,
-                False,
-                ms,
-                cn_level,
+                maidata=maidata, difficulty=difficulty, server=server, current_version=0, index=index,
+                is_b15=False, ms=ms, cn_level=cn_level,
                 shared_zip=shared_zip_handles.get(maidata.zip_path) if maidata.zip_path else None,
             )
-            for index, (maidata, diff) in enumerate(b35_entries, start=1)
+            for index, (maidata, difficulty) in enumerate(b35_entries, start=1)
         ]
         b35_imgs = [img for img in b35_imgs if img is not None]
         board_b35 = _image_grid_board(b35_imgs, cols=line_width, gap=ms.x(5), skip_first=line_width == 4, auto_close=True)
 
         b15_imgs = [
             ImageUnit.b50_box(
-                maidata,
-                diff,
-                server,
-                current_version,
-                index,
-                True,
-                ms,
-                cn_level,
+                maidata=maidata, difficulty=difficulty, server=server, current_version=0, index=index,
+                is_b15=True, ms=ms, cn_level=cn_level,
                 shared_zip=shared_zip_handles.get(maidata.zip_path) if maidata.zip_path else None,
             )
-            for index, (maidata, diff) in enumerate(b15_entries, start=1)
+            for index, (maidata, difficulty) in enumerate(b15_entries, start=1)
         ]
         b15_imgs = [img for img in b15_imgs if img is not None]
         board_b15 = _image_grid_board(b15_imgs, cols=line_width, gap=ms.x(5), skip_first=line_width == 4, auto_close=True)
@@ -371,17 +359,11 @@ def draw_grid_list(entries: list[tuple[MaiData, int]],
 
         grid_imgs = [
             ImageUnit.b50_box(
-                maidata,
-                diff,
-                server,
-                0,
-                index,
-                False,
-                ms,
-                cn_level,
+                maidata=maidata, difficulty=difficulty, server=server, current_version=0, index=index,
+                is_b15=False, ms=ms, cn_level=cn_level,
                 shared_zip=shared_zip_handles.get(maidata.zip_path) if maidata.zip_path else None,
             )
-            for index, (maidata, diff) in enumerate(entries, start=1)
+            for index, (maidata, difficulty) in enumerate(entries, start=1)
         ]
         grid_imgs = [img for img in grid_imgs if img is not None]
         board_grid = _image_grid_board(grid_imgs, cols=line_width, gap=ms.x(5), skip_first=False, auto_close=True)
