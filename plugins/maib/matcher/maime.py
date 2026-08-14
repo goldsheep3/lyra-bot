@@ -111,8 +111,8 @@ async def maime_lost_handled(event: Event, matcher: Matcher, groups: tuple = Reg
     if maime_user_id is None:
         await matcher.finish(reply("maime.lost.error.not_found"))
         return
-
-    await matcher.finish(reply("maime.lost.success", qq=maime_user_id))
+    masked = maime.access[:4] + "********" + maime.access[-4:]
+    await matcher.finish(reply("maime.lost.success", qq=maime_user_id, card=masked))
     return
 
 

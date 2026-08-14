@@ -89,7 +89,7 @@ maime:
       not_found: "未找到该卡片的绑定信息~"
       not_owner: "该卡片不属于你的账户~"
   lost:
-    success: "该卡片属于 {qq}，你可以尝试联系该音游痴喵（"
+    success: "卡号 {card} 属于 {qq}，你可以尝试联系该音游痴喵（"
     error:
       not_found: "这张卡片还没在这里绑定过，或者是被解绑的状态喵（"
       multiple_found: "这张卡片被绑定到了多个账户，只能麻烦你用完整 access 重试一次了qwq"
