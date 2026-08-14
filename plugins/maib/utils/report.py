@@ -32,7 +32,7 @@ class MaiChartAchDiff:
         # Line 1
         text = (
             f"{self.shortid}. "
-            f"{self.title if len(self.title) <= 20 else self.title[:20] + "..."} "
+            f'{(self.title[:20] + chr(46)*3) if len(self.title) > 20 else self.title} '
             f"{DiffMap.label(self.difficulty, index=1) or str(self.difficulty)}\n"
         )
         # Line 2
@@ -41,17 +41,23 @@ class MaiChartAchDiff:
         if self.old_ach is None:
             text += "0.0000%(    )(    )"
         else:
+            ach_old = f"{self.old_ach.achievement:.4f}%"
+            combo_old = ComboMap.label(self.old_ach.combo) or str(self.old_ach.combo)
+            sync_old = SyncMap.label(self.old_ach.sync) or str(self.old_ach.sync)
             text += (
-                f"{f"{self.old_ach.achievement:.4f}%":8}"
-                f"({f"{ComboMap.label(self.old_ach.combo) or str(self.old_ach.combo)}":4})"
-                f"({f"{SyncMap.label(self.old_ach.sync) or str(self.old_ach.sync)}":4})"
+                f"{ach_old:>8}"
+                f"({combo_old:>4})"
+                f"({sync_old:>4})"
             )
         text += "  ->  "
         # Line 2 - new achievement
+        ach_new = f"{self.new_ach.achievement:.4f}%"
+        combo_new = ComboMap.label(self.new_ach.combo) or str(self.new_ach.combo)
+        sync_new = SyncMap.label(self.new_ach.sync) or str(self.new_ach.sync)
         text += (
-            f"{f"{self.new_ach.achievement:.4f}%":8}"
-            f"({f"{ComboMap.label(self.new_ach.combo) or str(self.new_ach.combo)}":4})"
-            f"({f"{SyncMap.label(self.new_ach.sync) or str(self.new_ach.sync)}":4})"
+            f"{ach_new:>8}"
+            f"({combo_new:>4})"
+            f"({sync_new:>4})"
         )
         text += "  |  "
         # Line 2 - dxscore

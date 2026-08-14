@@ -163,8 +163,8 @@ def draw_info_box(maidata: MaiData, server: server, maiuser: Optional[MaiUser] =
         du1.text(dv_x, im_y1_5, text=username_text, fill="#FFF", anchor="lm", font=FontManager.font(FontCode.MiSans_Demibold, size=ms.x(3)))
         records = [
             "",
-            f"[CN({maiuser.get_dxrating_data("CN").total})] {maiuser.get_formated_time('CN').replace('0','O')}",
-            f"[JP({maiuser.get_dxrating_data("JP").total})] {maiuser.get_formated_time('JP').replace('0','O')}",
+            f'[CN({maiuser.get_dxrating_data("CN").total})] {maiuser.get_formated_time("CN").replace("0","O")}',
+            f'[JP({maiuser.get_dxrating_data("JP").total})] {maiuser.get_formated_time("JP").replace("0","O")}',
         ]
         du1.text(dv_x, im_y1_5, text="\n".join(records), fill="#FFF", anchor="lm", font=FontManager.font(FontCode.JBMono_Bold, size=ms.x(2.2)))
         del du1
