@@ -7,29 +7,41 @@ from nonebot.adapters.telegram import Event as TGEvent
 from plugins.nonebot_plugin_i18n import reply
 
 from .. import config, network, services, utils
-from ..constants import server
+from ..utils.enums import Server, ServerScope, SLevelSource
 from ..utils import NoLinkQQError
 
 
-ParsedArgs = tuple[int | None, server | Literal["ALL"] | None]
+ParsedArgs = tuple[Optional[int], Optional[ServerScope]]
 
 
 def get_args(args_text: str) -> ParsedArgs:
     """Parse optional target user id and target server arguments."""
-    target_user_id: int | None = None
-    target_server: server | Literal["ALL"] | None = None
+    target_user_id: Optional[int] = None
+    target_server: Optional[ServerScope] = None
 
     for arg in args_text.split():
         if arg.isdigit() and target_user_id is None:
             target_user_id = int(arg)
-        if arg.upper() in ["JP", "CN", "ALL"] and target_server is None:
-            target_server = cast(server | Literal["ALL"], arg.upper())
-        if arg in ["全服"] and target_server is None:
-            target_server = "ALL"
-        if arg in ["日服", "日"] and target_server is None:
-            target_server = "JP"
-        if arg in ["国服", "国"] and target_server is None:
-            target_server = "CN"
+        
+        if target_server is None:
+            try:
+                target_server = ServerScope.parse(arg)
+            except Exception:
+                target_server = None
+
+        _map = {
+            "全服": ServerScope.ALL,
+            
+            "日服": ServerScope.JP,
+            "日": ServerScope.JP,
+            
+            "国服": ServerScope.CN,
+            "简中服": ServerScope.CN,
+            "国": ServerScope.CN,
+            "简中": ServerScope.CN,
+        }
+        if arg in _map:
+            target_server = _map[arg]
 
     return target_user_id, target_server
 
@@ -67,14 +79,14 @@ async def get_maiuser(event: Event, user_id: int | None = None) -> utils.MaiUser
 
 async def get_maidata_with_ach(
     short_id: int,
-    target_server: server,
+    target_server: Server,
     user_id: int,
-) -> Optional[tuple[utils.MaiData, server]]:
+) -> Optional[tuple[utils.MaiData, Server]]:
     """Load music data with a user's achievement and apply server fallback."""
     mdt = await services.get_mdt.id(short_id, user_id)
     if not mdt:
         return None
 
     maidata = mdt.to_utils(achs_user_id=user_id)
-    actual_server = target_server if maidata.version_cn is not None else "JP"
+    actual_server = Server.JP if (getattr(maidata, SLevelSource.server(target_server).lv_field, None) is None) else target_server
     return maidata, actual_server

@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import utils
-from ..constants import server as Server
+from ..utils.enums import Server
 from . import execute_func
 from .minfo import get_mdt
 from .models import MaiData, MaiRecord
@@ -20,6 +20,7 @@ __all__ = [
 ]
 
 
+# TODO
 _RecordKey = tuple[int, int, Server]
 
 

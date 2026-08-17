@@ -11,7 +11,8 @@ from sqlalchemy.orm import selectinload
 from nonebot_plugin_datastore import create_session
 
 from .. import services
-from ..constants import VERSION_MAP, server as Server
+from ..utils.enums import Server
+from ..utils.map import Versions
 from ..services.models import MaiChartAch, MaiUser
 from ..services.refresh import _calc_mca_dxrating, _refresh_single_user_dxrating_cache
 from . import reply
@@ -50,7 +51,7 @@ async def recalc_dxrating_handled(bot: Bot, event: Event, matcher: Matcher):
 
         # 3. 逐条重算 dxrating
         for mca in all_achs:
-            current_version = VERSION_MAP.get_latest_version_id(mca.server)
+            current_version = Versions.latest(mca.server)
             old_rating = mca.dxrating
             try:
                 new_rating = _calc_mca_dxrating(mca, current_version)
@@ -71,7 +72,7 @@ async def recalc_dxrating_handled(bot: Bot, event: Event, matcher: Matcher):
         # 4. 刷新所有用户的汇总缓存
         refreshed_users = 0
         for user_id in user_ids:
-            for srv in ("JP", "CN"):
+            for srv in (Server.JP, Server.CN):
                 try:
                     await _refresh_single_user_dxrating_cache(
                         user_id=user_id,

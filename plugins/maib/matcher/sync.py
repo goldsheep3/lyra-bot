@@ -17,7 +17,6 @@ from nonebot.adapters.telegram import Bot as TGBot
 from nonebot.adapters.telegram.event import PrivateMessageEvent as TGPrivateMessageEvent
 
 from .. import config, utils, services, image_gen, network
-from ..constants import server
 from ..utils.report import MaiChartAchDiffReport, build_diff_report
 from ..utils.sync import build_legacy_lyra_ach_list, build_lyra_records_v3, parse_lyra_maisync_data
 from . import i18n_data, i18n, reply, rule_is_private
@@ -106,7 +105,7 @@ async def _build_sy_records_hash(records: list[dict[str, Any]]) -> str:
 
 # --- CN 更新线路---
 
-async def get_sy_and_upload(user_id: int, server: server) -> MaiChartAchDiffReport:
+async def get_sy_and_upload(user_id: int) -> MaiChartAchDiffReport:
     # 获取水鱼数据
     data = await network.DivingFish.dev_player_records(qq=user_id, developer_token=config.DIVING_FISH_DEVELOPER_TOKEN)
     records = data.pop('records', []) if data else []
@@ -140,7 +139,7 @@ async def sytb_handled(event: Event, matcher: Matcher, _i18n = i18n):
         return
 
     # 更新水鱼数据并生成差异报告
-    report = await get_sy_and_upload(maiuser.user_id, 'CN')
+    report = await get_sy_and_upload(maiuser.user_id)
     payload: list = [
         ("at", (maiuser.username, user_id)),
     ]

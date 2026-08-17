@@ -8,6 +8,7 @@ from nonebot.adapters.onebot.v11 import Event as OneBotV11Event
 
 from .. import services, image_gen
 from ..utils import NoLinkQQError
+from ..utils.enums import UICode, Server, ServerScope
 from . import i18n_data, i18n, reply
 from .context import get_args, get_maiuser
 from .message import build_msg
@@ -36,12 +37,12 @@ async def mai_info_handled(event: Event, matcher: Matcher, groups: tuple = Regex
         # 未绑定 QQ
         maiuser = None
         qq = None
-        default_server = 'JP'  # 没有绑定 QQ 的用户默认展示日服数据
+        default_server = Server.JP  # 没有绑定 QQ 的用户默认展示日服数据
     except ValueError as e:
         await matcher.finish(str(e))
         return
     
-    parsed_uid, server = get_args(args)
+    parsed_uid, scope = get_args(args)
     
     # 检查消息中的 at 提醒，优先级高于文本传参
     at_qq = None
@@ -52,8 +53,8 @@ async def mai_info_handled(event: Event, matcher: Matcher, groups: tuple = Regex
                 break
     if at_qq is not None:
         parsed_uid = at_qq
-    
-    server = server if (server != 'ALL' and server is not None) else default_server  # 暂不支持 ALL
+
+
     # 如果传入了目标用户 ID，则覆盖当前查询用户
     if parsed_uid is not None:
         qq = parsed_uid
@@ -68,9 +69,20 @@ async def mai_info_handled(event: Event, matcher: Matcher, groups: tuple = Regex
         await matcher.finish(reply("info.maidata_not_found", short_id=shortid))
         return
     maidata = mdt.to_utils(achs_user_id=qq)
-    s = server if maidata.version_cn is not None else "JP"  # 如果乐曲没有国服版本，则展示日服数据
     
-    info_box = image_gen.draw_info_box(maidata, s, maiuser=maiuser, cn_level=1 if s == 'CN' else 0)
+    if scope == ServerScope.ALL:
+        # 暂不支持 ALL
+        await matcher.finish(reply("info.all_server_not_supported"))
+        return
+    elif scope is None:
+        server = default_server
+    else:
+        server = scope.to_server()
+    if server == Server.CN and maidata.version_cn is None:
+        server = Server.JP  # 如果乐曲没有国服版本，则展示日服数据
+    uic = UICode.CN if server == Server.CN else UICode.JP
+
+    info_box = image_gen.draw_info_box(maidata, server, maiuser=maiuser, ui_code=uic)
     info_box_bytes = image_gen.get_image_bytes(info_box)
     
     payload = [
@@ -97,7 +109,7 @@ async def mai_what_song_handled(event: Event, matcher: Matcher, groups: tuple = 
         # 未绑定 QQ
         maiuser = None
         qq = None
-        server = 'JP'  # 没有绑定 QQ 的用户默认展示日服数据
+        server = Server.JP  # 没有绑定 QQ 的用户默认展示日服数据
     except ValueError as e:
         await matcher.finish(str(e))
         return
@@ -130,8 +142,8 @@ async def mai_what_song_handled(event: Event, matcher: Matcher, groups: tuple = 
         maidata = mdt.to_utils(achs_user_id=qq)
         if matched_alias:
             maidata._matched_alias = matched_alias
-        s = server if maidata.version_cn is not None else "JP"
-        info_box = image_gen.draw_info_box(maidata, server=s, maiuser=maiuser, cn_level=1 if s == 'CN' else 0)
+        uic = UICode.CN if server == Server.CN else UICode.JP
+        info_box = image_gen.draw_info_box(maidata, server=server, maiuser=maiuser, ui_code=uic)
         info_bytes = image_gen.get_image_bytes(info_box)
         alias_hint = f"（别名: {matched_alias}）" if matched_alias else None
         return info_bytes, alias_hint

@@ -11,8 +11,9 @@ from typing import Any, Awaitable, Callable, Mapping, Optional, Sequence, cast
 
 import orjson
 
-from ..constants import COMBO_MAP, DIFFICULTY_MAP, SYNC_MAP, server
 from .models import MaiChartAch, MaiData
+from .enums import Server
+from ..utils.map import Difficulties, ComboID, SyncID, Combos, Syncs
 
 
 __all__ = [
@@ -44,11 +45,11 @@ class LegacyLyraRecord:
     title: str
     record_type: str
     difficulty: int
-    server: server
+    server: Server
     achievement: float
     dxscore: int
-    combo: int
-    sync: int
+    combo: ComboID
+    sync: SyncID
 
 
 @dataclass(slots=True)
@@ -69,11 +70,11 @@ class LyraRecordV3:
     cabinet: str
     record_type: str
     difficulty: int
-    server: server
+    server: Server
     achievement: float
     dxscore: int
-    combo: int
-    sync: int
+    combo: ComboID
+    sync: SyncID
     play_time: datetime
     play_timestamp: int
     record_hash: str
@@ -123,12 +124,12 @@ def normalize_legacy_lyra_record(record: Mapping[str, Any]) -> LegacyLyraRecord:
     return LegacyLyraRecord(
         title=str(record.get('title', '')).strip() or 'Unknown',
         record_type=str(record.get('type', 'sd')).lower(),
-        difficulty=DIFFICULTY_MAP.key(str(record.get('diff', '')).lower()) or -1,
-        server=cast(server, str(record.get('server', 'JP'))),
+        difficulty=Difficulties.find_id(str(record.get('diff', ''))) or -1,
+        server=Server.parse(record.get('server', 'JP')),
         achievement=float(record.get('achievement', 0)),
         dxscore=int(record.get('dxscore', 0)),
-        combo=COMBO_MAP.key(str(record.get('combo', '')).lower()) or 0,
-        sync=SYNC_MAP.key(str(record.get('sync', '')).lower()) or 0,
+        combo=Combos.find_id(str(record.get('combo', '')).lower()) or 0,
+        sync=Syncs.find_id(str(record.get('sync', '')).lower()) or 0,
     )
 
 
@@ -148,30 +149,13 @@ def _normalize_record_type(value: Any) -> str:
     raise ValueError(f'非法记录类型: {value!r}')
 
 
-def _normalize_server(value: Any) -> server:
-    server_text = str(value or 'JP').strip().upper()
-    if server_text not in ('JP', 'CN'):
-        raise ValueError(f'非法服务器类型: {value!r}')
-    return cast(server, server_text)
-
-
-def _normalize_combo_text(value: Any) -> str:
-    text = str(value or '').strip().lower()
-    return '' if text in ('', 'fc_dummy') else text
-
-
-def _normalize_sync_text(value: Any) -> str:
-    text = str(value or '').strip().lower()
-    return '' if text in ('', 'sync_dummy') else text
-
-
 def build_record_hash(
     *,
     user_id: int,
     title: str,
     cabinet: str,
     difficulty: int,
-    server: server,
+    server: Server,
     record_type: str,
     achievement: float,
     dxscore: int,
@@ -200,7 +184,7 @@ def normalize_lyra_record_v3(record: Mapping[str, Any], *, user_id: int) -> Lyra
     if not title:
         raise ValueError('空标题记录')
 
-    difficulty = DIFFICULTY_MAP.key(str(record.get('diff', '')).lower()) or -1
+    difficulty = Difficulties.find_id(str(record.get('diff', ''))) or -1
     if difficulty < 0:
         raise KeyError(f"{title}[{record.get('diff', '?')}]")
 
@@ -210,9 +194,9 @@ def normalize_lyra_record_v3(record: Mapping[str, Any], *, user_id: int) -> Lyra
 
     cabinet = _normalize_cabinet(record.get('cabinet', 'sd'))
     record_type = _normalize_record_type(record.get('type', 'history'))
-    target_server = _normalize_server(record.get('server', 'JP'))
-    combo = COMBO_MAP.key(_normalize_combo_text(record.get('combo', ''))) or 0
-    sync = SYNC_MAP.key(_normalize_sync_text(record.get('sync', ''))) or 0
+    target_server = Server.parse(record.get('server', 'JP'))
+    combo = Combos.find_id(record.get('combo', '')) or 0
+    sync = Syncs.find_id(record.get('sync', '')) or 0
     achievement = float(f"{float(record.get('achievement', 0)):.4f}")
 
     return LyraRecordV3(
@@ -333,7 +317,7 @@ async def build_legacy_lyra_ach_list(
     return result
 
 
-def _parse_single_sy_record(record: dict) -> Optional[MaiChartAch]:
+def _parse_single_sy_record(record: dict, server: Server = Server.CN) -> Optional[MaiChartAch]:
     """将单条原始 record 字典解析为 MaiChartAch 对象，若无效则返回 None"""
     shortid = record.get("song_id")
     level_idx = record.get("level_index")
@@ -343,21 +327,21 @@ def _parse_single_sy_record(record: dict) -> Optional[MaiChartAch]:
     return MaiChartAch(
         shortid=shortid,
         difficulty=level_idx + 2,
-        server="CN",
+        server=server,
         achievement=record.get("achievements", 0.0),
         dxscore=record.get("dxScore", 0),
-        combo=COMBO_MAP.key(record.get("fc", "").lower()) or 0,
-        sync=SYNC_MAP.key(record.get("fs", "").lower()) or 0,
+        combo=Combos.find_id(record.get("fc", "").lower()) or 0,
+        sync=Syncs.find_id(record.get("fs", "").lower()) or 0,
         update_time=datetime.now()
     )
 
-def parse_sy_player_record(maidata: MaiData, records: list) -> MaiData:
+def parse_sy_player_record(maidata: MaiData, records: list, server: Server = Server.CN) -> MaiData:
     """解析水鱼玩家记录并更新到 MaiData 对象中"""
     for record in records:
         if record.get("song_id") != maidata.shortid:
             continue
             
-        ach = _parse_single_sy_record(record)
+        ach = _parse_single_sy_record(record, server=server)
         if ach and (chart := maidata.get_chart(ach.difficulty)):
             chart.set_ach(ach)
     

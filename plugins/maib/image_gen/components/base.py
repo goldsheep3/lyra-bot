@@ -130,8 +130,7 @@ class BaseDrawer:
             style = TextStyle(fill=fill, anchor='lm', font=font)
             self.text(x, dy, text=lines_new[i], style=style)
 
-    @lru_cache(maxsize=8)
-    def get_mask(self, w: int, h: int, radius: float) -> Image.Image:
+    def get_mask(self, w: float, h: float, radius: float) -> Image.Image:
         """获取圆角遮罩"""
         mask = Image.new('L', self.ms.xy(w, h), 0)
         draw = ImageDraw.Draw(mask)

@@ -10,7 +10,7 @@ from nonebot.adapters.telegram import Event as TGEvent
 
 from .. import services
 from ..utils import get_dxrating
-from ..constants import RATE_ALIAS, DIFFICULTY_MAP
+from ..utils.map import AchievementMap, Difficulties
 from . import i18n_data, i18n, reply
 
 
@@ -35,10 +35,12 @@ async def ra_calc_handled(event: Event, matcher: Matcher, groups: dict[str, Opti
         # achievement = int(achievement * 10000)  -> 后续重构为 INT 1,010,000 存储格式
     else:
         # 按照别名解析
-        achievement = RATE_ALIAS.key(raw_achievement.lower())
+        achievement = AchievementMap.find_achievement(raw_achievement)
         if achievement is None:
             await matcher.finish(reply("rc.achievement_invalid", achievement=raw_achievement))
             return
+        else:
+            achievement = achievement / 10000  # AchievementRateInfo 中存储的是`1,010,000`格式的整数，除以 10000 得到浮点计算结果
 
     # 解析 level
     raw_level: str = groups.get("level") or ""
@@ -55,8 +57,8 @@ async def ra_calc_handled(event: Event, matcher: Matcher, groups: dict[str, Opti
     elif match := re.match(pattern, raw_level):
         # 解析 `id11951紫` 形式
         shortid = int(match.group("id"))
-        difficulty = DIFFICULTY_MAP.key(match.group("color")) or 5  # MASTER
-        
+        difficulty = Difficulties.find_id(match.group("color")) or 5  # MASTER
+
         mdt = await services.get_mdt.id(shortid)
         if mdt is None:
             await matcher.finish(reply("rc.maidata_invalid"))

@@ -7,7 +7,6 @@ from .git import get_git_head_hash
 from .models import MaiAlias, MaiChartAch, MaiChart, MaiData, DXRatingData, MaiUser
 from .report import MaiChartAchDiff, MaiChartAchDiffReport, build_diff_report
 from .simai import SimaiNoteCount
-
 from . import sync
 
 

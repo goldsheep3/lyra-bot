@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from ..constants import server
+from ..utils.enums import Server, SLevelSource
 from . import execute_func
 from .models import MaiData, MaiChart, MaiChartAch
 
@@ -75,7 +75,7 @@ class get_mdt_list:
 class get_mct_list:
     
     @staticmethod
-    async def level(lv: float | tuple[float, float], server: server, achs_user_id: Optional[int] = None, allow_utage: bool = False,
+    async def level(lv: float | tuple[float, float], server: Server, achs_user_id: Optional[int] = None, allow_utage: bool = False,
                     *, session: Optional[AsyncSession] = None) -> Sequence[MaiChart]:
         """通过 等级范围 获取 `MaiChart`（列表）"""
         async def _query(session: AsyncSession):
@@ -83,10 +83,7 @@ class get_mct_list:
                 min_lv, max_lv = min(lv), max(lv)
             else:
                 min_lv, max_lv = lv, lv
-            level_field = {
-                "CN": MaiChart.lv_cn,
-                "JP": MaiChart.lv,
-            }.get(server, MaiChart.lv)
+            level_field = getattr(MaiChart, SLevelSource.server(server).lv_field, MaiChart.lv)
 
             stmt = (
                 select(MaiChart)
@@ -107,7 +104,7 @@ class get_mct_list:
 class get_mca_list:
 
     @staticmethod
-    async def user(user_id: int, server: server, allow_utage: bool = False,
+    async def user(user_id: int, server: Server, allow_utage: bool = False,
                    *, session: Optional[AsyncSession] = None) -> Sequence[MaiChartAch]:
         """通过用户 ID 和服务器获取 `MaiChartAch`（列表）"""
         async def _query(session: AsyncSession):
@@ -122,7 +119,7 @@ class get_mca_list:
         return await execute_func.select(_query, session=session)
 
     @staticmethod
-    async def b50(user_id: int, server: server, cut_version: int,
+    async def b50(user_id: int, server: Server, cut_version: int,
                   *, session: Optional[AsyncSession] = None) -> tuple[Sequence[MaiChartAch], Sequence[MaiChartAch]]:
         """
         通过 `user_id, server, cut_version` 获取 `MaiChartAch`（列表）（用于 best 50 生成）
@@ -148,13 +145,7 @@ class get_mca_list:
                 .order_by(MaiChartAch.dxrating.desc(), MaiChartAch.achievement.desc())
             )
 
-            if server == "JP":
-                version_field = MaiData.version
-            elif server == "CN":
-                version_field = MaiData.version_cn
-            else:
-                raise KeyError(f"Unknown server: {server}")
-
+            version_field = getattr(MaiData, SLevelSource.server(server).lv_field, MaiData.version)
             if target == "b35":
                 statement = statement.where(version_field < cut_version).limit(35)
             elif target == "b15":
@@ -170,7 +161,7 @@ class get_mca_list:
 
 
     @staticmethod
-    async def achievement(ach: float | tuple[float, float], server: server, achs_user_id: int, allow_utage: bool = False,
+    async def achievement(ach: float | tuple[float, float], server: Server, achs_user_id: int, allow_utage: bool = False,
                           *, session: Optional[AsyncSession] = None) -> Sequence[MaiChartAch]:
         """通过 完成率范围 获取 `MaiChartAch`（列表）"""
         async def _query(session: AsyncSession):
@@ -203,7 +194,7 @@ class get_mca_list:
         return await execute_func.select(_query, session=session)
 
     @staticmethod
-    async def dxrating(dxra: float | tuple[float, float], server: server, achs_user_id: int,
+    async def dxrating(dxra: float | tuple[float, float], server: Server, achs_user_id: int,
                        *, session: Optional[AsyncSession] = None) -> Sequence[MaiChartAch]:
         """通过 DXRating 范围 获取 `MaiChartAch`（列表）"""
         async def _query(session: AsyncSession):

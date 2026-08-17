@@ -4,7 +4,8 @@ import bisect
 from typing import Optional, Literal
 from PIL import Image, ImageFont
 
-from ..constants import GENRE_MAP
+from ..utils.enums import UICode
+from ..utils.map import Genres
 from .models import COLOR_THEME
 
 
@@ -170,12 +171,20 @@ def limit_text(text: str, font: ImageFont.FreeTypeFont, max_width: float) -> str
     return current_text
 
 # --- 流派信息获取函数 ---
-def get_genre(genre_id: int, cn_level: Literal[0, 1, 2]) -> tuple[str, str]:
+def get_genre(genre_id: int, ui_code: UICode) -> tuple[str, str]:
     """获取流派信息"""
-    genre_info = GENRE_MAP.get(genre_id, {})
-    target = {0: 'jp', 1: 'intl', 2: 'cn'}
-    genre = genre_info.get(target.get(cn_level, 'jp'), 'N/A').replace('\\n', '\n')
-    color = genre_info.get('color', COLOR_THEME)
+    genre_info = Genres.get(genre_id)
+    if genre_info is None:
+        return 'N/A', COLOR_THEME
+
+    color = genre_info.color
+    if ui_code.is_jp:
+        genre = genre_info.jp
+    elif ui_code.is_cn:
+        genre = genre_info.cn
+    else:
+        genre = genre_info.intl
+
     return genre, color
 
 # --- PIL Image 转字节流 ---

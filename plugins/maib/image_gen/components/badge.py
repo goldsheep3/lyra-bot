@@ -12,6 +12,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from ..models import Diff
 from ..utils import MS, FontCode, FontManager, ImageManager
+from ...utils.enums import UICode
 from .base import TextStyle, BaseDrawer
 
 
@@ -19,12 +20,12 @@ class LevelBadge:
     """等级标签组件"""
     
     def __init__(self, level: float, diff: Diff, plus: bool = False, 
-                 ignore_decimal: bool = False, cn_level: Literal[0, 1, 2] = 0):
+                 ignore_decimal: bool = False, ui_code: UICode = UICode.JP):
         self.level = level
         self.diff = diff
         self.plus = plus
         self.ignore_decimal = ignore_decimal
-        self.cn_level = cn_level
+        self.uic = ui_code
 
     def render(self, draw: ImageDraw.ImageDraw, ms: MS, x: float, y: float):
         """渲染等级标签"""
@@ -32,7 +33,7 @@ class LevelBadge:
         d = str(round(self.level % 1 * 10)).replace('0', 'O')
 
         # 等级 `LV`
-        if self.cn_level == 2:
+        if self.uic.is_cn_all:
             draw.text(ms.xy(x - 1, y), text="等级", fill=self.diff.frame, anchor='ls',
                      font=FontManager.font(FontCode.MiSans_Demibold, size=ms.x(3)),
                      stroke_width=ms.x(0.5), stroke_fill=self.diff.frame)
@@ -72,42 +73,38 @@ class DifficultyBadge:
     """难度标签组件"""
     
     def __init__(self, diff: Diff, custom_text: Optional[str] = None, 
-                 limit_width: float = -1, ms: MS = MS(), 
-                 cn_level: Literal[0, 1, 2] = 0,):
+                 limit_width: float = -1, ms: MS = MS(), ui_code: UICode = UICode.JP):
         self.diff = diff
         self.custom_text = custom_text
         self.limit_width = limit_width
         self.ms = ms
-        self.cn_level = cn_level
+        self.uic = ui_code
 
-    @lru_cache(maxsize=10)
-    def _get_diff_text_image(self, diff: Diff, text: Optional[str] = None, 
-                            limit_width: float = -1, ms: MS = MS(), 
-                            cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
-        """生成难度文本图片（缓存版）"""
+    def _get_diff_text_image(self, diff: Diff, text: Optional[str] = None, limit_width: float = -1) -> Image.Image:
+        """生成难度文本图片"""
         from ..utils import limit_text
         
-        font = FontManager.font(FontCode.MiSans_Heavy, ms.x(4.8))
+        font = FontManager.font(FontCode.MiSans_Heavy, self.ms.x(4.8))
         if text:
-            text = limit_text(text, font, limit_width) if limit_width > 0 else text
+            text = limit_text(text, font, self.limit_width) if self.limit_width > 0 else text
             display_text = text
         else:
             display_text = diff.text_title
 
-        x1, y1, x2, y2 = font.getbbox(display_text, anchor='lm', stroke_width=ms.x(0.8))
-        if cn_level == 2 and not text:
-            cn_font = FontManager.font(FontCode.MiSans_Heavy, ms.x(3.3))
-            cn_x1, _cn_y1, cn_x2, _cn_y2 = cn_font.getbbox(diff.text_title_cn, anchor='lm', stroke_width=ms.x(0.8))
-            cn_width = ms.rev(round(cn_x2 - cn_x1))
+        x1, y1, x2, y2 = font.getbbox(display_text, anchor='lm', stroke_width=self.ms.x(0.8))
+        if self.uic.is_cn_all and not text:
+            cn_font = FontManager.font(FontCode.MiSans_Heavy, self.ms.x(3.3))
+            cn_x1, _cn_y1, cn_x2, _cn_y2 = cn_font.getbbox(diff.text_title_cn, anchor='lm', stroke_width=self.ms.x(0.8))
+            cn_width = self.ms.rev(round(cn_x2 - cn_x1))
         else:
             cn_width = 0
         
-        width = (ms.rev(round(x2 - x1)) + cn_width) * 1.2
-        height = ms.rev(round(y2 - y1)) * 1.2
+        width = (self.ms.rev(round(x2 - x1)) + cn_width) * 1.2
+        height = self.ms.rev(round(y2 - y1)) * 1.2
 
-        img = Image.new('RGBA', ms.xy(width, height), '#FFFFFF00')
+        img = Image.new('RGBA', self.ms.xy(width, height), '#FFFFFF00')
         draw = ImageDraw.Draw(img)
-        drawer = BaseDrawer(img, draw, ms)
+        drawer = BaseDrawer(img, draw, self.ms)
         
         style = TextStyle(fill=diff.text, anchor='lm', font=font, 
                          shadow_width=0.8, shadow_color=diff.deep,
@@ -116,83 +113,77 @@ class DifficultyBadge:
         
         if cn_width:
             style_cn = TextStyle(fill=diff.text, anchor='ld', 
-                               font=FontManager.font(FontCode.MiSans_Heavy, ms.x(3.3)),
+                               font=FontManager.font(FontCode.MiSans_Heavy, self.ms.x(3.3)),
                                shadow_width=0.8, shadow_color=diff.deep,
                                shadow2_width=0.8, shadow2_color=diff.frame, shadow2_offset=0.7)
-            drawer.text(ms.rev(round(x2 - x1)) * 1.1, ms.rev(round(y2 - y1)) * 1.1, 
+            drawer.text(self.ms.rev(round(x2 - x1)) * 1.1, self.ms.rev(round(y2 - y1)) * 1.1, 
                        diff.text_title_cn, style_cn)
 
         return img
 
     def render(self) -> Image.Image:
         """渲染难度标签"""
-        return self._get_diff_text_image(self.diff, self.custom_text, 
-                                        self.limit_width, self.ms, self.cn_level)
+        return self._get_diff_text_image(self.diff, self.custom_text,  self.limit_width)
 
 
 class DrawBadge:
     """谱面类型徽章组件 (标准/DX)"""
     
     def __init__(self, is_cabinet_dx: bool, ms: MS = MS(), 
-                 cn_level: Literal[0, 1, 2] = 0):
+                 ui_code: UICode = UICode.JP):
         self.is_cabinet_dx = is_cabinet_dx
         self.ms = ms
-        self.cn_level = cn_level
+        self.uic = ui_code
 
-    @lru_cache(maxsize=4)
-    def _render_sd_badge(self, ms: MS, cn_level: Literal[0, 1, 2]) -> Image.Image:
+    def _render_sd_badge(self) -> Image.Image:
         """渲染标准谱面徽章"""
-        img = Image.new('RGBA', ms.xy(20, 5), "#FFFFFF00")
+        img = Image.new('RGBA', self.ms.xy(20, 5), "#FFFFFF00")
         draw = ImageDraw.Draw(img)
-        drawer = BaseDrawer(img, draw, ms)
+        drawer = BaseDrawer(img, draw, self.ms)
 
         COLOR_SD = '#4AF'
         drawer.rounded_rect(0, 0, 20, 5, fill=COLOR_SD, radius=5)
         
-        offset = 0.6 if cn_level else 0
+        offset = 0.6 if self.uic.is_cn else 0
         
         
-        font = FontManager.font(FontCode.MiSans_Heavy, ms.x(3 + offset))
-        text = "标 准" if cn_level else "スタンダード"
+        font = FontManager.font(FontCode.MiSans_Heavy, self.ms.x(3 + offset))
+        text = "标 准" if self.uic.is_cn else "スタンダード"
         style = TextStyle(fill='#FFF', anchor='mm', font=font)
         drawer.text(10, 2.5, text, style)
         return img
 
-    @lru_cache(maxsize=4)
-    def _render_dx_badge(self, ms: MS, cn_level: Literal[0, 1, 2]) -> Image.Image:
+    def _render_dx_badge(self) -> Image.Image:
         """渲染 DX 谱面徽章"""
-        img = Image.new('RGBA', ms.xy(20, 5), "#FFFFFF00")
+        img = Image.new('RGBA', self.ms.xy(20, 5), "#FFFFFF00")
         draw = ImageDraw.Draw(img)
-        drawer = BaseDrawer(img, draw, ms)
+        drawer = BaseDrawer(img, draw, self.ms)
 
         COLOR_DX = ('#FF7711', '#FFFFFF')
         COLOR_DELUXE = ('#FF4646', '#FFA02D', '#FFDC00', '#9AC948', '#00AAE6', '#2299EE')
 
         drawer.rounded_rect(0, 0, 20, 5, fill='#FFF', radius=5,
-                          outline=COLOR_DX[1] if cn_level else COLOR_DELUXE[-1], width=0.5)
+                          outline=COLOR_DX[1] if self.uic.is_cn else COLOR_DELUXE[-1], width=0.5)
         
-        if cn_level:
+        if self.uic.is_cn:
             text = "DX"
             style = TextStyle(fill=COLOR_DX[0], anchor='mm', 
-                            font=FontManager.font(FontCode.MiSans_Heavy, ms.x(4.1)))
+                            font=FontManager.font(FontCode.MiSans_Heavy, self.ms.x(4.1)))
             drawer.text(10, 2.5, text, style)
         else:
-            font = FontManager.font(FontCode.MiSans_Heavy, ms.x(3.2))
+            font = FontManager.font(FontCode.MiSans_Heavy, self.ms.x(3.2))
             text = "でらっくす"
-            total_text_width = ms.rev(round(font.getlength(text)))
+            total_text_width = self.ms.rev(round(font.getlength(text)))
             start_x = 10 - (total_text_width / 2)
             current_x = start_x
             center_y = 2.5
             for char, color in zip(text, COLOR_DELUXE):
                 style = TextStyle(fill=color, anchor='lm', font=font)
                 drawer.text(current_x, center_y, char, style)
-                char_width = ms.rev(round(font.getlength(char)))
+                char_width = self.ms.rev(round(font.getlength(char)))
                 current_x += char_width
         return img
 
     def render(self) -> Image.Image:
         """渲染徽章"""
-        if self.is_cabinet_dx:
-            return self._render_dx_badge(self.ms, self.cn_level)
-        else:
-            return self._render_sd_badge(self.ms, self.cn_level)
+        return self._render_dx_badge() if self.is_cabinet_dx else self._render_sd_badge()

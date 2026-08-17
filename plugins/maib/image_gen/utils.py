@@ -9,7 +9,8 @@ from functools import lru_cache
 from PIL import Image, ImageDraw, ImageFont
 
 from ..utils import MaiData, MaiChart, get_git_head_hash
-from ..constants import ASSETS_PATH, server
+from ..utils.constants import ASSETS_PATH
+from ..utils.enums import UICode, Server
 from .models import (
     Diff, Difficulty, 
     AchColor, EvalInfo, Combo, Sync,
@@ -168,12 +169,7 @@ class FontCode(StrEnum):
 class FontManager:
     """字体管理器 - 负责加载和缓存字体文件（类方法版）"""
     
-    _font_path: Path = Path()
-
-    @classmethod
-    def init(cls, font_path: Path):
-        """全局初始化字体路径"""
-        cls._font_path = Path(font_path)
+    _font_path: Path = ASSETS_PATH / "fonts"
 
     @classmethod
     @lru_cache(maxsize=128)
@@ -217,22 +213,12 @@ class FontManager:
 class ImageManager:
     """资源管理器 - 负责加载和缓存图片文件（类方法版）"""
     
-    _assets_path: Path = Path()
-    _img_path: Path = Path()
-    _pic_path: Path = Path()
-    _dxrating_path: Path = Path()
-    _plate_path: Path = Path()
-    _ver_path: Path = Path()
-
-    @classmethod
-    def init(cls, assets_path: Path):
-        """全局初始化资源路径"""
-        cls._assets_path = Path(assets_path)
-        cls._img_path = cls._assets_path / "img"         # `img` -> 直接打包的部分底图
-        cls._pic_path = cls._assets_path / "pic"         # `pic` -> 静态资源
-        cls._dxrating_path = cls._pic_path / "dxrating"  # `dxrating` -> DX Rating 框图
-        cls._plate_path = cls._pic_path / "plate"        # `plate` -> 牌子图
-        cls._ver_path = cls._pic_path / "ver"            # `ver` -> 版本图标
+    _assets_path: Path = ASSETS_PATH
+    _img_path: Path = ASSETS_PATH / "img"
+    _pic_path: Path = ASSETS_PATH / "pic"
+    _dxrating_path: Path = ASSETS_PATH / "pic" / "dxrating"
+    _plate_path: Path = ASSETS_PATH / "pic" / "plate"
+    _ver_path: Path = ASSETS_PATH / "pic" / "ver"
 
     @classmethod
     @lru_cache(maxsize=64)
@@ -278,20 +264,16 @@ class ImageManager:
         return cls.dxrating_image(rating_filename, size=size)
 
 
-FontManager.init(ASSETS_PATH / "fonts")
-ImageManager.init(ASSETS_PATH)
-
-
 class DrawUnit:
     """绘图适配器，持有 `Image.Image` 对象并操作"""
     
-    def __init__(self, img: Image.Image, multiple: MS | int = MS(), cn_level: Literal[0, 1, 2] = 0):
+    def __init__(self, img: Image.Image, multiple: MS | int = MS(), ui_code: UICode = UICode.JP):
         from .components import BaseDrawer
 
         self.img = img
         self.draw = ImageDraw.Draw(img)
         self.ms = multiple if isinstance(multiple, MS) else MS(multiple)
-        self.cn_level: Literal[0, 1, 2] = cn_level  # 明确标注类型
+        self.ui_code = ui_code
         self._drawer = BaseDrawer(img, self.draw, self.ms)
 
     def _text(self, x: float, y: float, text: Optional[str], fill: Optional[str], anchor: str,
@@ -348,51 +330,56 @@ class DrawUnit:
         """绘制等级标签"""
         from .components import LevelBadge
 
-        badge = LevelBadge(level, diff, plus, ignore_decimal, self.cn_level)
+        badge = LevelBadge(level, diff, plus, ignore_decimal, self.ui_code)
         badge.render(self.draw, self.ms, x, y)
 
     def ach_frame(self, x: float, y: float, diff: Diff):
         """绘制达成率框架"""
         from .components import AchievementComponent
 
-        component = AchievementComponent(0, diff, ms=self.ms, cn_level=self.cn_level)
+        component = AchievementComponent(0, diff, ms=self.ms, ui_code=self.ui_code)
         component.render_frame(self.draw, x, y)
 
     def ach_value(self, x: float, y: float, ach_percent: float, color: Optional[AchColor] = None):
         """绘制达成率数值"""
         from .components import AchievementComponent
 
-        component = AchievementComponent(ach_percent, Difficulty.NONE.value, color, ms=self.ms, cn_level=self.cn_level)
+        component = AchievementComponent(ach_percent, Difficulty.NONE.value, color, ms=self.ms, ui_code=self.ui_code)
         component.render_value(self.draw, x, y)
 
     def ach(self, x: float, y: float, diff: Diff, ach_percent: float, color: Optional[AchColor] = None):
         """绘制达成率（完整）"""
         from .components import AchievementComponent
 
-        component = AchievementComponent(ach_percent, diff, color, ms=self.ms, cn_level=self.cn_level)
+        component = AchievementComponent(ach_percent, diff, color, ms=self.ms, ui_code=self.ui_code)
         component.render_frame(self.draw, x, y)
         component.render_value(self.draw, x + 2.8, y + 1.5)
 
-    @staticmethod
-    def _dxscore(cn_level: Literal[0, 1, 2], score: int, max_score: int, star_count: int) -> tuple[str, str, str, str]:
-        """计算 DX 分数信息"""
-        title = {0: " でらっくスコア", 1: " DXSCORE", 2: " DX分数"}[cn_level]
-        text = f"{score} / {max_score}"
-        if star_count == 5:
-            color = COLOR_DXSCORE_GD
-        elif star_count >= 3:
-            color = COLOR_DXSCORE_OR
-        else:
-            color = COLOR_DXSCORE_GN
-        star_text = "✦ " * star_count if 0 <= star_count <= 5 else ""
-        return title, text, star_text.strip(), color
+    # @staticmethod
+    # def _dxscore(ui_code: UICode, score: int, max_score: int, star_count: int) -> tuple[str, str, str, str]:
+    #     """计算 DX 分数信息"""
+    #     if ui_code.is_jp:
+    #         title = "でらっくスコア"
+    #     elif ui_code.is_cn:
+    #         title = "DX分数"
+    #     else:
+    #         title = "DXSCORE"
+    #     text = f"{score} / {max_score}"
+    #     if star_count == 5:
+    #         color = COLOR_DXSCORE_GD
+    #     elif star_count >= 3:
+    #         color = COLOR_DXSCORE_OR
+    #     else:
+    #         color = COLOR_DXSCORE_GN
+    #     star_text = "✦ " * star_count if 0 <= star_count <= 5 else ""
+    #     return title, text, star_text.strip(), color
 
     def dxscore(self, x: float, y: float, score: int, max_score: int, star_count: int, diff: Diff):
         """绘制 DX 分数"""
         from .components import DXScoreComponent
 
         component = DXScoreComponent(score, max_score, star_count, diff,
-                                    lite=False, ms=self.ms, cn_level=self.cn_level)
+                                    lite=False, ms=self.ms, ui_code=self.ui_code)
         component.render(self.draw, x, y)
 
     def dxscore_lite(self, x: float, y: float, score: int, max_score: int, star_count: int, diff: Diff):
@@ -400,7 +387,7 @@ class DrawUnit:
         from .components import DXScoreComponent
 
         component = DXScoreComponent(score, max_score, star_count, diff,
-                                    lite=True, ms=self.ms, cn_level=self.cn_level)
+                                    lite=True, ms=self.ms, ui_code=self.ui_code)
         component.render(self.draw, x, y)
 
     def infos(self, x: float, y: float, lines: list[str], font: ImageFont.FreeTypeFont,
@@ -426,7 +413,7 @@ class ImageUnit:
 
     # 难度式文本样式
     @classmethod
-    def diff_text(cls, diff: Diff, text: Optional[str] = None, limit_width: float = -1, ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0):
+    def diff_text(cls, diff: Diff, text: Optional[str] = None, limit_width: float = -1, ms: MS = MS(), ui_code: UICode = UICode.JP):
         # 处理文字长度并计算位置
         font = FontManager.font(FontCode.MiSans_Heavy, size=ms.x(4.8))
         if text:
@@ -437,7 +424,7 @@ class ImageUnit:
             display_text = diff.text_title
 
         x1, y1, x2, y2 = font.getbbox(display_text, anchor='lm', stroke_width=ms.x(0.8))
-        if cn_level == 2 and not text:
+        if ui_code.is_cn_all and not text:
             # 特殊处理中文默认难度标题的位置
             cn_font = FontManager.font(FontCode.MiSans_Heavy, size=ms.x(3.3))
             cn_x1, _cn_y1, cn_x2, _cn_y2 = cn_font.getbbox(diff.text_title_cn, anchor='lm', stroke_width=ms.x(0.8))
@@ -449,7 +436,7 @@ class ImageUnit:
 
         # 实际渲染逻辑
         img = Image.new('RGBA', ms.xy(width, height), '#FFFFFF00')
-        du = DrawUnit(img, multiple=ms, cn_level=cn_level)
+        du = DrawUnit(img, multiple=ms, ui_code=ui_code)
         du.text(1, height / 2, display_text, diff.text, 'lm', font, shadow=(0.8, diff.deep), shadow2=(0.8, diff.frame, 0.7))
         if cn_width:
             du.text(ms.rev(round(x2 - x1)) * 1.1, ms.rev(round(y2 - y1)) * 1.1, diff.text_title_cn, diff.text, 'ld', FontManager.font(FontCode.MiSans_Heavy, size=ms.x(3.3)),
@@ -460,47 +447,48 @@ class ImageUnit:
     # 难度文本
     @classmethod
     @lru_cache(maxsize=10)
-    def difficulty(cls, diff: Diff, ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
-        return cls.diff_text(diff=diff, text=None, limit_width=-1, ms=ms, cn_level=cn_level)
+    def difficulty(cls, diff: Diff, ms: MS = MS(), ui_code: UICode = UICode.JP) -> Image.Image:
+        return cls.diff_text(diff=diff, text=None, limit_width=-1, ms=ms, ui_code=ui_code)
 
     # FC / FS 评定文本
     @classmethod
     @lru_cache(maxsize=18)
-    def evaluate(cls, eval: EvalInfo | None, mini: bool = False, ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+    def evaluate(cls, eval: EvalInfo | None, mini: bool = False, ms: MS = MS(), ui_code: UICode = UICode.JP) -> Image.Image:
         size = ms.xy(20, 5) if mini else ms.xy(40, 5)
         img = Image.new('RGBA', size, "#FFFFFF00")
         if eval:
-            du = DrawUnit(img, multiple=ms, cn_level=cn_level)
-            text = eval.short_name if mini else (eval.cn_name if cn_level == 2 else eval.full_name)
+            du = DrawUnit(img, multiple=ms, ui_code=ui_code)
+            text = eval.short_name if mini else (eval.cn_name if ui_code.is_cn_all else eval.full_name)
             du.text(1, 2.5, text, eval.color.fill, 'lm', FontManager.font(FontCode.MiSans_Heavy, size=ms.x(3)),
                 stroke=(0.5, eval.color.shadow), shadow=(0.65, eval.color.shadow))
         return img
 
     # 谱面类型标记（标准）
     @classmethod
-    def draw_sd_badge(cls, ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+    def draw_sd_badge(cls, ms: MS = MS(), ui_code: UICode = UICode.JP) -> Image.Image:
         img = Image.new('RGBA', ms.xy(20, 5), "#FFFFFF00")
-        du = DrawUnit(img, multiple=ms, cn_level=cn_level)
+        du = DrawUnit(img, multiple=ms, ui_code=ui_code)
 
         COLOR_SD = '#4AF'
         du.rounded_rect(0, 0, 20, 5, fill=COLOR_SD, radius=5)
-        offset = 0.6 if cn_level else 0
+        offset = 0.6 if ui_code.is_cn else 0
         font = FontManager.font(FontCode.MiSans_Heavy, size=ms.x(3 + offset))
-        text = "标 准" if cn_level else "スタンダード"
+        text = "标 准" if ui_code.is_cn else "スタンダード"
         du.text(10, 2.5, text, '#FFF', 'mm', font)
         return img
 
     # 谱面类型标记（DX）
     @classmethod
-    def draw_dx_badge(cls, ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+    def draw_dx_badge(cls, ms: MS = MS(), ui_code: UICode = UICode.JP) -> Image.Image:
         img = Image.new('RGBA', ms.xy(20, 5), "#FFFFFF00")
-        du = DrawUnit(img, multiple=ms, cn_level=cn_level)
+        du = DrawUnit(img, multiple=ms, ui_code=ui_code)
 
         COLOR_DX = ('#FF7711', '#FFFFFF')
         COLOR_DELUXE = ('#FF4646', '#FFA02D', '#FFDC00', '#9AC948', '#00AAE6', '#2299EE')
-
-        du.rounded_rect(0, 0, 20, 5, fill='#FFF', radius=5, outline=COLOR_DX[1] if cn_level else COLOR_DELUXE[-1], width=0.5)
-        if cn_level:
+    
+        outline_color = COLOR_DX[1] if ui_code.is_cn else COLOR_DELUXE[-1]
+        du.rounded_rect(0, 0, 20, 5, fill='#FFF', radius=5, outline=outline_color, width=0.5)
+        if ui_code.is_cn:
             text = "DX"
             du.text(10, 2.5, text, COLOR_DX[0], 'mm', FontManager.font(FontCode.MiSans_Heavy, size=ms.x(4.1)))
         else:
@@ -519,14 +507,14 @@ class ImageUnit:
     # 谱面类型标记
     @classmethod
     @lru_cache(maxsize=4)
-    def draw_badge(cls, is_cabinet_dx: bool, ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
-        return cls.draw_dx_badge(ms=ms, cn_level=cn_level) if is_cabinet_dx else cls.draw_sd_badge(ms=ms, cn_level=cn_level)
+    def draw_badge(cls, is_cabinet_dx: bool, ms: MS = MS(), ui_code: UICode = UICode.JP) -> Image.Image:
+        return cls.draw_dx_badge(ms=ms, ui_code=ui_code) if is_cabinet_dx else cls.draw_sd_badge(ms=ms, ui_code=ui_code)
 
     # 版权信息栏
     @classmethod
     @lru_cache(maxsize=4)
     def copyright_bar(cls, width: int, lines: list[str] | None = None,
-                      ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+                      ms: MS = MS(), ui_code: UICode = UICode.JP) -> Image.Image:
         if lines is None:
             lines = [
                 "Powered by LyraBot (@GoldSheep3)",
@@ -556,7 +544,7 @@ class ImageUnit:
 
         # 实际渲染
         img = Image.new('RGBA', (ms.x(width), bar_height), '#313d7c')
-        du = DrawUnit(img, multiple=ms, cn_level=cn_level)
+        du = DrawUnit(img, multiple=ms, ui_code=ui_code)
         du.text(
             width // 2, 
             ms.rev(bar_height) // 2, 
@@ -571,14 +559,14 @@ class ImageUnit:
     # -- 大型组件 --
     # 谱面信息框
     @classmethod
-    def chart_box(cls, chart: MaiChart, cabinet_dx: bool, server: server, plus_level: int = 6, is_utage: bool = False,
-                  ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+    def chart_box(cls, chart: MaiChart, cabinet_dx: bool, server: Server, plus_level: int = 6, is_utage: bool = False,
+                  ms: MS = MS(), ui_code: UICode = UICode.JP) -> Image.Image:
         """组件：谱面信息框"""
         w, h, ow = 108, 36, 1  # w, h, outline_width
         diff = Difficulty.get(chart.difficulty)
 
-        img = cls.chart_box_base(diff=diff, cabinet_dx=cabinet_dx, w=w, h=h, ow=ow, ms=ms, cn_level=cn_level).copy()
-        du = DrawUnit(img, multiple=ms, cn_level=cn_level)
+        img = cls.chart_box_base(diff=diff, cabinet_dx=cabinet_dx, w=w, h=h, ow=ow, ms=ms, ui_code=ui_code).copy()
+        du = DrawUnit(img, multiple=ms, ui_code=ui_code)
         # 等级 LV
         plus = round(chart.lv % 1 * 10) >= plus_level
         du.level(ow + 64, ow + 7.4, diff, chart.lv, plus=plus, ignore_decimal=is_utage)
@@ -588,9 +576,9 @@ class ImageUnit:
         dxs, dxs_max, dxs_star = ach.dxscore_tuple
         du.dxscore(ow + 38, ow + 25, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
         # 评价图标
-        fc = cls.evaluate(Combo.get(ach.combo), ms=ms, cn_level=cn_level)
+        fc = cls.evaluate(Combo.get(ach.combo), ms=ms, ui_code=ui_code)
         img.paste(fc, ms.xy(ow + 3, ow + 27-3), fc)
-        fs = cls.evaluate(Sync.get(ach.sync), ms=ms, cn_level=cn_level)
+        fs = cls.evaluate(Sync.get(ach.sync), ms=ms, ui_code=ui_code)
         img.paste(fs, ms.xy(ow + 3, ow + 32-3), fs)
 
         info_line5 = [
@@ -605,14 +593,14 @@ class ImageUnit:
         return img
 
     @classmethod
-    def chart_box_lite(cls, chart: MaiChart, cabinet_dx: bool, server: server, plus_level: int = 6, is_utage: bool = False,
-                       ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+    def chart_box_lite(cls, chart: MaiChart, cabinet_dx: bool, server: Server, plus_level: int = 6, is_utage: bool = False,
+                       ms: MS = MS(), ui_code: UICode = UICode.JP) -> Image.Image:
         """组件：谱面信息框 Lite"""
         w, h, ow = 108, 25, 1  # w, h, outline_width
         diff = Difficulty.get(chart.difficulty)
 
-        img = cls.chart_box_base(diff=diff, cabinet_dx=cabinet_dx, w=w, h=h, ow=ow, ms=ms, cn_level=cn_level).copy()
-        du = DrawUnit(img, multiple=ms, cn_level=cn_level)
+        img = cls.chart_box_base(diff=diff, cabinet_dx=cabinet_dx, w=w, h=h, ow=ow, ms=ms, ui_code=ui_code).copy()
+        du = DrawUnit(img, multiple=ms, ui_code=ui_code)
         # 等级 LV
         plus = round(chart.lv % 1 * 10) >= plus_level
         du.level(ow + 64, ow + 7.4, diff, chart.lv, plus=plus, ignore_decimal=is_utage)
@@ -622,48 +610,48 @@ class ImageUnit:
         dxs, dxs_max, dxs_star = ach.dxscore_tuple
         du.dxscore_lite(ow + 2, ow + 20, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
         # 评价图标
-        fc = cls.evaluate(Combo.get(ach.combo), ms=ms, cn_level=cn_level)
+        fc = cls.evaluate(Combo.get(ach.combo), ms=ms, ui_code=ui_code)
         img.paste(fc, ms.xy(ow + 3, ow + 12 - 3), fc)
-        fs = cls.evaluate(Sync.get(ach.sync), ms=ms, cn_level=cn_level)
+        fs = cls.evaluate(Sync.get(ach.sync), ms=ms, ui_code=ui_code)
         img.paste(fs, ms.xy(ow + 3, ow + 17 - 3), fs)
         return img
 
     @classmethod
     @lru_cache(maxsize=32)
     def chart_box_base(cls, diff: Diff, cabinet_dx: bool, w: int, h: int, ow: int,
-                       ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+                       ms: MS = MS(), ui_code: UICode = UICode.JP) -> Image.Image:
         img = Image.new('RGBA', ms.xy(w + ow * 2, h + ow * 2), '#FFFFFF00')
-        du = DrawUnit(img, multiple=ms, cn_level=cn_level)
+        du = DrawUnit(img, multiple=ms, ui_code=ui_code)
 
         du.rounded_rect(ow, ow, w, h, radius=4, fill=diff.bg)
         du.cut_line(ow, ow, w, h, radius=4, line_y=ow + 2, line_h=5, fill=diff.title_bg)
         du.rounded_rect(ow, ow, w, h, radius=4, fill=None, outline=diff.frame, width=1)
-        difficulty = cls.difficulty(diff=diff, ms=ms, cn_level=cn_level)
+        difficulty = cls.difficulty(diff=diff, ms=ms, ui_code=ui_code)
         diff_height = ms.rev(difficulty.size[1])
         img.paste(difficulty, ms.xy(ow + 2.5, ow + 4.3 - diff_height / 2), difficulty)
-        badge = cls.draw_badge(is_cabinet_dx=cabinet_dx, ms=ms, cn_level=cn_level)
+        badge = cls.draw_badge(is_cabinet_dx=cabinet_dx, ms=ms, ui_code=ui_code)
         img.paste(badge, ms.xy(ow + 85, ow + 2), badge)
         return img
 
     @classmethod
     @lru_cache(maxsize=12)
     def mini_box_base(cls, diff: Diff, is_cabinet_dx: bool, shortid: int, w: int, h: int, ow: int,
-                      ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0) -> Image.Image:
+                      ms: MS = MS(), ui_code: UICode = UICode.JP) -> Image.Image:
         img = Image.new('RGBA', ms.xy(w + ow * 2, h + ow * 2), '#FFFFFF00')
-        du = DrawUnit(img, multiple=ms, cn_level=cn_level)
+        du = DrawUnit(img, multiple=ms, ui_code=ui_code)
 
         du.rounded_rect(ow, ow, w, h, diff.bg, radius=2.5, outline=diff.frame)
         du.cut_line(ow, ow, w, h, radius=0, line_y=ow + 2, line_h=5, fill=diff.title_bg)
         du.rounded_rect(ow, ow, w, h, None, radius=2.5, outline=diff.title_bg, width=1)
-        badge = cls.draw_badge(is_cabinet_dx=is_cabinet_dx, ms=ms, cn_level=cn_level)
+        badge = cls.draw_badge(is_cabinet_dx=is_cabinet_dx, ms=ms, ui_code=ui_code)
         img.paste(badge, ms.xy(ow + 75, ow + 2), badge)
-        shortid_img = cls.diff_text(diff=diff, text=f'#{shortid}', ms=ms, cn_level=cn_level)
+        shortid_img = cls.diff_text(diff=diff, text=f'#{shortid}', ms=ms, ui_code=ui_code)
         img.paste(shortid_img, ms.xy(ow + 35, ow + 4.2 - ms.rev(round(shortid_img.size[1] / 2))), shortid_img)
         return img
 
     @classmethod
-    def mini_box(cls, maidata: MaiData | None, difficulty: int, server: server,
-                 ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0,
+    def mini_box(cls, maidata: MaiData | None, difficulty: int, server: Server,
+                 ms: MS = MS(), ui_code: UICode = UICode.JP,
                  shared_zip: zipfile.ZipFile | None = None) -> Image.Image | tuple[int, int]:
         w, h, ow = 97, 36, 1  # w, h, outline_width
         width, height = w + ow * 2, h + ow * 2
@@ -682,9 +670,9 @@ class ImageUnit:
             h=h,
             ow=ow,
             ms=ms,
-            cn_level=cn_level,
+            ui_code=ui_code,
         ).copy()
-        du = DrawUnit(img, multiple=ms, cn_level=cn_level)
+        du = DrawUnit(img, multiple=ms, ui_code=ui_code)
         # 曲绘
         cover = maidata.get_image(shared_zip=shared_zip)
         if cover:
@@ -696,24 +684,24 @@ class ImageUnit:
         dxs, dxs_max, dxs_star = ach.dxscore_tuple
         du.dxscore_lite(ow + 53, ow + 31, score=dxs, max_score=dxs_max, star_count=dxs_star, diff=diff)
         # 评价图标
-        fc = cls.evaluate(Combo.get(ach.combo), mini=True, ms=ms, cn_level=cn_level)
+        fc = cls.evaluate(Combo.get(ach.combo), mini=True, ms=ms, ui_code=ui_code)
         img.paste(fc, ms.xy(ow + 36, ow + 24), fc)
-        fs = cls.evaluate(Sync.get(ach.sync), mini=True, ms=ms, cn_level=cn_level)
+        fs = cls.evaluate(Sync.get(ach.sync), mini=True, ms=ms, ui_code=ui_code)
         img.paste(fs, ms.xy(ow + 36, ow + 29), fs)
         return img
 
     @classmethod
-    def b50_box(cls, maidata: MaiData, difficulty: int, server: server,
+    def b50_box(cls, maidata: MaiData, difficulty: int, server: Server,
                 current_version: int, index: int, is_b15: Optional[bool] = None,
-                ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0,
+                ms: MS = MS(), ui_code: UICode = UICode.JP,
                 shared_zip: zipfile.ZipFile | None = None) -> Image.Image | None:
         chart = maidata.get_chart(difficulty)
         if not chart:
             return None
-        img = cls.mini_box(maidata=maidata, difficulty=difficulty, server=server, ms=ms, cn_level=cn_level, shared_zip=shared_zip)
+        img = cls.mini_box(maidata=maidata, difficulty=difficulty, server=server, ms=ms, ui_code=ui_code, shared_zip=shared_zip)
         if isinstance(img, tuple):
             return None
-        du = DrawUnit(img, multiple=ms, cn_level=cn_level)
+        du = DrawUnit(img, multiple=ms, ui_code=ui_code)
         du.rounded_rect(54, 25, 42, 5, fill=bcm(Difficulty.get(difficulty).bg, '#0009'), radius=4)
         du.rounded_rect(54, 25, 16, 5, fill='#006', radius=4)
         b_type = '15' if is_b15 else '35'

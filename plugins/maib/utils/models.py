@@ -12,7 +12,9 @@ from PIL import Image
 from loguru import logger
 
 from .calculator import get_dxrating, get_dxscore_max, get_dxscore_star_count
-from ..constants import server, DEFAULT_DATETIME
+from ..utils.constants import DEFAULT_DATETIME
+from ..utils.map import ComboID, SyncID
+from .enums import Server, SLevelSource
 
 
 __all__ = [
@@ -41,12 +43,12 @@ class MaiChartAch:
     """maimai 谱面成就信息"""
     shortid: int
     difficulty: int
-    server: server
+    server: Server
     achievement: float
     dxscore: int = 0
     dxscore_max: int = 0
-    combo: int = 0
-    sync: int = 0
+    combo: ComboID = 0
+    sync: SyncID = 0
     update_time: datetime = DEFAULT_DATETIME
     user_id: int = -1
 
@@ -128,8 +130,8 @@ class MaiChart:
     notes: dict[str, int] = field(
         default_factory=lambda: {"tap": 0, "hold": 0, "slide": 0, "touch": 0, "break": 0}
     )
-    _achs: dict[server, Optional[MaiChartAch]] = field(
-        default_factory=lambda: {"JP": None, "CN": None}
+    _achs: dict[Server, Optional[MaiChartAch]] = field(
+        default_factory=lambda: {server: None for server in Server}
     )
 
     @property
@@ -140,13 +142,14 @@ class MaiChart:
     def dxscore_max(self) -> int:
         return get_dxscore_max(self.note_count)
 
-    def get_lv_str(self, server: server = "JP", plus: int = 6) -> str:
+    def get_lv_str(self, source: SLevelSource = SLevelSource.JP, plus: int = 6) -> str:
         """获取谱面定数字符串表示，支持 JP/CN 服务器切换"""
-        level = self.lv_cn if server == "CN" else self.lv
-        if level is None: return "N/A"
+        level = getattr(self, source.lv_field, None)
+        if level is None:
+            return "N/A"
         return f"{int(level)}+" if (level - int(level)) * 10 >= plus else f"{level}"
 
-    def get_ach(self, server: server = "JP") -> MaiChartAch:
+    def get_ach(self, server: Server = Server.JP) -> MaiChartAch:
         """返回该谱面在指定服务器的成绩数据"""
         ach = self._achs.get(server, None)
         if ach is None:
@@ -172,10 +175,12 @@ class MaiChart:
             return
         current.update(ach)
 
-    def get_dxrating(self, server: server = "JP", ap_bonus: int = 0) -> int:
+    def get_dxrating(self, server: Server = Server.JP, ap_bonus: int = 0) -> int:
         """根据成就率和定数计算 DX Rating"""
         ach_obj = self.get_ach(server)
-        level = self.lv_cn if server == "CN" and self.lv_cn is not None else self.lv
+        level: float = getattr(self, SLevelSource.server(server).lv_field, -1)
+        if level < 0:
+            level = self.lv  # fallback
         return get_dxrating(achievement=ach_obj.achievement, level=level, ap_bonus=ap_bonus, combo=ach_obj.combo)
 
     def set_notes(self, tap: int, hold: int, slide: int, touch: int, break_note: int):
@@ -222,11 +227,11 @@ class MaiData:
     def wholebpm(self) -> int:
         return self.bpm
 
-    def is_plate_required(self, server: server) -> bool:
+    def is_plate_required(self, server: Server) -> bool:
         """返回指定服务器是否要求牌子。"""
-        if server == "JP":
+        if server == Server.JP:
             return self.jp_is_plate_required
-        if server == "CN":
+        if server == Server.CN:
             return self.cn_is_plate_required
         raise KeyError(f"Invalid server: {server}")
 
@@ -301,7 +306,7 @@ class MaiData:
             limit = 1
         return ver >= version - limit
 
-    def get_chart_dxrating(self, diff: int, server: server, current_version: int = 0) -> int:
+    def get_chart_dxrating(self, diff: int, server: Server, current_version: int = 0) -> int:
         """获取指定难度谱面的 DXRating"""
         ap = 1 if 2000 > current_version >= 25 else 0
         chart = self.get_chart(diff)
@@ -343,7 +348,7 @@ class MaiUser:
     user_id: int
     user_telegram_id: Optional[int] = None
     username: str = ''
-    default_server: server = 'CN'
+    default_server: Server = Server.CN
     plate: tuple[int | None, int | None] = (None, None)
 
     jp_current_version: int = 0
@@ -362,49 +367,50 @@ class MaiUser:
         """获取用户名，若未设置则返回 'maimai'"""
         return self.username or "maimai"
 
-    def get_dxrating_data(self, server: Optional[server] = None) -> DXRatingData:
+    def get_dxrating_data(self, server: Optional[Server] = None) -> DXRatingData:
         """获取指定服务器的 DXRating 数据"""
         if server is None:
             server = self.default_server
-        if server == 'JP':
+        if server == Server.JP:
             data = self.jp_dxra_data
-        elif server == 'CN':
+        elif server == Server.CN:
             data = self.cn_dxra_data
-        else: raise KeyError(f"Invalid server: {server}")
+        else:
+            raise KeyError(f"Invalid server: {server}")
         return data
 
-    def get_update_time(self, server: Optional[server] = None) -> datetime:
+    def get_update_time(self, server: Optional[Server] = None) -> datetime:
         """获取指定服务器的更新日期"""
         if server is None:
             server = self.default_server
-        if server == 'JP':
+        if server == Server.JP:
             dt = self.jp_update_time
-        elif server == 'CN':
+        elif server == Server.CN:
             dt = self.cn_update_time
         else: raise KeyError(f"Invalid server: {server}")
         return dt
 
-    def get_formated_time(self, server: Optional[server] = None) -> str:
+    def get_formated_time(self, server: Optional[Server] = None) -> str:
         """获取指定服务器的更新日期（格式化字符串）"""
         dt = self.get_update_time(server=server)
         if dt <= DEFAULT_DATETIME: return "Not Updated"
         return f"{dt:%Y.%m.%d %H:%M:%S}"
         
-    def get_current_version(self, server: server) -> int:
+    def get_current_version(self, server: Server) -> int:
         """获取指定服务器的当前版本号"""
-        if server == 'JP':
+        if server == Server.JP:
             ver = self.jp_current_version
-        elif server == 'CN':
+        elif server == Server.CN:
             ver = self.cn_current_version
         else:
             raise KeyError(f"Invalid server: {server}")
         return ver
 
-    def set_current_version(self, server: server, version: int):
+    def set_current_version(self, server: Server, version: int):
         """设置指定服务器的当前版本号"""
-        if server == 'JP':
+        if server == Server.JP:
             self.jp_current_version = version
-        elif server == 'CN':
+        elif server == Server.CN:
             self.cn_current_version = version
 
     def set_avatar(self, avatar: Image.Image | bytes):

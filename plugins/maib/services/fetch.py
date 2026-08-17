@@ -5,9 +5,9 @@ from sqlalchemy import Table, select, update, bindparam
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..constants import server
 from . import execute_func
 from .models import MaiData, MaiChart
+from ..utils.enums import Server, SLevelSource
 
 
 __all__ = [
@@ -22,7 +22,7 @@ __all__ = [
 ]
 
 
-async def set_mct_level(mct: MaiChart | tuple[int, int], server: server | Literal['synh'], level: float,
+async def set_mct_level(mct: MaiChart | tuple[int, int], source: SLevelSource, level: float,
                         *, session: Optional[AsyncSession] = None):
     """
     设置 `MaiChart` 的 `level`
@@ -36,17 +36,12 @@ async def set_mct_level(mct: MaiChart | tuple[int, int], server: server | Litera
         ).scalar_one_or_none()
         if not chart:
             return
-        if server == 'CN':
-            chart.lv_cn = level
-        elif server == 'synh':
-            chart.lv_synh = level
-        elif server == 'JP':
-            chart.lv = level
+        setattr(chart, source.lv_field, level)
 
     await execute_func.action(_action, session=session)
 
 
-async def set_mct_level_batch(data: list[dict], server: server | Literal['synh'],
+async def set_mct_level_batch(data: list[dict], source: SLevelSource,
                               *, session: Optional[AsyncSession] = None):
     """批量设置谱面定数"""
     if not data:
@@ -54,19 +49,13 @@ async def set_mct_level_batch(data: list[dict], server: server | Literal['synh']
 
     async def _action(session: AsyncSession):
         table = cast(Table, MaiChart.__table__)
-        field_map = {
-            'JP': table.c.lv,
-            'CN': table.c.lv_cn,
-            'synh': table.c.lv_synh,
-        }
-        if server not in field_map:
-            raise ValueError(f"Unsupported server: {server}")
+        value = getattr(table.c, source.lv_field)
 
         stmt = (
             update(table)
             .where(table.c.shortid == bindparam("b_shortid"))
             .where(table.c.difficulty == bindparam("b_diff"))
-            .values({field_map[server]: bindparam("b_level")})
+            .values({value: bindparam("b_level")})
             .execution_options(synchronize_session=False)
         )
 
@@ -85,7 +74,7 @@ async def set_mct_level_batch(data: list[dict], server: server | Literal['synh']
     await execute_func.action(_action, session=session)
 
 
-async def set_mct_version(shortid: int, version: int, server: server,
+async def set_mct_version(shortid: int, version: int, server: Server,
                           *, session: Optional[AsyncSession] = None) -> None:
     """通过 `shortid, server` 设置 `MaiData` 的 `version`"""
     async def _set_mct_version(session: AsyncSession):
@@ -96,19 +85,14 @@ async def set_mct_version(shortid: int, version: int, server: server,
         result = await session.execute(statement)
         mdt = result.scalar_one_or_none()
 
-        if not mdt:
-            return
-        if server == 'CN':
-            mdt.version_cn = version
-        elif server == 'JP':
-            mdt.version = version
-        else:
-            return
+        if mdt:
+            setattr(mdt, SLevelSource.server(server).lv_field, version)
+        return
 
     await execute_func.action(_set_mct_version, session=session)
 
 
-async def set_mdt_version_batch(data: list[tuple[int, int]], server: server,
+async def set_mdt_version_batch(data: list[tuple[int, int]], server: Server,
                                 *, session: Optional[AsyncSession] = None) -> None:
     """
     [批量] 设置 `MaiData` 的 `version`
@@ -120,22 +104,13 @@ async def set_mdt_version_batch(data: list[tuple[int, int]], server: server,
     async def _set_mdt_version_batch(session: AsyncSession):
         # 1. 映射服务器标签到数据库字段
         table = MaiData.__table__
-        server_field_map = {
-            'CN': table.c.version_cn,
-            'JP': table.c.version,
-        }
-
-        if server not in server_field_map:
-            # 事实上这里应该不会进入
-            raise ValueError(f"Unsupported server tag: {server}")
-
-        target_field = server_field_map[server]
+        target = getattr(table.c, server.version_field)
 
         # 2. 构建动态批量更新语句
         statement = (
             update(table)  # type: ignore
             .where(table.c.shortid == bindparam("b_shortid"))
-            .values({target_field: bindparam("b_version")})
+            .values({target: bindparam("b_version")})
             .execution_options(synchronize_session=False)
         )
 

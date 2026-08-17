@@ -13,7 +13,8 @@ from nonebot.adapters.telegram import (Event as TGEvent,)
 
 from .. import config, utils, services, image_gen, network
 from ..utils.report import build_diff_report
-from ..constants import server, VERSION_MAP
+from ..utils.enums import UICode,  ServerScope
+from ..utils.map import Versions
 from . import i18n_data, i18n, reply, sync
 from .context import get_args
 from .message import build_msg
@@ -143,9 +144,9 @@ async def b50_handled(event: Event, matcher: Matcher, groups: dict = RegexDict()
 
     # 解析命令参数
     parsed_uid, target_server = get_args(args_text)
-    server: server = target_server if (target_server and target_server != 'ALL') else 'CN'
+    scope: ServerScope = target_server or ServerScope.CN
 
-    if target_server == 'ALL':
+    if scope == 'ALL':
         await matcher.finish(reply("b50.all_not_supported"))
         return
 
@@ -198,9 +199,9 @@ async def b50_handled(event: Event, matcher: Matcher, groups: dict = RegexDict()
 
     payload: list[tuple[str, Any]] = [("at", (sender_username, sender_user_id)), ("text", reply("b50.drawing"))]
     # extra. 查询内容含国服，强制刷新水鱼数据
-    if server in ['CN', 'ALL']:
+    if scope in [ServerScope.CN, ServerScope.ALL]:
         try:
-            report = await sync.get_sy_and_upload(target_qq, server)
+            report = await sync.get_sy_and_upload(target_qq)
             if report.has_changes:
                 # 有变化，考虑查询者是否在查询自己，展示不同的报告细节
                 if is_querying_self:
@@ -228,14 +229,14 @@ async def b50_handled(event: Event, matcher: Matcher, groups: dict = RegexDict()
 
 
     # 确定版本并获取 achs 数据
-    if server == 'ALL':
+    if scope == ServerScope.ALL:
         # 目前不兼容 ALL 混合模式
         await matcher.finish(reply("b50.all_not_supported"))
         return
-    current_version = VERSION_MAP.get_latest_version_id(server)
-    cut_version = VERSION_MAP.get_cut_version(current_version)
+    current_version = Versions.latest(scope.to_server())
+    cut_version = Versions.b50_cut_version(current_version)
     
-    b35_achs, b15_achs = await services.get_b50(target_qq, server, cut_version)
+    b35_achs, b15_achs = await services.get_b50(target_qq, scope.to_server(), cut_version)
     dxrating = sum([mca.dxrating for mca in (list(b35_achs) + list(b15_achs))])
 
     # 清洗谱面数据，构建绘图数据结构
@@ -258,9 +259,9 @@ async def b50_handled(event: Event, matcher: Matcher, groups: dict = RegexDict()
 
     if not (b35_entries or b15_entries):
         # 无谱面数据
-        if server == 'CN':
+        if scope == ServerScope.CN:
             await build_msg(matcher, event, [("text", reply("b50.no_cn_data"))], tag='finish')
-        elif server == 'JP':
+        elif scope == ServerScope.JP:
             await build_msg(matcher, event, [("text", reply("b50.no_jp_data"))], tag='finish')
         return
 
@@ -268,12 +269,12 @@ async def b50_handled(event: Event, matcher: Matcher, groups: dict = RegexDict()
     img = image_gen.draw_b50(
         b35_entries, b15_entries,
         current_version=current_version,
-        server=server,
+        server=scope.to_server(),
         user_name=target_maiuser.username,
         user_avatar=await utils.get_qq_avatar(target_qq, spec=100),
         dxrating=dxrating,
-        update_time=target_maiuser.get_formated_time(server),
-        cn_level=1 if server == 'CN' else 0
+        update_time=target_maiuser.get_formated_time(scope.to_server()),
+        ui_code=UICode.CN if scope == ServerScope.CN else UICode.JP
     )
     img_bytes = image_gen.get_image_bytes(img)
     

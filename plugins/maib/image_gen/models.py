@@ -48,6 +48,7 @@ class Diff:
         return self.code
 
 
+# TODO 后续和 utils.map.difficulty 接轨，颜色信息仍然放置到 image_gen，改为获取颜色的函数/方法
 class Difficulty(Enum):
     """难度枚举"""
     NONE = Diff(0, "N/A", "N/A", bg='#FFF', frame='#FFF', text='#FFF', deep='#FFF', title_bg='#FFF')
@@ -100,6 +101,7 @@ class EvaluateColor:
     fill: str
     shadow: str
 
+# TODO 后续和 utils.map.combo / utils.map.sync 接轨，颜色信息仍然放置到 image_gen，改为获取颜色的函数/方法
 _EVAL_GN = EvaluateColor(fill='#7D5', shadow='#162')  # FC / FC+
 _EVAL_GD = EvaluateColor(fill='#FE2', shadow='#A02')  # AP / AP+ / FDX / FDX+
 _EVAL_BE = EvaluateColor(fill='#6DF', shadow='#038')  # FS / FS+
@@ -120,6 +122,7 @@ class EvalInfo:
     def __int__(self) -> int:
         return self.code
 
+# TODO 后续和 utils.map.combo / utils.map.sync 接轨，颜色信息仍然放置到 image_gen，改为获取颜色的函数/方法
 class Combo(Enum):
     """Combo 类型 (FC, AP 等)"""
     NONE = EvalInfo(0, _EVAL_GN, '', '', '')

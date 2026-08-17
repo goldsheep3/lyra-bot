@@ -5,7 +5,7 @@ import orjson
 import zipfile
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from pathlib import Path
-from typing import Any, TypeVar, overload
+from typing import Any, TypeVar, overload, Literal
 
 from nonebot import logger
 from nonebot_plugin_localstore import get_plugin_data_dir, get_plugin_cache_dir
@@ -13,7 +13,8 @@ from nonebot_plugin_datastore.db import post_db_init
 from sqlalchemy import select
 
 from . import config, utils, services, network
-from .constants import GENRE_MAP, VERSION_MAP
+from .utils.enums import Server, SLevelSource
+from .utils.map import VersionID, Versions, Genres
 
 
 ChartFileChange = tuple[str, str]
@@ -150,7 +151,7 @@ def _raw_get(
 
 
 def _parse_genre(genre_str: str) -> int:
-    genre_id = GENRE_MAP.get_id_by_name(genre_str, fuzzy=True, threshold=80)
+    genre_id = Genres.find_id(genre_str, allow_fuzzy=True)
     if genre_id is None:
         logger.warning(f"maib-fetch: 无法解析流派名: {genre_str}")
         return -1
@@ -209,8 +210,7 @@ async def parse_maidata(raw_mdt: Mapping[str, str], zip_path: Path | str) -> uti
     else:
         cabinet = "DX" if any(k in cabinet_raw.lower() for k in ["dx", "でらっくす", "deluxe"]) else "SD"
 
-    version = VERSION_MAP.get_id_by_text(_raw_get(raw_mdt, "version", default=""))
-    version = version if version is not None else -1
+    version: VersionID | Literal[-1] = Versions.find_id(_raw_get(raw_mdt, "version", default=""), default=-1)
     converter = _raw_get(raw_mdt, "ChartConverter", default="")
 
     is_utage = shortid > 100000
@@ -346,6 +346,7 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
+# TODO sy_data 采用带数据规范的 dict 以实现更精确的类型检查
 async def _build_cn_update_lists(sy_data: Sequence[Any]) -> tuple[list[tuple[int, int]], list[dict[str, float]]]:
     version_update_list: list[tuple[int, int]] = []
     level_update_list: list[dict[str, float]] = []
@@ -359,9 +360,8 @@ async def _build_cn_update_lists(sy_data: Sequence[Any]) -> tuple[list[tuple[int
             continue
 
         basic_info = sy_item.get("basic_info", {})
-        raw_version = basic_info.get("from", "") if isinstance(basic_info, Mapping) else ""
-        version = VERSION_MAP.get_id_by_text(str(raw_version), cn=True)
-        version = version if version is not None else -1
+        raw_version: str = basic_info.get("from", "") if isinstance(basic_info, Mapping) else ""
+        version: VersionID | Literal[-1] = Versions.find_id(raw_version, default=-1)
         if version >= 0:
             version_update_list.append((sid, version))
 
@@ -400,14 +400,14 @@ async def _sync_cn_metadata(data_dir: Path, *, force: bool) -> None:
     try:
         async with services.get_session() as session:
             if version_update_list:
-                await services.set_mdt_version_batch(version_update_list, "CN", session=session)
+                await services.set_mdt_version_batch(version_update_list, Server.CN, session=session)
             if level_update_list:
-                await services.set_mct_level_batch(level_update_list, "CN", session=session)
+                await services.set_mct_level_batch(level_update_list, SLevelSource.CN, session=session)
                 refresh_chart_keys = list(dict.fromkeys(
                     (int(item["shortid"]), int(item["difficulty"]))
                     for item in level_update_list
                 ))
-                await services.rfs_dxra_batch(refresh_chart_keys, "CN", session=session)
+                await services.rfs_dxra_batch(refresh_chart_keys, Server.CN, session=session)
             await session.commit()
         logger.success(f"maib-fetch Step 4/6: 同步完成 (曲目:{len(version_update_list)}, 谱面:{len(level_update_list)})")
     except Exception as e:
@@ -447,7 +447,7 @@ async def _sync_synh_levels() -> None:
         return
 
     try:
-        await services.set_mct_level_batch(synh_list, server="synh")
+        await services.set_mct_level_batch(synh_list, source=SLevelSource.SYNH)
         logger.info(f"maib-fetch Step 5/6: 已同步 {len(synh_list)} 条水鱼拟合定数")
     except Exception as e:
         logger.error(f"maib-fetch Step 5/6: 更新水鱼拟合定数数据失败，原因: {e}")

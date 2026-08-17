@@ -4,9 +4,11 @@ from typing import Optional
 
 from PIL import Image
 
-from ..constants import server, DIFFICULTY_MAP as DiffMap, COMBO_MAP as ComboMap, SYNC_MAP as SyncMap
+from ..utils.map import Difficulties, Combos, Syncs
+from .enums import Server
 from .models import MaiChartAch
 from .calculator import get_dxscore_star_count
+
 
 
 __all__ = [
@@ -22,7 +24,7 @@ class MaiChartAchDiff:
     shortid: int
     title: str
     difficulty: int
-    server: server
+    server: Server
     new_ach: MaiChartAch
     old_ach: Optional[MaiChartAch] = None
 
@@ -33,7 +35,7 @@ class MaiChartAchDiff:
         text = (
             f"{self.shortid}. "
             f'{(self.title[:20] + chr(46)*3) if len(self.title) > 20 else self.title} '
-            f"{DiffMap.label(self.difficulty, index=1) or str(self.difficulty)}\n"
+            f"{Difficulties.text_cn_short(self.difficulty) or str(self.difficulty)}\n"
         )
         # Line 2
         text += ' '*4
@@ -42,8 +44,8 @@ class MaiChartAchDiff:
             text += "0.0000%(    )(    )"
         else:
             ach_old = f"{self.old_ach.achievement:.4f}%"
-            combo_old = ComboMap.label(self.old_ach.combo) or str(self.old_ach.combo)
-            sync_old = SyncMap.label(self.old_ach.sync) or str(self.old_ach.sync)
+            combo_old = Combos.text_shortname(self.old_ach.combo, default=str(self.old_ach.combo))
+            sync_old = Syncs.text_shortname(self.old_ach.sync, default=str(self.old_ach.sync))
             text += (
                 f"{ach_old:>8}"
                 f"({combo_old:>4})"
@@ -52,8 +54,8 @@ class MaiChartAchDiff:
         text += "  ->  "
         # Line 2 - new achievement
         ach_new = f"{self.new_ach.achievement:.4f}%"
-        combo_new = ComboMap.label(self.new_ach.combo) or str(self.new_ach.combo)
-        sync_new = SyncMap.label(self.new_ach.sync) or str(self.new_ach.sync)
+        combo_new = Combos.text_shortname(self.new_ach.combo, default=str(self.new_ach.combo))
+        sync_new = Syncs.text_shortname(self.new_ach.sync, default=str(self.new_ach.sync))
         text += (
             f"{ach_new:>8}"
             f"({combo_new:>4})"
@@ -78,7 +80,7 @@ class MaiChartAchDiffReport:
     """成绩变更报告（单次）"""
 
     maib: str = "maimaiDX"
-    server: server = 'JP'
+    server: Server = Server.JP
     no_update_song_count: int = 0
     updated_song: list[MaiChartAchDiff] = field(default_factory=list)
     new_song: list[MaiChartAchDiff] = field(default_factory=list)
@@ -98,7 +100,8 @@ class MaiChartAchDiffReport:
 
 
 def diff_message_lite(shortid: int, title: str, difficulty: int, reason: str) -> str:
-    return f"{shortid}. {title} {DiffMap.label(difficulty, index=1) or str(difficulty)} \n    {reason}"
+    difficulty_text = Difficulties.text_cn_short(difficulty) or str(difficulty)
+    return f"{shortid}. {title}    {difficulty_text} \n    {reason}"
 
 
 def build_diff_report(

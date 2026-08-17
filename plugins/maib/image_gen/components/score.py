@@ -10,6 +10,7 @@ from functools import lru_cache
 
 from PIL import Image, ImageDraw, ImageFont
 
+from ...utils.enums import UICode
 from ..models import Diff, AchColor, Achievement, EvalInfo
 from ..utils import MS, FontCode, FontManager
 from ..tools import bcm
@@ -20,17 +21,17 @@ class AchievementComponent:
     """达成率显示组件"""
     
     def __init__(self, ach_percent: float, diff: Diff, color: Optional[AchColor] = None,
-                 ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0):
+                 ms: MS = MS(), ui_code: UICode = UICode.JP):
         self.ach_percent = ach_percent
         self.diff = diff
         self.color = color
         self.ms = ms
-        self.cn_level = cn_level
+        self.uic = ui_code
 
     def _render_ach_frame(self, draw: ImageDraw.ImageDraw, x: float, y: float):
         """渲染达成率框架"""
         drawer = BaseDrawer(Image.new('RGBA', (1, 1), '#FFF'), draw, self.ms)
-        text = " 达成率" if self.cn_level == 2 else " ACHIEVEMENT"
+        text = " 达成率" if self.uic.is_cn_all else " ACHIEVEMENT"
         
         drawer.rounded_rect(x, y, 60, 14, fill=bcm(self.diff.bg, '#FFF9'), radius=1.5)
         style = TextStyle(fill=self.diff.frame, anchor='la',
@@ -63,21 +64,26 @@ class DXScoreComponent:
     """DX 分数显示组件"""
     
     def __init__(self, score: int, max_score: int, star_count: int, diff: Diff,
-                 lite: bool = False, ms: MS = MS(), 
-                 cn_level: Literal[0, 1, 2] = 0):
+                 lite: bool = False, ms: MS = MS(), ui_code: UICode = UICode.JP):
         self.score = score
         self.max_score = max_score
         self.star_count = star_count
         self.diff = diff
         self.lite = lite
         self.ms = ms
-        self.cn_level = cn_level
+        self.uic = ui_code
 
     def _get_dxscore_info(self) -> Tuple[str, str, str, str]:
         """获取 DX 分数信息"""
         from ..models import COLOR_DXSCORE_GN, COLOR_DXSCORE_OR, COLOR_DXSCORE_GD
         
-        title = {0: " でらっくスコア", 1: " DXSCORE", 2: " DX分数"}[self.cn_level]
+        if self.uic.is_jp:
+            title = "でらっくスコア"
+        elif self.uic.is_cn:
+            title = "DX分数"
+        else:
+            title = "DXSCORE"
+        title = f' {title}'
         text = f"{self.score} / {self.max_score}"
         
         if self.star_count == 5:
@@ -131,20 +137,19 @@ class EvaluateComponent:
     """FC/FS/Sync 评价标签组件"""
     
     def __init__(self, eval: Optional[EvalInfo], mini: bool = False,
-                 ms: MS = MS(), cn_level: Literal[0, 1, 2] = 0,
+                 ms: MS = MS(), ui_code: UICode = UICode.JP,
                  FontManager: Optional[FontManager] = None):
         self.eval = eval
         self.mini = mini
         self.ms = ms
-        self.cn_level = cn_level
+        self.uic = ui_code
         self.FontManager = FontManager
 
-    @lru_cache(maxsize=18)
-    def _render_evaluate(self, eval_code: int, mini: bool, ms: MS, cn_level: Literal[0, 1, 2]) -> Image.Image:
-        """渲染评价标签（缓存版）"""
+    def _render_evaluate(self, eval_code: int, mini: bool) -> Image.Image:
+        """渲染评价标签"""
         from ..models import Combo, Sync
         
-        size = ms.xy(20, 5) if mini else ms.xy(40, 5)
+        size = self.ms.xy(20, 5) if mini else self.ms.xy(40, 5)
         img = Image.new('RGBA', size, "#FFFFFF00")
         
         if eval_code >= 0:
@@ -155,11 +160,11 @@ class EvaluateComponent:
                 eval_info = Sync.get(eval_code - 10)  # 假设 Sync 代码偏移 10
             
             draw = ImageDraw.Draw(img)
-            drawer = BaseDrawer(img, draw, ms)
+            drawer = BaseDrawer(img, draw, self.ms)
                         
-            text = eval_info.short_name if mini else (eval_info.cn_name if cn_level == 2 else eval_info.full_name)
+            text = eval_info.short_name if mini else (eval_info.cn_name if self.uic.is_cn_all else eval_info.full_name)
             style = TextStyle(fill=eval_info.color.fill, anchor='lm',
-                            font=FontManager.font(FontCode.MiSans_Heavy, ms.x(3)),
+                            font=FontManager.font(FontCode.MiSans_Heavy, self.ms.x(3)),
                             stroke_width=0.5, stroke_fill=eval_info.color.shadow,
                             shadow_width=0.65, shadow_color=eval_info.color.shadow)
             drawer.text(1, 2.5, text, style)
@@ -173,4 +178,4 @@ class EvaluateComponent:
             return Image.new('RGBA', size, "#FFFFFF00")
         
         eval_code = self.eval.code
-        return self._render_evaluate(eval_code, self.mini, self.ms, self.cn_level)
+        return self._render_evaluate(eval_code, self.mini)

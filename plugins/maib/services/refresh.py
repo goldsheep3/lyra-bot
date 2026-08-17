@@ -6,7 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from .. import utils
-from ..constants import DEFAULT_DATETIME, VERSION_MAP, server as Server
+from ..utils.constants import DEFAULT_DATETIME
+from ..utils.enums import Server
+from ..utils.map import Versions
 from . import execute_func
 from .mlist import get_b50
 from .models import MaiChartAch, MaiUser
@@ -31,7 +33,7 @@ def _calc_mca_dxrating(mca: MaiChartAch, current_version: Optional[int] = None) 
     if chart is None:
         raise ValueError("MaiChartAch.chart is required to calculate DXRating")
 
-    version = current_version if current_version is not None else VERSION_MAP.get_latest_version_id(mca.server)
+    version = current_version if current_version is not None else Versions.latest(mca.server)
     ap_bonus = utils.get_ap_bonus_value(version)
 
     if mca.server == "JP":
@@ -62,8 +64,8 @@ async def _refresh_single_user_dxrating_cache(
     *,
     session: AsyncSession,
 ) -> None:
-    cut_version = VERSION_MAP.get_cut_version(server)
-    current_version = VERSION_MAP.get_latest_version_id(server)
+    current_version = Versions.latest(server)
+    cut_version = Versions.b50_cut_version(current_version)
 
     b35, b15 = await get_b50(
         user_id=user_id,
@@ -181,7 +183,7 @@ async def rfs_dxra_batch(
 
     async def _action(session: AsyncSession) -> None:
         target_server = server
-        current_version = VERSION_MAP.get_latest_version_id(target_server)
+        current_version = Versions.latest(target_server)
         shortids = [shortid for shortid, _ in unique_chart_keys]
         difficulties = [difficulty for _, difficulty in unique_chart_keys]
         key_set = set(unique_chart_keys)
@@ -249,7 +251,7 @@ async def rfs_mu_dxra_with_mct_batch(
         return
 
     async def _action(session: AsyncSession) -> None:
-        current_version = VERSION_MAP.get_latest_version_id(server)
+        current_version = Versions.latest(server)
         shortids = [shortid for shortid, _ in unique_chart_keys]
         difficulties = [difficulty for _, difficulty in unique_chart_keys]
         key_set = set(unique_chart_keys)
