@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Literal
 from ...type import Achievement
 from .._normalize import normalize_basic as normalize
 from ._data import AchievementRateInfo, raw_rates
@@ -56,3 +56,25 @@ class AchievementMap:
         """根据 称号名/别名 获取 `AchievementRateInfo`"""
         achievement = cls.find_achievement(name)
         return cls.get(achievement) if achievement is not None else None
+
+    # 功能性方法
+    
+    @classmethod
+    def rate(cls, achievement: Achievement | AchievementRateInfo) -> Literal['S', 'A', 'B']:
+        """根据 `Achievement` 获取称号等级（S/A/B）"""
+        info: AchievementRateInfo
+        if isinstance(achievement, Achievement):
+            info = cls.get(achievement)
+        else:
+            info = achievement
+
+        achievement_value = cls.find_achievement(info.main_name)
+        if achievement_value is None:
+            achievement_value = 0
+
+        if achievement_value >= 970000:
+            return 'S'
+        elif achievement_value >= 800000:
+            return 'A'
+        else:
+            return 'B'

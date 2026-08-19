@@ -1,12 +1,18 @@
-"""image_gen/tools.py 绘图基础工具"""
+"""
+image_gen.tools
+绘图工具函数
+"""
 import io
 import bisect
-from typing import Optional, Literal
-from PIL import Image, ImageFont
+import zipfile
+from typing import Optional, Iterable, Sequence
+from PIL import Image, ImageDraw, ImageFont
+from contextlib import contextmanager
+from pathlib import Path
 
-from ..utils.enums import UICode
-from ..utils.map import Genres
-from .models import COLOR_THEME
+from .color import TRANSPARENT
+from ..utils import MaiData
+from ..utils.map import DifficultyID
 
 
 __all__ = [
@@ -18,10 +24,14 @@ __all__ = [
     "bcm",
     # 文本限制函数
     "limit_text",
-    # 流派信息获取函数
-    "get_genre",
     # PIL Image 转字节流
     "get_image_bytes",
+    # 圆角矩形切割
+    "rounded_image",
+    # zip 文件句柄管理
+    "open_zip_handles",
+    # 网格化排列图片
+    "image_grid_board",
 ]
 
 
@@ -127,7 +137,7 @@ def bcm(t: str, f: str) -> str:
     return f"#{r:02X}{g:02X}{b:02X}"
 
 # --- 文本限制函数 ---
-def limit_text(text: str, font: ImageFont.FreeTypeFont, max_width: float) -> str:
+def limit_text(text: str, font: ImageFont.FreeTypeFont, max_width: Optional[float]) -> str:
     """
     限制文本显示宽度（超过则截断并添加 ...）
     
@@ -139,6 +149,10 @@ def limit_text(text: str, font: ImageFont.FreeTypeFont, max_width: float) -> str
     Returns:
         截断后的文本
     """
+    if max_width is None or max_width < 0:
+        # 无宽度限制值，直接返回原文本
+        return text
+    
     full_width = font.getlength(text)
     if full_width <= max_width or len(text) < 4 or max_width < 0:
         return text
@@ -170,23 +184,6 @@ def limit_text(text: str, font: ImageFont.FreeTypeFont, max_width: float) -> str
 
     return current_text
 
-# --- 流派信息获取函数 ---
-def get_genre(genre_id: int, ui_code: UICode) -> tuple[str, str]:
-    """获取流派信息"""
-    genre_info = Genres.get(genre_id)
-    if genre_info is None:
-        return 'N/A', COLOR_THEME
-
-    color = genre_info.color
-    if ui_code.is_jp:
-        genre = genre_info.jp
-    elif ui_code.is_cn:
-        genre = genre_info.cn
-    else:
-        genre = genre_info.intl
-
-    return genre, color
-
 # --- PIL Image 转字节流 ---
 def get_image_bytes(img: Image.Image, format: str = "jpeg") -> bytes:
     """将 PIL Image 对象转换为字节流"""
@@ -202,3 +199,99 @@ def get_image_bytes(img: Image.Image, format: str = "jpeg") -> bytes:
             output.truncate(0)
             img.save(output, format="png")
         return output.getvalue()
+
+# --- 圆角矩形切割函数 ---
+def rounded_image(img, size, outline_width, radius=4):
+    weight, height = size
+    mask = Image.new('L', size, 0)
+    draw = ImageDraw.Draw(mask)
+    draw.rounded_rectangle(
+        (outline_width, outline_width, weight, height),
+        radius=radius,
+        fill=255,
+    )
+
+    final_img = Image.new('RGBA', size, TRANSPARENT)
+    final_img.paste(img, (0, 0), mask)
+
+    mask.close()
+    return final_img
+
+# --- 统一管理 zip 句柄 ---
+@contextmanager
+def open_zip_handles(entries: list[tuple[MaiData, DifficultyID]]):
+    """统一打开并管理所有需要的 zip 句柄"""
+    handles: dict[Path, zipfile.ZipFile] = {}
+    try:
+        for maidata, _ in entries:
+            zip_path = maidata.zip_path
+            if zip_path and zip_path not in handles:
+                handles[zip_path] = zipfile.ZipFile(zip_path, "r")
+        yield handles
+    finally:
+        for handle in handles.values():
+            handle.close()
+
+# --- 网格化排列图片 ---
+def image_grid_board(image_iter: Iterable[Image.Image], 
+                     cols: int = 4, 
+                     gap_px: int = 0,
+                     total_count: Optional[int] = None,
+                     box_size_px: Optional[tuple[int, int]] = None,
+                     first_img: Optional[Image.Image] = None) -> Optional[Image.Image]:
+    """图片网格排列"""
+    # 判断传入的是否为列表/元组等序列类型
+    is_sequence = isinstance(image_iter, Sequence)
+    
+    # 1. 确定总数量 (用于计算画板高度)
+    if total_count is None:
+        if is_sequence:
+            total_count = len(image_iter)
+        else:
+            raise ValueError("当使用生成器/迭代器时，必须显式提供 'total_count' 参数。")
+            
+    if total_count <= 0 and first_img is None:
+        return None
+    if cols <= 0:
+        raise ValueError("cols 必须为正整数。")
+
+    # 2. 确定单张尺寸 (用于计算画板宽度)
+    if box_size_px is None:
+        if is_sequence and len(image_iter) > 0:
+            box_size_px = image_iter[0].size
+        else:
+            raise ValueError("当使用生成器/迭代器时，必须显式提供 'box_size' 参数，例如 (800, 600)。")
+            
+    box_w, box_h = box_size_px
+    total_slots = total_count + (1 if first_img is not None else 0)
+    rows = (total_slots + cols - 1) // cols
+
+    # 提前创建好大画板
+    board_width = cols * box_w + (cols - 1) * gap_px
+    board_height = rows * box_h + (rows - 1) * gap_px
+    board = Image.new("RGBA", (int(board_width), int(board_height)), (0, 0, 0, 0))
+    
+    # 3. 首图占位：first_img 占据第一个槽位（0×0 图视为留空，仅占槽位）
+    slot = 0
+    if first_img is not None:
+        if first_img.size[0] > 0 and first_img.size[1] > 0:
+            mask = first_img if first_img.mode == 'RGBA' else None
+            board.paste(first_img, (0, 0), mask)
+        slot += 1
+
+    # 4. 核心循环：边迭代、边粘贴、边销毁
+    for img in image_iter:
+        tx = (slot % cols) * (box_w + gap_px)
+        ty = (slot // cols) * (box_h + gap_px)
+        
+        # 修复之前的 Mask 隐患：只有带 Alpha 通道的图才用自身做 Mask
+        if img.size[0] > 0 and img.size[1] > 0:
+            mask = img if img.mode == 'RGBA' else None
+            board.paste(img, (int(tx), int(ty)), mask)
+        
+        # 粘贴完毕，立刻关闭底层 C 缓冲，释放内存！
+        if not is_sequence:
+            img.close()
+        slot += 1
+
+    return board

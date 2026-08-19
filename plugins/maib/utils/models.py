@@ -13,7 +13,7 @@ from loguru import logger
 
 from .calculator import get_dxrating, get_dxscore_max, get_dxscore_star_count
 from ..utils.constants import DEFAULT_DATETIME
-from ..utils.map import ComboID, SyncID
+from ..utils.map import ComboID, SyncID, GenreID, DifficultyID
 from .enums import Server, SLevelSource
 
 
@@ -42,7 +42,7 @@ class MaiAlias:
 class MaiChartAch:
     """maimai 谱面成就信息"""
     shortid: int
-    difficulty: int
+    difficulty: DifficultyID
     server: Server
     achievement: float
     dxscore: int = 0
@@ -121,7 +121,7 @@ class MaiChartAch:
 class MaiChart:
     """maimai 谱面信息"""
     shortid: int
-    difficulty: int
+    difficulty: DifficultyID
     lv: float
     lv_cn: Optional[float] = None
     lv_synh: Optional[float] = None
@@ -199,7 +199,7 @@ class MaiData:
     title: str
     bpm: int
     artist: str
-    genre: int
+    genre: GenreID
     cabinet: Literal['SD', 'DX']
     version: int
     version_cn: Optional[int]

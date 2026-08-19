@@ -271,7 +271,7 @@ async def b50_handled(event: Event, matcher: Matcher, groups: dict = RegexDict()
         current_version=current_version,
         server=scope.to_server(),
         user_name=target_maiuser.username,
-        user_avatar=await utils.get_qq_avatar(target_qq, spec=100),
+        user_avatar=await network.get_qq_avatar(target_qq, spec=100),
         dxrating=dxrating,
         update_time=target_maiuser.get_formated_time(scope.to_server()),
         ui_code=UICode.CN if scope == ServerScope.CN else UICode.JP

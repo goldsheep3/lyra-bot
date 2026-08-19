@@ -1,161 +1,129 @@
-"""image_gen/utils.py 绘图基础工具"""
-from enum import Enum
-from typing import Iterator, Optional, Any
+"""
+image_gen.models
+色彩与风格模型
+"""
 from dataclasses import dataclass
+from typing import Optional
+
+from ..utils.map import DifficultyID
 
 
-__all__ = [
-    # 难度
-    "Diff", "Difficulty",
-    # 达成率
-    "AchColor", "Achievement",
-    # Combo / Sync
-    "EvaluateColor", "EvalInfo", "Combo", "Sync",
-]
+# --------------------------------
+# 颜色模型
+# --------------------------------
 
-
-# --- 基础颜色 ---
-COLOR_DXSCORE_GN = '#0A5'  # DXScore ✦ / ✦✦
-COLOR_DXSCORE_OR = '#C72'  # DXScore ✦✦✦ / ✦✦✦✦
-COLOR_DXSCORE_GD = '#ED4'  # DXScore ✦✦✦✦✦
-COLOR_THEME = '#64d2ce'  # 主题色
-EMP_COLOR = '#FFFFFF00'  # 完全透明
-
-COLOR_UTAGE_TAG_BG = '#236'  # 宴会场标签背景
-COLOR_UTAGE_TAG_FRAME = '#BEF'  # 宴会场标签边框
-COLOR_BUDDY_TAG_BG = '#411'  # buddy 宴会场标签背景
-COLOR_BUDDY_TAG_FRAME = '#FEA'  # buddy 宴会场标签边框
-
-# --- 难度数据类 ---
 @dataclass(frozen=True)
-class Diff:
-    """难度信息数据类"""
-    code: int
-    text_title: str
-    text_title_cn: str
+class GenreColors:
+    """流派颜色信息"""
+    main: str
+    sub: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class DifficultyColors:
+    """难度颜色信息"""
     bg: str
     frame: str
     text: str
     deep: str
     title_bg: str
-    _level_text: Optional[str] = None
-
-    @property
-    def level_text(self) -> str:
-        return self._level_text if self._level_text else self.text
-    
-    def __int__(self) -> int:
-        return self.code
+    level_text: str
 
 
-# TODO 后续和 utils.map.difficulty 接轨，颜色信息仍然放置到 image_gen，改为获取颜色的函数/方法
-class Difficulty(Enum):
-    """难度枚举"""
-    NONE = Diff(0, "N/A", "N/A", bg='#FFF', frame='#FFF', text='#FFF', deep='#FFF', title_bg='#FFF')
-    EASY = Diff(1, "EASY", "简单", bg='#FFF', frame='#FFF', text='#FFF', deep='#FFF', title_bg='#FFF')
-    BASIC = Diff(2, "BASIC", "基础", bg='#7E6', frame='#053', text='#FFF', deep='#8D5', title_bg='#2B5')
-    ADVANCED = Diff(3, "ADVANCED", "高级", bg='#FD3', frame='#B41', text='#FFF', deep='#FB1', title_bg='#F92')
-    EXPERT = Diff(4, "EXPERT", "专家", bg='#F88', frame='#C23', text='#FFF', deep='#F9A', title_bg='#F46')
-    MASTER = Diff(5, "MASTER", "大师", bg='#C7F', frame='#618', text='#FFF', deep='#B3D', title_bg='#94E')
-    REMASTER = Diff(6, "Re:MASTER", "宗师", bg='#EDE', frame='#82D', text='#D5F', deep='#FFF', title_bg='#B6F', _level_text='#FFF')
-    UTAGE = Diff(7, "U·TA·GE", "宴·会·场", bg='#E6E', frame='#D0B', text='#FFF', deep='#F6F', title_bg='#F4F')
-
-    @classmethod
-    def get(cls, code: int) -> Diff:
-        """根据难度代码获取难度信息"""
-        ob = cls.NONE
-        for item in cls:
-            if int(item.value) == code:
-                ob = item
-                break
-        return ob.value
-
-
-# --- 达成率数据类 --- 
 @dataclass(frozen=True)
-class AchColor:
+class RateColors:
     """达成率颜色信息"""
     fill: str
     stroke: str
     shadow: str
 
-class Achievement(Enum):
-    """达成率评级"""
-    S = AchColor(fill='#F93', stroke='#C00', shadow='#EB5')
-    A = AchColor(fill='#D77', stroke='#834', shadow='#B77')
-    B = AchColor(fill='#3AD', stroke='#239', shadow='#58B')
 
-    @classmethod
-    def get_by_percent(cls, percent: float) -> AchColor:
-        """根据达成率百分比获取颜色"""
-        if percent >= 97:
-            return cls.S.value
-        if percent >= 80:
-            return cls.A.value
-        return cls.B.value
-
-# --- Combo / Sync 数据类 ---
 @dataclass(frozen=True)
-class EvaluateColor:
+class EvaluateColors:
     """评价颜色信息"""
     fill: str
+    stroke: str
     shadow: str
 
-# TODO 后续和 utils.map.combo / utils.map.sync 接轨，颜色信息仍然放置到 image_gen，改为获取颜色的函数/方法
-_EVAL_GN = EvaluateColor(fill='#7D5', shadow='#162')  # FC / FC+
-_EVAL_GD = EvaluateColor(fill='#FE2', shadow='#A02')  # AP / AP+ / FDX / FDX+
-_EVAL_BE = EvaluateColor(fill='#6DF', shadow='#038')  # FS / FS+
-_EVAL_DB = EvaluateColor(fill='#038', shadow='#FFF')  # SYNC PLAY
 
 @dataclass(frozen=True)
-class EvalInfo:
-    """评价信息数据类"""
-    code: int
-    color: EvaluateColor
-    full_name: str
-    short_name: str
-    cn_name: str
+class CabinetColors:
+    """谱面类型徽章颜色信息"""
+    fill: str
+    outline: str
+    text: tuple[str, ...]
+    
 
-    def __iter__(self) -> Iterator[Any]:
-        return iter((self.color, self.full_name, self.short_name, self.cn_name))
+# --------------------------------
+# 风格模型
+# --------------------------------
 
-    def __int__(self) -> int:
-        return self.code
+@dataclass(frozen=True)
+class GenreStyle:
+    """流派"""
+    content: str
+    fill: str
+    shadow: str
+    sub_fill: Optional[str] = None  # 中二/音击 分两行绘制特有
 
-# TODO 后续和 utils.map.combo / utils.map.sync 接轨，颜色信息仍然放置到 image_gen，改为获取颜色的函数/方法
-class Combo(Enum):
-    """Combo 类型 (FC, AP 等)"""
-    NONE = EvalInfo(0, _EVAL_GN, '', '', '')
-    FC   = EvalInfo(1, _EVAL_GN, 'FULL COMBO', 'FC', '全连击')
-    FCP  = EvalInfo(2, _EVAL_GN, 'FULL COMBO +', 'FC+', '全连击+')
-    AP   = EvalInfo(3, _EVAL_GD, 'ALL PERFECT', 'AP', '完美无缺')
-    APP  = EvalInfo(4, _EVAL_GD, 'ALL PERFECT +', 'AP+', '完美无缺+')
 
-    @classmethod
-    def get(cls, code: int) -> EvalInfo:
-        """根据代码获取组合评价"""
-        ob = cls.NONE
-        for item in cls:
-            if int(item.value) == code:
-                ob = item
-                break
-        return ob.value
+@dataclass(frozen=True)
+class EvaluateStyle:
+    """Combo / Sync"""
+    content: str
+    fill: str
+    stroke: str
+    shadow: str
 
-class Sync(Enum):
-    """Sync 类型 (FS, FDX 等)"""
-    NONE = EvalInfo(0, _EVAL_DB, '', '', '')
-    SYNC = EvalInfo(1, _EVAL_DB, 'SYNC PLAY', 'SYNC', '同步游玩')
-    FS   = EvalInfo(2, _EVAL_BE, 'FULL SYNC', 'FS', '全完同步')  # 原文如此
-    FSP  = EvalInfo(3, _EVAL_BE, 'FULL SYNC +', 'FS+', '全完同步+')  # 原文如此
-    FDX  = EvalInfo(4, _EVAL_GD, 'FULL SYNC DX', 'FDX', '完全同步DX')
-    FDXP = EvalInfo(5, _EVAL_GD, 'FULL SYNC DX +', 'FDX+', '完全同步DX+')
 
-    @classmethod
-    def get(cls, code: int) -> EvalInfo:
-        """根据代码获取同步评价"""
-        ob = cls.NONE
-        for item in cls:
-            if int(item.value) == code:
-                ob = item
-                break
-        return ob.value
+@dataclass(frozen=True)
+class RateStyle:
+    """达成率"""
+    content: str
+    fill: str
+    stroke: str
+    shadow: str
+
+
+@dataclass(frozen=True)
+class RateFrameStyle:
+    """达成率框架"""
+    content: str
+    fill: str
+    bg_fill: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class DifficultyStyle:
+    """难度"""
+    id: DifficultyID
+    title_jp: str
+    title_cn: str
+    level: str
+    bg: str
+    frame: str
+    text: str
+    deep: str
+    title_bg: str
+    level_text: str
+
+
+@dataclass(frozen=True)
+class CabinetStyle:
+    """SD/DX"""
+    content: str
+    fill: str
+    outline: str
+    text: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DXScoreStyle:
+    """DX 分数"""
+    title: str
+    title_fill: str
+    bg_fill: str
+    content: str
+    fill: str
+    star: Optional[str] = None
+    star_fill: Optional[str] = None
