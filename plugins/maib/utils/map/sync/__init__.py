@@ -1,7 +1,7 @@
 from typing import Optional, TypeVar
 
 from ._data import SyncID, SyncInfo, raw_syncs
-from .._normalize import normalize_eval as normalize
+from .._normalize import normalize_evaluate as normalize
 
 
 __all__ = [
@@ -46,14 +46,14 @@ class Syncs:
         return getattr(info, index, default)
 
     @classmethod
-    def text_fullname(cls, sync_id: SyncID, *, default: E = None) -> str | E:
+    def text_full(cls, sync_id: SyncID, *, default: E = None) -> str | E:
         """根据 `SyncID` 获取 `SyncInfo` 的完整名称"""
-        return cls._text(sync_id, index='fullname', default=default)
+        return cls._text(sync_id, index='full', default=default)
 
     @classmethod
-    def text_shortname(cls, sync_id: SyncID, *, default: E = None) -> str | E:
+    def text_short(cls, sync_id: SyncID, *, default: E = None) -> str | E:
         """根据 `SyncID` 获取 `SyncInfo` 的简写"""
-        return cls._text(sync_id, index='shortname', default=default)
+        return cls._text(sync_id, index='short', default=default)
 
     @classmethod
     def text_cn(cls, sync_id: SyncID, *, default: E = None) -> str | E:

@@ -88,13 +88,13 @@ async def ra_calc_handled(event: Event, matcher: Matcher, groups: dict[str, Opti
             ("S+", 98.0),
             ("S", 97.0),
         ):
-            ra = get_dxrating(_achievement, level, 0)
+            ra = get_dxrating(int(_achievement*10000), level, 0)
             lines.append(reply("rc.success.blur", level=level, rate=rate, ra=ra))
         lines.append(reply("rc.excluding_ap_bouns"))
         await matcher.finish("\n".join(lines))
         return
     else:
-        ra = get_dxrating(achievement, level, 0)
+        ra = get_dxrating(int(achievement*10000), level, 0)
         lines = [
             reply("rc.success.tip"),
             reply("rc.success.common", level=level, achievement=f"{achievement:.4f}", ra=ra),

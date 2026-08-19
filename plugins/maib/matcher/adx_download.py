@@ -152,6 +152,11 @@ async def _cleanup_expired_group_files(bot: OneBotV11Bot, group_id: int, folder_
 async def adx_download_handled(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup(), _i18n = i18n): 
     """处理命令: 下载谱面11568"""
     i18n_data.set(_i18n)
+    # 硬编码拦截：OneBotV11 私聊暂时不支持谱面下载
+    if isinstance(event, OneBotV11PrivateMessageEvent):
+        await matcher.finish("由于部分原因，暂停私聊谱面发送，请通过支持的群聊或加入 672460250 下载谱面~")
+        return
+
 
     raw_short_id, archive_type = groups
     archive_type = archive_type.strip().lower()
@@ -224,6 +229,7 @@ async def adx_download_handled(bot: Bot, event: Event, matcher: Matcher, groups:
                     use_stream=True,
                 )
             except Exception as e:
+                logger.warning(f"上传异常类型: {type(e).__module__}.{type(e).__qualname__}: {e}")
                 if not _is_call_api_timeout(e, "upload_group_file"):
                     logger.error(f"上传失败: {e}")
                     await matcher.finish(reply("ad.error"))

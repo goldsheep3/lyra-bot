@@ -1,7 +1,7 @@
 from typing import Optional, TypeVar
 
 from ._data import ComboID, ComboInfo, raw_combos
-from .._normalize import normalize_eval as normalize
+from .._normalize import normalize_evaluate as normalize
 
 
 __all__ = [
@@ -46,14 +46,14 @@ class Combos:
         return getattr(info, index, default)
 
     @classmethod
-    def text_fullname(cls, combo_id: ComboID, *, default: E = None) -> str | E:
+    def text_full(cls, combo_id: ComboID, *, default: E = None) -> str | E:
         """根据 `ComboID` 获取 `ComboInfo` 的完整名称"""
-        return cls._text(combo_id, index='fullname', default=default)
+        return cls._text(combo_id, index='full', default=default)
 
     @classmethod
-    def text_shortname(cls, combo_id: ComboID, *, default: E = None) -> str | E:
+    def text_short(cls, combo_id: ComboID, *, default: E = None) -> str | E:
         """根据 `ComboID` 获取 `ComboInfo` 的简写"""
-        return cls._text(combo_id, index='shortname', default=default)
+        return cls._text(combo_id, index='short', default=default)
 
     @classmethod
     def text_cn(cls, combo_id: ComboID, *, default: E = None) -> str | E:
@@ -74,7 +74,6 @@ class Combos:
         return cls.get(combo_id) if combo_id is not None else None
 
     # dict key/value/items
-
 
     @classmethod
     def id_list(cls) -> list[ComboID]:

@@ -55,6 +55,7 @@ b50 = on_regex(r'^(?:b50|kkb)\s*(?P<args>.*)', priority=1, block=True)
 @scorelist.handle()
 async def scorelist_handled(event: Event, matcher: Matcher, groups: dict = RegexDict(), _i18n = i18n):
     """处理命令: xxx完成表/xxx进度/xxx列表"""
+    return  # 暂未实现，暂时忽略
     i18n_data.set(_i18n)
     await matcher.finish("该功能尚未实现……比预想中难写很多，果咩纳塞（´・ω・｀）")
     
@@ -266,14 +267,16 @@ async def b50_handled(event: Event, matcher: Matcher, groups: dict = RegexDict()
         return
 
     # 绘制 b50
-    img = image_gen.draw_b50(
+    img = image_gen.draw_b50_board(
         b35_entries, b15_entries,
+        dxrating_data=target_maiuser.get_dxrating_data(scope.to_server()),
         current_version=current_version,
+        updated=target_maiuser.get_formated_time(scope.to_server()),
         server=scope.to_server(),
-        user_name=target_maiuser.username,
-        user_avatar=await utils.get_qq_avatar(target_qq, spec=100),
-        dxrating=dxrating,
-        update_time=target_maiuser.get_formated_time(scope.to_server()),
+        cut_version=cut_version,
+        username=target_maiuser.username,
+        avatar=await network.get_qq_avatar(target_qq, spec=100),
+        line_width=4,
         ui_code=UICode.CN if scope == ServerScope.CN else UICode.JP
     )
     img_bytes = image_gen.get_image_bytes(img)
@@ -283,4 +286,3 @@ async def b50_handled(event: Event, matcher: Matcher, groups: dict = RegexDict()
         ("image", img_bytes)
     ]
     await build_msg(matcher, event, final_payload, tag='finish')
-

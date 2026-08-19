@@ -3,7 +3,7 @@ import asyncio
 import httpx
 import orjson
 from pathlib import Path
-from typing import Optional, Any
+from typing import Optional, Any, Literal
 from dataclasses import dataclass
 
 from nonebot import logger, get_driver
@@ -14,6 +14,8 @@ __all__ = [
     "MaichartConverts",
     "Lxns",
     "YuzuChaN",
+
+    "get_qq_avatar",
 ]
 
 
@@ -257,3 +259,11 @@ class YuzuChaN:
             _ENDPOINTS["yuzuchan"] + "/maimaidxalias",
             project_name="yuzuchan*/maimaidxalias"
         )
+
+
+# --- 工具函数 ---
+
+async def get_qq_avatar(qq: str | int, spec: Literal[1, 2, 3, 4, 5, 40, 100, 640] = 100) -> Optional[bytes]:
+    avatar_url = f"http://q2.qlogo.cn/headimg_dl?dst_uin={qq}&spec={spec}"
+    avatar = await request_image(avatar_url)
+    return avatar

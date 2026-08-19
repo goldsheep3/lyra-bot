@@ -11,10 +11,7 @@ from ..utils.enums import Server, ServerScope, SLevelSource
 from ..utils import NoLinkQQError
 
 
-ParsedArgs = tuple[Optional[int], Optional[ServerScope]]
-
-
-def get_args(args_text: str) -> ParsedArgs:
+def get_args(args_text: str) -> tuple[Optional[int], Optional[ServerScope]]:
     """Parse optional target user id and target server arguments."""
     target_user_id: Optional[int] = None
     target_server: Optional[ServerScope] = None

@@ -61,11 +61,6 @@ class Genres:
         """根据 `GenreID` 获取 `GenreInfo` 的汉化文本"""
         return cls._text(genre_id, index='cn', default=default)
 
-    @classmethod
-    def color(cls, genre_id: GenreID, *, default: E = None) -> str | E:
-        """根据 `GenreID` 获取 `GenreInfo` 的颜色值"""
-        return cls._text(genre_id, index='color', default=default)
-
     # find: name -> id/info
 
     @classmethod

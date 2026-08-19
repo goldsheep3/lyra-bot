@@ -44,8 +44,8 @@ class MaiChartAchDiff:
             text += "0.0000%(    )(    )"
         else:
             ach_old = f"{self.old_ach.achievement:.4f}%"
-            combo_old = Combos.text_shortname(self.old_ach.combo, default=str(self.old_ach.combo))
-            sync_old = Syncs.text_shortname(self.old_ach.sync, default=str(self.old_ach.sync))
+            combo_old = Combos.text_short(self.old_ach.combo, default=str(self.old_ach.combo))
+            sync_old = Syncs.text_short(self.old_ach.sync, default=str(self.old_ach.sync))
             text += (
                 f"{ach_old:>8}"
                 f"({combo_old:>4})"
@@ -54,8 +54,8 @@ class MaiChartAchDiff:
         text += "  ->  "
         # Line 2 - new achievement
         ach_new = f"{self.new_ach.achievement:.4f}%"
-        combo_new = Combos.text_shortname(self.new_ach.combo, default=str(self.new_ach.combo))
-        sync_new = Syncs.text_shortname(self.new_ach.sync, default=str(self.new_ach.sync))
+        combo_new = Combos.text_short(self.new_ach.combo, default=str(self.new_ach.combo))
+        sync_new = Syncs.text_short(self.new_ach.sync, default=str(self.new_ach.sync))
         text += (
             f"{ach_new:>8}"
             f"({combo_new:>4})"
@@ -165,9 +165,9 @@ def build_diff_report(
 
     detail_text = "\n".join(detail_lines)
     if report.has_changes:
-        from ..image_gen import simple_list, FontManager, FontCode
+        from ..image_gen import draw_simple_board, FontManager, FontCode
 
-        detail_image = simple_list(detail_text, font=FontManager.font(FontCode.SmileySans, size=16))
+        detail_image = draw_simple_board(detail_text, font=FontManager.font(FontCode.SmileySans, size=16))
     else:
         detail_image = None
 

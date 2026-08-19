@@ -7,10 +7,10 @@ def normalize_basic(text: str) -> str:
     return text
     
 
-def normalize_eval(text: str) -> str:
-    """文本归一化函数（用于 eval）"""
+def normalize_evaluate(text: str) -> str:
+    """文本归一化函数（用于 evaluate）"""
     if "_dummy" in text:
-        # dummy 为空 eval，直接返回空字符串
+        # dummy 为空 evaluate，直接返回空字符串
         return ""
     text = normalize_basic(text)
     text = text.replace("deluxe", "dx")
