@@ -57,7 +57,7 @@ class B50Board:
                 gap_px=ms.x(5),
                 total_count=b35_count,
                 box_size_px=ms.xy(*box_size),
-                first_img=None if inner_width == 5 else Image.new("RGBA", (0, 0), Color.TRANSPARENT),
+                first_img=None if line_width == 5 else Image.new("RGBA", (0, 0), Color.TRANSPARENT),
             )
             board_b15 = image_grid_board(
                 image_iter=generator(b15_entries, is_b15=True),
@@ -65,7 +65,7 @@ class B50Board:
                 gap_px=ms.x(5),
                 total_count=b15_count,
                 box_size_px=ms.xy(*box_size),
-                first_img=None if inner_width == 5 else Image.new("RGBA", (0, 0), Color.TRANSPARENT),
+                first_img=None if line_width == 5 else Image.new("RGBA", (0, 0), Color.TRANSPARENT),
             )
 
         board_last = CopyrightBadge.copyright(width_px=width, ms=ms)

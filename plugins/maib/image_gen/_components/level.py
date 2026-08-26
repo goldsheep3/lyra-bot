@@ -47,10 +47,10 @@ class LevelBadge:
         plus_mask_font = FontManager.font(FontCode.JBMono_Bold, size=ms.x(3))
 
         # 计算文本宽度
-        level_bbox = level_font.getbbox(level_text, anchor='ls', stroke_width=ms.x(0.1))
-        int_bbox = int_font.getbbox(int_text, anchor='ls', stroke_width=ms.x(0.1))
-        frac_bbox = frac_font.getbbox(frac_text if len(frac_text) >= 2 else '00', anchor='ls', stroke_width=ms.x(0.1))
-        # plus_mask_bbox = plus_mask_font.getbbox(plus_mask_text, anchor='ls', stroke_width=ms.x(0.1))  # 暂时用不到
+        level_bbox = level_font.getbbox(level_text, anchor='ls', stroke_width=0.4)
+        int_bbox = int_font.getbbox(int_text, anchor='ls', stroke_width=0.4)
+        frac_bbox = frac_font.getbbox(frac_text if len(frac_text) >= 2 else '00', anchor='ls', stroke_width=0.4)
+        # plus_mask_bbox = plus_mask_font.getbbox(plus_mask_text, anchor='ls', stroke_width=0.4)  # 暂时用不到
 
         level_w = ms.rev(round(level_bbox[2] - level_bbox[0]))
         int_w = ms.rev(round(int_bbox[2] - int_bbox[0]))

@@ -54,6 +54,6 @@ try:
     # 注入 hook 以支持 stream 获取文件
     napcat_stream.install_hook()
 
-except (RuntimeError, ImportError):
+except RuntimeError:
     from loguru import logger
-    logger.warning("插件 maib 未被加载，可能是调试阶段")
+    logger.warning("插件 maib 因 RuntimeError 未被加载，可能是正在调试 image_gen 模块。如果不是，请检查 NoneBot 是否正确初始化。")
