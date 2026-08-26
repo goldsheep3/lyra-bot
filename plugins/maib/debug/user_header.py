@@ -12,7 +12,7 @@ if __name__ == "__main__":
     from PIL import Image
 
     # 绝对导入
-    from plugins.maib.image_gen.components.user_header import UserHeaderBadge
+    from plugins.maib.image_gen._components.user_header import UserHeaderBadge
     
     from plugins.maib.utils.models import MaiChart, MaiChartAch
     from plugins.maib.utils.enums import Server

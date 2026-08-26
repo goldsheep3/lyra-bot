@@ -1,22 +1,22 @@
-# def _debug_maidata(version: int):
-#     from pathlib import Path
-#     from datetime import datetime
+def _debug_maidata(version: int):
+    from pathlib import Path
+    from datetime import datetime
     
-#     from ..utils import MaiData, MaiChart, MaiChartAch, MaiAlias
-#     from ..utils.enums import Server
+    from ..utils import MaiData, MaiChart, MaiChartAch, MaiAlias
+    from ..utils.enums import Server
     
-#     datetime_now = datetime.now()
+    datetime_now = datetime.now()
     
-#     aliases = ["transcend lights", "超越光", "九月的雨", "超超光光", "美瞳广告", "小女孩们的茶话会", "超越之光", "bright主题曲", "别急19", "音击的武士", "tl", "萝莉的雨", "音击妹妹", "114514", "音击的雨"]
-#     maidata = MaiData(shortid=11451, title="Transcend Lights", bpm=70, artist="曲：小高光太郎／歌：オンゲキシューターズ", genre=5, cabinet="DX", version=version, version_cn=2023, converter="debug",
-#                       img_path=Path(__name__).parent.parent.parent.parent / "temp" / "debug_cover.png", zip_path=None,
-#                       aliases=[MaiAlias(shortid=11451, alias=a, create_time=datetime_now, create_qq=-1, create_qq_group=None) for a in aliases])
-#     for i in range(2, 7):
-#         chart = MaiChart(shortid=11451, difficulty=i, lv=1 + i * 3)
-#         chart.set_ach(MaiChartAch(shortid=11451, difficulty=i, server=Server.JP, achievement=97.6 + i * 0.5, combo=3, sync=2))
-#         maidata.set_chart(chart)
+    aliases = ["transcend lights", "超越光", "九月的雨", "超超光光", "美瞳广告", "小女孩们的茶话会", "超越之光", "bright主题曲", "别急19", "音击的武士", "tl", "萝莉的雨", "音击妹妹", "114514", "音击的雨"]
+    maidata = MaiData(shortid=11451, title="Transcend Lights", bpm=70, artist="曲：小高光太郎／歌：オンゲキシューターズ", genre=5, cabinet="DX", version=version, version_cn=2023, converter="debug",
+                      img_path=Path(__name__).parent.parent.parent.parent / "temp" / "debug_cover.png", zip_path=None,
+                      aliases=[MaiAlias(shortid=11451, alias=a, create_time=datetime_now, create_qq=-1, create_qq_group=None) for a in aliases])
+    for i in range(2, 7):
+        chart = MaiChart(shortid=11451, difficulty=i, lv=1 + i * 3)
+        chart.set_ach(MaiChartAch(shortid=11451, difficulty=i, server=Server.JP, achievement=97.6 + i * 0.5, combo=3, sync=2))
+        maidata.set_chart(chart)
 
-#     return maidata
+    return maidata
     
     
 # def _debug():

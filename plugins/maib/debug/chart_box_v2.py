@@ -10,7 +10,7 @@ if project_root not in sys.path:
 
 if __name__ == "__main__":
     # 绝对导入
-    from plugins.maib.image_gen.components.chart_box import ChartBoxBadgeV2
+    from plugins.maib.image_gen._components.chart_box import ChartBoxBadgeV2
     
     from plugins.maib.utils.models import MaiChart, MaiChartAch
     from plugins.maib.utils.enums import Server
