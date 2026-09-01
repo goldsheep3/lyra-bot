@@ -80,9 +80,8 @@ async def mai_info_handled(event: Event, matcher: Matcher, groups: tuple = Regex
         server = scope.to_server()
     if server == Server.CN and maidata.version_cn is None:
         server = Server.JP  # 如果乐曲没有国服版本，则展示日服数据
-    uic = UICode.CN if server == Server.CN else UICode.JP
 
-    info_box = image_gen.draw_info_board(maidata, server, maiuser=maiuser, ui_code=uic)
+    info_box = image_gen.draw_info_board(maidata, maiuser=maiuser)
     info_box_bytes = image_gen.get_image_bytes(info_box)
     
     payload = [
@@ -142,8 +141,7 @@ async def mai_what_song_handled(event: Event, matcher: Matcher, groups: tuple = 
         maidata = mdt.to_utils(achs_user_id=qq)
         if matched_alias:
             maidata._matched_alias = matched_alias
-        uic = UICode.CN if server == Server.CN else UICode.JP
-        info_box = image_gen.draw_info_board(maidata, server=server, maiuser=maiuser, ui_code=uic)
+        info_box = image_gen.draw_info_board(maidata, maiuser=maiuser)
         info_bytes = image_gen.get_image_bytes(info_box)
         alias_hint = f"（别名: {matched_alias}）" if matched_alias else None
         return info_bytes, alias_hint

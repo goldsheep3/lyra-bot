@@ -11,7 +11,7 @@ from ...utils.map import DifficultyID
 from .. import color as Color
 from ..utils import MS, ImageManager
 from . import CopyrightBadge, MiniBoxBadge, UserHeaderBadge
-from ..tools import open_zip_handles, image_grid_board
+from ..tools import image_grid_board
 
 
 class GridListBoard:
@@ -36,24 +36,22 @@ class GridListBoard:
             display_content=f"Update: [{server.value}] {update_time}", dan=None, ms=ms
         )
 
-        with open_zip_handles(entries) as zip_handles:
-            def generator():
-                for maidata, difficulty in entries:
-                    yield MiniBoxBadge.box(
-                        maidata=maidata, difficulty=difficulty, server=server, ms=ms, ui_code=ui_code,
-                        shared_zip=zip_handles.get(maidata.zip_path) if maidata.zip_path else None,
+        def generator():
+            for maidata, difficulty in entries:
+                yield MiniBoxBadge.box(
+                    maidata=maidata, difficulty=difficulty, server=server, ms=ms, ui_code=ui_code,
                     )
 
-            box_size = MiniBoxBadge.size()
-            entries_count = len(entries)
+        box_size = MiniBoxBadge.size()
+        entries_count = len(entries)
             
-            board_grid = image_grid_board(
-                image_iter=generator(),
-                cols=line_width,
-                gap_px=ms.x(5),
-                total_count=entries_count,
-                box_size_px=ms.xy(*box_size),
-            )
+        board_grid = image_grid_board(
+            image_iter=generator(),
+            cols=line_width,
+            gap_px=ms.x(5),
+            total_count=entries_count,
+            box_size_px=ms.xy(*box_size),
+        )
 
         board_last = CopyrightBadge.copyright(width_px=width, ms=ms)
 
