@@ -11,7 +11,7 @@ from ...utils.enums import UICode, Server
 
 from ..utils import MS, FontCode, FontManager
 from ..style import get_difficulty_style
-from ..tools import bcm
+from ..color import TRANSPARENT, WHITE
 from .base import TextDrawStyle, Drawer
 from .mini_box import MiniBoxBadge
 
@@ -25,17 +25,19 @@ class B50BoxBadge(MiniBoxBadge):
         chart = maidata.get_chart(difficulty)
         if not chart:
             return cls.empty(ms=ms)
-        img = cls.box(
+        base_img = cls.box(
             maidata=maidata, difficulty=difficulty, server=server, ms=ms, ui_code=ui_code
         )
+        
+        img = Image.new('RGBA', ms.xy(42, 5), TRANSPARENT)
         drawer = Drawer(img, ms=ms)
-        drawer.rounded_rect(54, 25, 42, 5, fill=bcm(get_difficulty_style(chart.difficulty).bg, '#0009'), radius=4)
-        drawer.rounded_rect(54, 25, 16, 5, fill='#006', radius=4)
+        bg_color = get_difficulty_style(chart.difficulty).bg
+        drawer.capsule(0, 0, 42, 5, fill=f"{bg_color}99")
+        drawer.capsule(0, 0, 16, 5, fill=f"{bg_color}55")
         b_type = '15' if is_b15 else '35'
-        drawer.text(62, 27.5, f"b{b_type} #{index}", tds=TextDrawStyle(
-            fill='#FFF', anchor='mm', font=FontManager.font(FontCode.MiSans_Demibold, size=ms.x(3))
-        ))
-        drawer.text(74, 27.5, f"{chart.lv:.1f} > {maidata.get_chart_dxrating(difficulty, server, current_version)}", tds=TextDrawStyle(
-            fill='#FFF', anchor='lm', font=FontManager.font(FontCode.MiSans_Demibold, size=ms.x(3))
-        ))
-        return img
+        tds = TextDrawStyle(fill=WHITE, anchor='mm', font=FontManager.font(FontCode.JBMono_Medium, size=ms.x(3)))
+        drawer.text(8, 2.5, f"b{b_type} #{index}", tds=tds)
+        drawer.text(29, 2.5, f"{chart.lv:.1f} > {maidata.get_chart_dxrating(difficulty, server, current_version)}", tds=tds)
+        base_img.alpha_composite(img, ms.xy(54, 25))
+        
+        return base_img

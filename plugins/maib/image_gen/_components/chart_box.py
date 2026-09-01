@@ -13,7 +13,7 @@ from ...utils.type import Achievement
 from ..utils import MS, FontCode, FontManager
 from ..color import TRANSPARENT, HALF_TRANSPARENT, BLACK, WHITE
 from ..style import get_difficulty_style, _DIFFICULTY_TYPE, DifficultyStyle, get_note_designer_text
-from ..tools import bcm, rounded_image
+from ..tools import rounded_image
 from .base import TextDrawStyle, Drawer
 from . import (
     DifficultyBadge, LevelBadge, CabinetBadge, EvaluateBadge, AchievementBadge, DXScoreBadge,

@@ -20,8 +20,6 @@ __all__ = [
     "convert_to_full_width",
     # dxrating 外框
     "get_dxra_frame_filename",
-    # 颜色混合函数
-    "bcm",
     # 文本限制函数
     "limit_text",
     # PIL Image 转字节流
@@ -118,23 +116,6 @@ def get_dxra_frame_filename(dxrating: int, cirp_frame: bool = True) -> str:
     if cirp_frame:
         return f"JP_CIRP_{idx}.png"
     return f"JP_{idx}.png"
-
-# --- 颜色混合函数 ---
-def bcm(t: str, f: str) -> str:
-    """
-    颜色混合函数 (背景色 t，前景色 f)
-    
-    使用 Alpha 混合模式
-    """
-    # TODO 最终要更换成 Pillow 的 mask 混合
-    r1, g1, b1 = (int(t[i] * 2, 16) for i in range(1, 4))
-    r2, g2, b2, a = \
-        (int(f[i] * 2, 16) for i in range(1, 5)) if len(f) == 5 else (int(f[i:i + 2], 16) for i in range(1, 9, 2))
-    alpha = a / 255.0
-    r = int(r1 + (r2 - r1) * alpha)
-    g = int(g1 + (g2 - g1) * alpha)
-    b = int(b1 + (b2 - b1) * alpha)
-    return f"#{r:02X}{g:02X}{b:02X}"
 
 # --- 文本限制函数 ---
 def limit_text(text: str, font: ImageFont.FreeTypeFont, max_width: Optional[float]) -> str:
