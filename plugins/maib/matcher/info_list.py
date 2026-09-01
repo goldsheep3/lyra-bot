@@ -266,7 +266,7 @@ async def b50_handled(event: Event, matcher: Matcher, groups: dict = RegexDict()
         return
 
     # 绘制 b50
-    img = image_gen.draw_b50(
+    img = image_gen.draw_b50_board(
         b35_entries, b15_entries,
         current_version=current_version,
         server=scope.to_server(),

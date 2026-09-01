@@ -165,9 +165,9 @@ def build_diff_report(
 
     detail_text = "\n".join(detail_lines)
     if report.has_changes:
-        from ..image_gen import simple_list, FontManager, FontCode
+        from ..image_gen import draw_simple_board, FontManager, FontCode
 
-        detail_image = simple_list(detail_text, font=FontManager.font(FontCode.SmileySans, size=16))
+        detail_image = draw_simple_board(detail_text, font=FontManager.font(FontCode.SmileySans, size=16))
     else:
         detail_image = None
 

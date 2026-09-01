@@ -13,12 +13,12 @@ if __name__ == "__main__":
     from plugins.maib.image_gen._components.chart_box import ChartBoxBadgeV2
     
     from plugins.maib.utils.models import MaiChart, MaiChartAch
-    from plugins.maib.utils.enums import Server
+    from plugins.maib.utils.enums import Server, UICode
     
-    chart = MaiChart(shortid=11451, difficulty=7, lv=13.6, lv_synh=13.9, _achs={
-        Server.JP: MaiChartAch(shortid=11451, difficulty=7, server=Server.JP, achievement=99.5, combo=3, sync=2, dxscore=799, dxscore_max=810)
+    chart = MaiChart(shortid=11451, difficulty=5, lv=13.6, lv_synh=13.5833, _achs={
+        Server.JP: MaiChartAch(shortid=11451, difficulty=7, server=Server.JP, achievement=101.0000, combo=4, sync=5, dxscore=799, dxscore_max=810)
     })
     result_img = ChartBoxBadgeV2._box(
-        chart, 'DX', Server.JP, plus=True, utage=None, floor_rating=None,
+        chart, 'DX', Server.JP, plus=True, utage=None, floor_rating=263, ui_code=UICode.INTL,
     )
     result_img.show()

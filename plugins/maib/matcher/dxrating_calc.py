@@ -9,7 +9,7 @@ from nonebot.adapters.onebot.v11 import Event as OneBotV11Event
 from nonebot.adapters.telegram import Event as TGEvent
 
 from .. import services
-from ..utils import get_dxrating
+from ..utils import get_dxrating_old
 from ..utils.map import AchievementMap, Difficulties
 from . import i18n_data, i18n, reply
 
@@ -88,13 +88,13 @@ async def ra_calc_handled(event: Event, matcher: Matcher, groups: dict[str, Opti
             ("S+", 98.0),
             ("S", 97.0),
         ):
-            ra = get_dxrating(_achievement, level, 0)
+            ra = get_dxrating_old(_achievement, level, 0)
             lines.append(reply("rc.success.blur", level=level, rate=rate, ra=ra))
         lines.append(reply("rc.excluding_ap_bouns"))
         await matcher.finish("\n".join(lines))
         return
     else:
-        ra = get_dxrating(achievement, level, 0)
+        ra = get_dxrating_old(achievement, level, 0)
         lines = [
             reply("rc.success.tip"),
             reply("rc.success.common", level=level, achievement=f"{achievement:.4f}", ra=ra),

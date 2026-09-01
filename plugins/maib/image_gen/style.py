@@ -27,7 +27,7 @@ def get_genre_style(genre: _GENRE_TYPE, ui_code: UICode) -> GenreStyle:
     """获取流派风格信息"""
     _info = genre if isinstance(genre, GenreInfo) else Genres.get(genre)
     if _info is None:
-        return GenreStyle(content="N/A", fill=THEME_CYAN, shadow=TRANSPARENT)
+        return GenreStyle(content="N/A", fill=THEME_CYAN, sub_fill=THEME_CYAN, shadow=TRANSPARENT)
     gid: GenreID = _info.id
     ginfo: GenreInfo = _info
     
@@ -43,10 +43,10 @@ def get_genre_style(genre: _GENRE_TYPE, ui_code: UICode) -> GenreStyle:
     colors = GENRE_STYLE.get(gid)
     if colors is None:
         fill = THEME_CYAN
-        sub_fill = TRANSPARENT
+        sub_fill = THEME_CYAN
     else:
         fill = colors.main
-        sub_fill = colors.sub if colors.sub else TRANSPARENT
+        sub_fill = colors.sub or colors.main
 
     return GenreStyle(
         content=content,
@@ -252,7 +252,7 @@ def get_dxscore_style(dxscore: int, max_dxscore: int, is_jp: bool = True, is_cn:
         title = "DXSCORE"
     
     # content
-    content = f"{dxscore} / {max_dxscore}"
+    content = f"{dxscore}/{max_dxscore}"
     
     # star
     star_count = get_dxscore_star_count(dxscore, max_dxscore)
@@ -264,11 +264,11 @@ def get_dxscore_style(dxscore: int, max_dxscore: int, is_jp: bool = True, is_cn:
         bg_fill=BLACK,
         content=content,
         fill=HALF_TRANSPARENT,
-        star=' '.join(['✦'] * star_count) if star_count > 0 else None,
+        star=('✦ ' * star_count).rstrip(),
         star_fill=star_color,
     )
     
 
 def get_note_designer_text(is_cn_all: bool = False) -> str:
     """获取谱面设计师文本"""
-    return "谱师: " if is_cn_all else "NOTE DESIGNER: "
+    return "谱师:  " if is_cn_all else "NOTE DESIGNER:  "

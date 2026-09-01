@@ -7,14 +7,16 @@ import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, Literal
-
+from contextlib import contextmanager, ExitStack, AbstractContextManager
+from collections.abc import Generator
 from PIL import Image
 from loguru import logger
 
-from .calculator import get_dxrating, get_dxscore_max, get_dxscore_star_count
+from .calculator import get_dxrating, get_dxscore_max, get_dxscore_star_count, get_level_plus_line
 from ..utils.constants import DEFAULT_DATETIME
-from ..utils.map import ComboID, SyncID, GenreID, DifficultyID
+from ..utils.map import ComboID, SyncID, GenreID, DifficultyID, VersionID, Versions
 from .enums import Server, SLevelSource
+from .type import Achievement
 
 
 __all__ = [
@@ -175,13 +177,19 @@ class MaiChart:
             return
         current.update(ach)
 
-    def get_dxrating(self, server: Server = Server.JP, ap_bonus: int = 0) -> int:
+    def get_dxrating(self, server: Server = Server.JP, ap_bonus: int = 0,
+                     *, achievement: Optional[Achievement] = None, combo: Optional[ComboID] = None) -> int:
         """根据成就率和定数计算 DX Rating"""
-        ach_obj = self.get_ach(server)
+        if achievement is None:
+            ach_obj = self.get_ach(server)
+            achievement = int(ach_obj.achievement * 10000)
+            combo = ach_obj.combo
+        else:
+            combo = combo if combo is not None else 0
         level: float = getattr(self, SLevelSource.server(server).lv_field, -1)
         if level < 0:
             level = self.lv  # fallback
-        return get_dxrating(achievement=ach_obj.achievement, level=level, ap_bonus=ap_bonus, combo=ach_obj.combo)
+        return get_dxrating(achievement=achievement, level=level, ap_bonus=ap_bonus, combo=combo)
 
     def set_notes(self, tap: int, hold: int, slide: int, touch: int, break_note: int):
         """根据参数设置谱面 Note 数量"""
@@ -190,6 +198,21 @@ class MaiChart:
         self.notes["slide"] = slide
         self.notes["touch"] = touch
         self.notes["break"] = break_note
+
+    def lv_is_plus(self, source: SLevelSource | Server = SLevelSource.JP, version: Optional[VersionID] = None,
+                   plus: Optional[int] = None) -> bool:
+        """判断谱面定数是否为加号定数"""
+        if isinstance(source, Server):
+            source = SLevelSource.server(source)
+        if plus is None:
+            if version is None:
+                server = source.to_server() or Server.CN
+                version = Versions.latest(server=server)
+            plus = get_level_plus_line(version)
+        level = getattr(self, source.lv_field, None)
+        if level is None:
+            return False
+        return (level - int(level)) * 10 >= plus
 
 
 @dataclass
@@ -207,17 +230,19 @@ class MaiData:
     img_path: Path
     zip_path: Optional[Path] = None
     _cached_image: Optional[Image.Image] = None
-    _matched_alias: Optional[str] = None  # 搜索时触发的别名缓存
     tg_file_id_cache: Optional[str] = None
     is_utage: bool = False
     utage_tag: str = ""
     buddy: bool = False
     jp_is_plate_required: bool = True
     cn_is_plate_required: bool = True
-    _charts: dict[int, Optional[MaiChart]] = field(
+    _charts: dict[DifficultyID, Optional[MaiChart]] = field(
         default_factory=lambda: {i: None for i in range(1, 8)}
     )
     aliases: list[MaiAlias] = field(default_factory=list)
+
+    # 特殊字段
+    _matched_alias: Optional[str] = None  # 搜索时触发的别名缓存
 
     @property
     def is_cabinet_dx(self) -> bool:
@@ -234,6 +259,65 @@ class MaiData:
         if server == Server.CN:
             return self.cn_is_plate_required
         raise KeyError(f"Invalid server: {server}")
+
+    @contextmanager
+    def open_image(self, shared_zip: Optional[zipfile.ZipFile] = None) -> Generator[Optional[Image.Image], None, None]:
+        """
+        上下文管理器：打开图片，使用后自动关闭底层资源。
+        """
+        path_str = str(self.img_path)
+        lower = path_str.lower()
+        zip_pos = lower.find(".zip")
+
+        # 1. 处理 zip 内图片
+        if zip_pos != -1:
+            zip_end = zip_pos + len(".zip")
+            zip_path = Path(path_str[:zip_end])
+            inner_path = path_str[zip_end:].lstrip("/\\") or "bg.png"
+
+            if shared_zip is not None or zip_path.exists():
+                stack = ExitStack()
+                try:
+                    # 管理 ZipFile 的生命周期
+                    if shared_zip is not None:
+                        zf = shared_zip
+                    else:
+                        zf = stack.enter_context(zipfile.ZipFile(zip_path))
+                    # 将 zip 内的文件读入内存 (BytesIO)
+                    raw_data = zf.read(inner_path)
+                    buf = stack.enter_context(io.BytesIO(raw_data))
+                    
+                    img = Image.open(buf)
+                    stack.callback(img.close)
+
+                except Exception as exc:
+                    stack.close()
+                    logger.error(f"Failed to open image in zip: {exc}")
+                    yield None
+                    return
+
+                with stack:
+                    yield img
+                return
+
+        # 2. 处理普通文件图片
+        p = Path(path_str)
+        if not (p.exists() and p.is_file()):
+            yield None
+            return
+
+        stack = ExitStack()
+        try:
+            img = Image.open(p)
+            stack.callback(img.close)
+        except Exception as exc:
+            stack.close()
+            logger.error(f"Failed to open image file: {exc}")
+            yield None
+            return
+
+        with stack:
+            yield img
 
     def get_image(self, shared_zip: Optional[zipfile.ZipFile] = None) -> Optional[Image.Image]:
         path_str = str(self.img_path)
@@ -271,10 +355,10 @@ class MaiData:
         return self.get_image()
 
     @property
-    def charts(self) -> dict[int, MaiChart]:
+    def charts(self) -> dict[DifficultyID, MaiChart]:
         return {c.difficulty: c for c in self._charts.values() if c}
 
-    def get_chart(self, diff: int) -> Optional[MaiChart]:
+    def get_chart(self, diff: DifficultyID) -> Optional[MaiChart]:
         """根据难度获取谱面对象"""
         if not 1 <= diff <= 7:
             raise ValueError("Difficulty must be between 1 and 7")
@@ -306,7 +390,7 @@ class MaiData:
             limit = 1
         return ver >= version - limit
 
-    def get_chart_dxrating(self, diff: int, server: Server, current_version: int = 0) -> int:
+    def get_chart_dxrating(self, diff: DifficultyID, server: Server, current_version: int = 0) -> int:
         """获取指定难度谱面的 DXRating"""
         ap = 1 if 2000 > current_version >= 25 else 0
         chart = self.get_chart(diff)

@@ -95,6 +95,11 @@ class Drawer:
             )
         return
 
+    def line(self, x0: float, y0: float, x1: float, y1: float, fill: str, width: float = 1):
+        """绘制线条"""
+        points = [self.ms.x(i) for i in (x0, y0, x1, y1)]
+        self.draw.line(points, fill=fill, width=self.ms.x(width))
+
     def rounded_rect(self, x: float, y: float, w: float, h: float, fill: Optional[str], 
                     radius: float, outline: Optional[str] = None, width: float = 0):
         """绘制圆角矩形"""
@@ -112,14 +117,14 @@ class Drawer:
         return
 
     def capsule(self, x: float, y: float, w: float, h: float, fill: Optional[str],
-                outline: Optional[str] = None, width: float = 0):
+                outline: Optional[str] = None, outline_width: float = 0):
         """绘制胶囊形状"""
         x, y = self.ms.xy(x, y)
         w, h =self.ms.xy(w, h)
         radius = round(min(w, h) / 2)
         self.draw.rounded_rectangle(
             (x, y, x + w, y + h), 
-            radius=radius, fill=fill, outline=outline, width=self.ms.x(width)
+            radius=radius, fill=fill, outline=outline, width=self.ms.x(outline_width)
         )
 
     def cut_line(self, x: float, y: float, w: float, h: float, radius: float, 

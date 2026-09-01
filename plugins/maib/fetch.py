@@ -211,7 +211,7 @@ async def parse_maidata(raw_mdt: Mapping[str, str], zip_path: Path | str) -> uti
         cabinet = "DX" if any(k in cabinet_raw.lower() for k in ["dx", "でらっくす", "deluxe"]) else "SD"
 
     version: VersionID | Literal[-1] = Versions.find_id(_raw_get(raw_mdt, "version", default=""), default=-1)
-    converter = _raw_get(raw_mdt, "ChartConverter", default="")
+    converter = _raw_get(raw_mdt, "ChartConvertTool", default="")
 
     is_utage = shortid > 100000
     has_utage_chart = bool(raw_mdt.get("lv_7", "").strip())

@@ -64,7 +64,7 @@ class GenreStyle:
     content: str
     fill: str
     shadow: str
-    sub_fill: Optional[str] = None  # 中二/音击 分两行绘制特有
+    sub_fill: str  # 中二/音击 分两行绘制特有
 
 
 @dataclass(frozen=True)
@@ -125,5 +125,5 @@ class DXScoreStyle:
     bg_fill: str
     content: str
     fill: str
-    star: Optional[str] = None
-    star_fill: Optional[str] = None
+    star: str
+    star_fill: str

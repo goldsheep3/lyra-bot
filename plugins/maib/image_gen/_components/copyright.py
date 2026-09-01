@@ -16,23 +16,31 @@ class CopyrightBadge:
     """版权信息栏组件"""
 
     @classmethod
-    @lru_cache(maxsize=3)
-    def _copyright_bar(cls, width_px: int, content: str, ms: MS = MS()) -> Image.Image:
-        width = ms.rev(width_px)
-        # 测量字体大小合适尺寸
-        base_size = 5.0
-        test_font = FontManager.font(FontCode.MiSans_Demibold, size=ms.x(base_size))
+    def size(cls, width: float, content: str, ms: MS = MS()) -> tuple[float, float, float]:
+        """计算版权信息栏的尺寸"""
+        raw_size = 5.0
+        test_font = FontManager.font(FontCode.MiSans_Demibold, size=ms.x(raw_size))
         tx1, ty1, tx2, ty2 = test_font.getbbox(content)
         raw_width, raw_height = int(tx2 - tx1 + 1), int(ty2 - ty1 + 1)
-        target_content_width = width * 0.9  # 预留左右各 5% 的空白边距
-        # 缩放系数 = 目标 / 原始
-        ratio = min(target_content_width / raw_width, 1.0)
-        final_size = max(base_size * ratio, 1.2)
-        height = round(max((raw_height * ratio) * 1.4, ms.x(6)))  # 预留上下各 20% 的空白边距
-        font = FontManager.font(FontCode.MiSans_Demibold, size=ms.x(final_size))
+        w_h_ratio = raw_width / raw_height
+        h_size_radio = raw_height / raw_size
         
-        # 实际渲染
-        img = Image.new('RGBA', (width_px, ms.x(height)), THEME_DARK)
+        # 计算目标尺寸
+        w = width * 0.8
+        h = w / w_h_ratio
+        size = ms.x(h / h_size_radio) * 0.8
+        height = h / 0.8
+        
+        return width, height, size
+
+    @classmethod
+    @lru_cache(maxsize=3)
+    def _copyright_bar(cls, width: float, content: str, ms: MS = MS()) -> Image.Image:
+        _, height, size = cls.size(width, content, ms=ms)
+        
+        font = FontManager.font(FontCode.MiSans_Demibold, size=ms.x(size))
+        img = Image.new('RGBA', ms.xy(width, height), THEME_DARK)
+
         drawer = Drawer(img, ms=ms)
         drawer.text(width / 2, height / 2, text=content,
                     tds=TextDrawStyle(fill=THEME_CYAN, anchor='mm', font=font))
@@ -40,22 +48,22 @@ class CopyrightBadge:
         return img
 
     @classmethod
-    def _copyright(cls, width_px: int, ms: MS = MS()) -> Image.Image:
-        content = "  ,  ".join([
+    def _copyright(cls, width_mpx: float, ms: MS = MS()) -> Image.Image:
+        content = "    ".join([
             "Generate by LyraBot",
             "Dev by GoldSheep3 (and his Bakamai⑨'s Members)",
             "Version: " + (get_git_head_hash() or "Unknown"),
             "Background Artist by @银色山雾",
         ])
-        return cls._copyright_bar(width_px, content, ms=ms).copy()
+        return cls._copyright_bar(width_mpx, content, ms=ms).copy()
 
     @classmethod
     def copyright(cls, width_px: int, ms: MS = MS()) -> Image.Image:
         """绘制版权信息栏"""
-        return cls._copyright(width_px, ms=ms)
+        width_mpx = ms.x(width_px)
+        return cls._copyright(width_mpx, ms=ms)
 
     @classmethod
-    def copyright_mpx(cls, width_mpx: int, ms: MS = MS()) -> Image.Image:
+    def copyright_mpx(cls, width_mpx: float, ms: MS = MS()) -> Image.Image:
         """绘制版权信息栏"""
-        width_px = ms.x(width_mpx)
-        return cls._copyright(width_px, ms=ms)
+        return cls._copyright(width_mpx, ms=ms)

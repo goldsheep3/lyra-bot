@@ -40,7 +40,7 @@ GRAY = '#CCCCCC'
 # 透明色常量
 TRANSPARENT = '#FFFFFF00'
 # 半透明常量
-HALF_TRANSPARENT = '#FFFFFF99'
+HALF_TRANSPARENT = '#FFFFFF88'
 
 # --------------------------------
 # 流派 / Genre 颜色主题
@@ -70,21 +70,21 @@ GENRE_STYLE: dict[GenreID, GenreColors] = {
 
 DIFFICULTY_STYLE: dict[DifficultyID, DifficultyColors] = {
     # 未知 Unknown
-    0: DifficultyColors(bg=WHITE, frame=WHITE, text=WHITE, deep=WHITE, title_bg=WHITE, level_text=WHITE),
+    0: DifficultyColors(bg="#9B9B9B", frame="#555555", text=WHITE, deep="#7F7F7F", title_bg="#717171", level_text=WHITE),
     # 简单 Easy (占位，暂时无蓝色色卡且 DX 已经没有 Easy 难度)
     1: DifficultyColors(bg=WHITE, frame=WHITE, text=WHITE, deep=WHITE, title_bg=WHITE, level_text=WHITE),
     # 基础 Basic
-    2: DifficultyColors(bg='#77EE66', frame='#005533', text='#FFFFFF', deep='#88DD55', title_bg='#22BB55', level_text='#FFFFFF'),
+    2: DifficultyColors(bg='#77EE66', frame='#005533', text=WHITE, deep='#88DD55', title_bg='#22BB55', level_text=WHITE),
     # 高级 Advanced
-    3: DifficultyColors(bg='#FFDD33', frame='#BB4411', text='#FFFFFF', deep='#FFBB11', title_bg='#FF9922', level_text='#FFFFFF'),
+    3: DifficultyColors(bg='#FFDD33', frame='#BB4411', text=WHITE, deep='#FFBB11', title_bg='#FF9922', level_text=WHITE),
     # 专家 Expert
-    4: DifficultyColors(bg='#FF8888', frame='#CC2233', text='#FFFFFF', deep='#FF99AA', title_bg='#FF4466', level_text='#FFFFFF'),
+    4: DifficultyColors(bg='#FF8888', frame='#CC2233', text=WHITE, deep='#FF99AA', title_bg='#FF4466', level_text=WHITE),
     # 大师 Master
-    5: DifficultyColors(bg='#CC77FF', frame='#661188', text='#FFFFFF', deep='#BB33DD', title_bg='#9944EE', level_text='#FFFFFF'),
+    5: DifficultyColors(bg='#CC77FF', frame='#661188', text=WHITE, deep='#BB33DD', title_bg='#9944EE', level_text=WHITE),
     # 宗师 Re:MASTER
-    6: DifficultyColors(bg='#EEEDEE', frame='#8822DD', text='#DD55FF', deep='#FFFFFF', title_bg='#BB66FF', level_text='#FFFFFF'),
+    6: DifficultyColors(bg='#EEEDEE', frame='#8822DD', text='#DD55FF', deep='#FFFFFF', title_bg='#BB66FF', level_text=WHITE),
     # 宴会场 U·TA·GE
-    7: DifficultyColors(bg='#EE66EE', frame='#DD00BB', text='#FFFFFF', deep='#FF66FF', title_bg='#FF44FF', level_text='#FFFFFF'),
+    7: DifficultyColors(bg='#EE66EE', frame='#DD00BB', text=WHITE, deep='#FF66FF', title_bg='#FF44FF', level_text=WHITE),
 }
 
 DIFFICULTY_UTAGE_TAG_BG    = '#223366'  # 标签背景

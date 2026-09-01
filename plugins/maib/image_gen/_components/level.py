@@ -31,20 +31,20 @@ class LevelBadge:
         # 确定输出文本
         level_text = style.level
         if is_cn_all:
-            level_font = FontManager.font(FontCode.MiSans_Demibold, size=ms.x(2.5))
+            level_font = FontManager.font(FontCode.MiSans_Demibold, size=ms.x(2.2))
         else:
-            level_font = FontManager.font(FontCode.JBMono_Bold, size=ms.x(3))
+            level_font = FontManager.font(FontCode.JBMono_Bold, size=ms.x(2.8))
         int_text = integer
-        int_font = FontManager.font(FontCode.JBMono_Bold, size=ms.x(5.5))
+        int_font = FontManager.font(FontCode.JBMono_Bold, size=ms.x(5))
         if display_fractional == 'display':
             frac_text = f".{fractional}"
         elif display_fractional == 'question_mask':
             frac_text = ".?"
         else:
             frac_text = ""
-        frac_font = FontManager.font(FontCode.JBMono_Bold, size=ms.x(4))
+        frac_font = FontManager.font(FontCode.JBMono_Bold, size=ms.x(3.8))
         plus_mask_text = "+" if display_plus_mask else ""
-        plus_mask_font = FontManager.font(FontCode.JBMono_Bold, size=ms.x(3))
+        plus_mask_font = FontManager.font(FontCode.JBMono_Bold, size=ms.x(2.8))
 
         # 计算文本宽度
         level_bbox = level_font.getbbox(level_text, anchor='ls', stroke_width=0.4)
@@ -57,20 +57,22 @@ class LevelBadge:
         frac_w = ms.rev(round(frac_bbox[2] - frac_bbox[0]))
         width = level_w + 1 + int_w + frac_w + 1 + 1
 
+        shadow_width = 0.6
+
         # 绘制
         img = Image.new('RGBA', ms.xy(width, height+1), '#FFFFFF00')
         drawer = Drawer(img, ms=ms)
         def lv_tds(font):
             return TextDrawStyle(fill=style.level_text, anchor='ls', font=font,
-                                  shadow_width=ms.x(0.1), shadow=style.frame)
+                                  shadow_width=shadow_width, shadow=style.frame)
         
         drawer.text(0.5, height, text=level_text, tds=lv_tds(level_font))
         drawer.text(level_w + 2, height, text=int_text, tds=lv_tds(int_font))
         if frac_text:
             drawer.text(level_w + 2 + int_w, height, text=frac_text, tds=lv_tds(frac_font))
         if plus_mask_text:
-            drawer.text(level_w + 2 + int_w, 0.5, text=plus_mask_text, tds=TextDrawStyle(
-                fill=style.level_text, anchor='lt', font=plus_mask_font, shadow_width=ms.x(0.1), shadow=style.frame
+            drawer.text(level_w + 2 + int_w, height - 5, text=plus_mask_text, tds=TextDrawStyle(
+                fill=style.level_text, anchor='lt', font=plus_mask_font, shadow_width=shadow_width, shadow=style.frame
             ))
         return img
 
@@ -79,7 +81,7 @@ class LevelBadge:
                display_plus_mask: bool = False, display_frac: _LEVEL_DECIMAL_TYPE = 'display',
                ms: MS = MS(), is_cn_all: bool = False) -> Image.Image:
         integer = int(level)
-        fractional = int((level - integer) * 10)
+        fractional = round((level - integer) * 10)
         return cls._level_badge(str(integer), str(fractional), difficulty, display_plus_mask, display_frac, ms, is_cn_all)
 
     @classmethod

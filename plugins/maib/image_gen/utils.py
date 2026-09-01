@@ -56,11 +56,6 @@ class MS:
         """将 px 值还原为 mpx 值"""
         return px / self.multiple
 
-    @property
-    def key(self) -> str:
-        """返回可用于缓存的字符串键"""
-        return f"{self.multiple:.2f}"
-
     def __repr__(self): 
         return f"MS(multiple={self.multiple})"
 
@@ -71,6 +66,9 @@ class MS:
 
     def __hash__(self): 
         return hash(self.multiple)
+
+    def __str__(self): 
+        return f"MS({self.multiple:.2f})"
 
     def __int__(self): 
         raise NotImplementedError("MS Object cannot be converted to int directly.")
@@ -137,9 +135,9 @@ class FontCode(StrEnum):
     # NotoSansSC_Light = "Noto_Sans_SC/static/NotoSansSC-Light.ttf"
     # NotoSansSC_ExtraLight = "Noto_Sans_SC/static/NotoSansSC-ExtraLight.ttf"
     # NotoSansSC_Regular = "Noto_Sans_SC/static/NotoSansSC-Regular.ttf"
-    # NotoSansSC_Medium = "Noto_Sans_SC/static/NotoSansSC-Medium.ttf"
+    NotoSansSC_Medium = "Noto_Sans_SC/static/NotoSansSC-Medium.ttf"
     # NotoSansSC_SemiBold = "Noto_Sans_SC/static/NotoSansSC-SemiBold.ttf"
-    # NotoSansSC_Bold = "Noto_Sans_SC/static/NotoSansSC-Bold.ttf"
+    NotoSansSC_Bold = "Noto_Sans_SC/static/NotoSansSC-Bold.ttf"
     # NotoSansSC_ExtraBold = "Noto_Sans_SC/static/NotoSansSC-ExtraBold.ttf"
     # NotoSansSC_Black = "Noto_Sans_SC/static/NotoSansSC-Black.ttf"
     

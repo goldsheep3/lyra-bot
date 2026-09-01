@@ -82,7 +82,7 @@ async def mai_info_handled(event: Event, matcher: Matcher, groups: tuple = Regex
         server = Server.JP  # 如果乐曲没有国服版本，则展示日服数据
     uic = UICode.CN if server == Server.CN else UICode.JP
 
-    info_box = image_gen.draw_info_box(maidata, server, maiuser=maiuser, ui_code=uic)
+    info_box = image_gen.draw_info_board(maidata, server, maiuser=maiuser, ui_code=uic)
     info_box_bytes = image_gen.get_image_bytes(info_box)
     
     payload = [
@@ -143,7 +143,7 @@ async def mai_what_song_handled(event: Event, matcher: Matcher, groups: tuple = 
         if matched_alias:
             maidata._matched_alias = matched_alias
         uic = UICode.CN if server == Server.CN else UICode.JP
-        info_box = image_gen.draw_info_box(maidata, server=server, maiuser=maiuser, ui_code=uic)
+        info_box = image_gen.draw_info_board(maidata, server=server, maiuser=maiuser, ui_code=uic)
         info_bytes = image_gen.get_image_bytes(info_box)
         alias_hint = f"（别名: {matched_alias}）" if matched_alias else None
         return info_bytes, alias_hint
@@ -179,7 +179,7 @@ async def mai_what_song_handled(event: Event, matcher: Matcher, groups: tuple = 
                 lines.append(f"{mdt.shortid}.	{mdt.title} (别名: {alias_hint})")
             else:
                 lines.append(f"{mdt.shortid}.	{mdt.title}")
-        img = image_gen.simple_list("\n".join(lines))
+        img = image_gen.draw_simple_board("\n".join(lines))
         
         img_bytes = image_gen.get_image_bytes(img)
         payload.append(("text", reply("info.found_many", count=len(mdt_list))))

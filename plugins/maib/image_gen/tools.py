@@ -32,6 +32,8 @@ __all__ = [
     "open_zip_handles",
     # 网格化排列图片
     "image_grid_board",
+    # 拼接图片并转换为 RGB
+    "image_listed_to_rgb",
 ]
 
 
@@ -201,7 +203,7 @@ def get_image_bytes(img: Image.Image, format: str = "jpeg") -> bytes:
         return output.getvalue()
 
 # --- 圆角矩形切割函数 ---
-def rounded_image(img, size, outline_width, radius=4):
+def rounded_image(img: Image.Image, size: tuple[int, int], outline_width: int, radius=4):
     weight, height = size
     mask = Image.new('L', size, 0)
     draw = ImageDraw.Draw(mask)
@@ -211,7 +213,7 @@ def rounded_image(img, size, outline_width, radius=4):
         fill=255,
     )
 
-    final_img = Image.new('RGBA', size, TRANSPARENT)
+    final_img = Image.new(img.mode, size, TRANSPARENT)
     final_img.paste(img, (0, 0), mask)
 
     mask.close()
@@ -295,3 +297,31 @@ def image_grid_board(image_iter: Iterable[Image.Image],
         slot += 1
 
     return board
+
+
+def image_listed_to_rgb(images: Sequence[Image.Image], forward: int = 0, margin: int = 0) -> Image.Image:
+    """拼接并转换为 rgb 模式"""
+    # forward 指最外圈的留白，margin 指图片之间的间距0
+    forward, margin = max(0, forward), max(0, margin)
+    if not images:
+        raise ValueError("images 列表不能为空。")
+    
+    images = [(img if img.mode == "RGBA" else img.convert("RGBA")) for img in images]
+    
+    # 计算总高度和最大宽度
+    total_height = sum(img.height for img in images) + forward * (len(images) + 1) + margin * (len(images) - 1)
+    max_width = max(img.width for img in images) + forward * 2
+    
+    # 创建一个新的 RGB 图像
+    new_image = Image.new("RGBA", (max_width, total_height), (255, 255, 255, 255))
+    
+    # 将每张图片粘贴到新图像上
+    current_y = forward
+    for img in images:
+        new_image.paste(img, (forward, current_y))
+        current_y += img.height + margin
+
+    final_image = new_image.convert("RGB")
+    new_image.close()
+
+    return final_image

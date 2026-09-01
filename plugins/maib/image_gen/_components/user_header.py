@@ -102,7 +102,7 @@ class UserHeaderBadge:
         shougou_size = (115, 9)
         shougou_xy = (48.5, 38)
         drawer.capsule(*shougou_xy, *shougou_size, fill="#FCC916",
-                       outline="#DFAE00", width=0.5)
+                       outline="#DFAE00", outline_width=0.5)
         drawer.text(shougou_xy[0]+shougou_size[0]/2, shougou_xy[1]+shougou_size[1]/2, text=display_content, tds=TextDrawStyle(
             fill=BLACK, anchor="mm", font=FontManager.font(FontCode.MiSans_Demibold, size=ms.x(6))
         ))

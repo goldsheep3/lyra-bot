@@ -11,7 +11,7 @@ from .achievement import AchievementBadge
 from .dxscore import DXScoreBadge
 from .user_header import UserHeaderBadge
 
-from .chart_box import ChartBoxBadge, ChartBoxBadgeV2
+from .chart_box import ChartBoxBadgeV2
 from .mini_box import MiniBoxBadge
 from .b50_box import B50BoxBadge
 
@@ -32,7 +32,6 @@ __all__ = [
     "UserHeaderBadge",
 
     # 二级组件
-    "ChartBoxBadge",
     "ChartBoxBadgeV2",
     "MiniBoxBadge",
     "B50BoxBadge",

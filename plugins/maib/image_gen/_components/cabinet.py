@@ -12,7 +12,7 @@ from ..utils import MS, FontCode, FontManager
 from ...utils.enums import UICode
 from ..style import _CABINET_TYPE, get_cabinet_style
 from .base import TextDrawStyle, Drawer
-
+from .capsule import Capsule
 
 
 class CabinetBadge:
@@ -29,9 +29,8 @@ class CabinetBadge:
         else:
             font_size_mpx = 3.6 if is_cn else 3.0
         font = FontManager.font(FontCode.MiSans_Heavy, ms.x(font_size_mpx))
-        
-        drawer.rounded_rect(0.5, 0.5, 20, 5, fill=style.fill, radius=5,
-                            outline=style.outline, width=0.5)
+        drawer.capsule(0.5, 0.5, 20, 5, fill=style.fill,
+                        outline=style.outline, outline_width=0.5)
         char_width = ms.rev(round(font.getlength(style.content))) / len(style.content)
         start_x = 10.5 - (char_width * (len(style.content) - 1) / 2)
         current_x = start_x
