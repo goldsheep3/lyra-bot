@@ -40,6 +40,7 @@ class MiniBoxBadge:
         img = Image.new('RGBA', ms.xy(*cls.size()), '#FFFFFF00')
         drawer = Drawer(img, ms=ms)
 
+        # TODO 待修整
         drawer.rounded_rect(ow, ow, w, h, style.bg, radius=2.5, outline=style.frame)
         drawer.cut_line(ow, ow, w, h, radius=0, line_y=ow + 2, line_h=5, fill=style.title_bg)
         drawer.rounded_rect(ow, ow, w, h, None, radius=2.5, outline=style.title_bg, width=1)
