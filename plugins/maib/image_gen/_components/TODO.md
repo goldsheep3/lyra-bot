@@ -1,0 +1,3 @@
+- [ ] `image_gen.components.mini_box`
+- [ ] `image_gen.components.b50_box`
+- [ ] `image_gen.components.b50_board`
