@@ -2,7 +2,7 @@
 image_gen.components.mini_box
 基础盒子组件
 """
-import zipfile
+from typing import Optional
 from PIL import Image
 from functools import lru_cache
 
@@ -52,8 +52,7 @@ class MiniBoxBadge:
 
     @classmethod
     def box(cls, maidata: MaiData, difficulty: DifficultyID, server: Server,
-            ms: MS = MS(), ui_code: UICode = UICode.JP,
-            shared_zip: zipfile.ZipFile | None = None) -> Image.Image:
+            ms: MS = MS(), ui_code: UICode = UICode.JP) -> Image.Image:
         w, h, ow = 97, 36, 1  # w, h, outline_width
 
         chart = maidata.get_chart(difficulty) if maidata else None
@@ -72,11 +71,11 @@ class MiniBoxBadge:
             ui_code=ui_code,
         ).copy()
         # 曲绘
-        cover = maidata.get_image(shared_zip=shared_zip)
-        if cover:
-            mask = Drawer.get_mask(w=32, h=32, radius=1.5, ms=ms)
-            cover_img = cover.resize(ms.xy(32, 32), Image.Resampling.LANCZOS)
-            img.paste(cover_img, ms.xy(ow + 2, ow + 2), mask)
+        with maidata.image() as cover:
+            if cover:
+                mask = Drawer.get_mask(w=32, h=32, radius=1.5, ms=ms)
+                cover_img = cover.resize(ms.xy(32, 32), Image.Resampling.LANCZOS)
+                img.paste(cover_img, ms.xy(ow + 2, ow + 2), mask)
         # 达成率
         ach_img = AchievementBadge.achievement(round(ach.achievement*10000), chart.difficulty, buddy=False, ms=ms, ui_code=ui_code)
         img.paste(ach_img, ms.xy(ow + 35, ow + 9), ach_img)

@@ -87,7 +87,7 @@ class MaiChartInfoBoard:
         drawer = Drawer(img, ms=ms)
 
         # 曲绘
-        with maidata.open_image() as cover_img:
+        with maidata.image() as cover_img:
             if cover_img is None:
                 cover_img_now = Image.new("RGB", ms.xy(image_size, image_size), color=GRAY)
             elif cover_img.size != (image_size, image_size):

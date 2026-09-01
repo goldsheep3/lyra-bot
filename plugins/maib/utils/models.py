@@ -261,7 +261,7 @@ class MaiData:
         raise KeyError(f"Invalid server: {server}")
 
     @contextmanager
-    def open_image(self, shared_zip: Optional[zipfile.ZipFile] = None) -> Generator[Optional[Image.Image], None, None]:
+    def image(self) -> Generator[Optional[Image.Image], None, None]:
         """
         上下文管理器：打开图片，使用后自动关闭底层资源。
         """
@@ -275,15 +275,10 @@ class MaiData:
             zip_path = Path(path_str[:zip_end])
             inner_path = path_str[zip_end:].lstrip("/\\") or "bg.png"
 
-            if shared_zip is not None or zip_path.exists():
+            if zip_path.exists():
                 stack = ExitStack()
                 try:
-                    # 管理 ZipFile 的生命周期
-                    if shared_zip is not None:
-                        zf = shared_zip
-                    else:
-                        zf = stack.enter_context(zipfile.ZipFile(zip_path))
-                    # 将 zip 内的文件读入内存 (BytesIO)
+                    zf = stack.enter_context(zipfile.ZipFile(zip_path))
                     raw_data = zf.read(inner_path)
                     buf = stack.enter_context(io.BytesIO(raw_data))
                     
@@ -318,41 +313,6 @@ class MaiData:
 
         with stack:
             yield img
-
-    def get_image(self, shared_zip: Optional[zipfile.ZipFile] = None) -> Optional[Image.Image]:
-        path_str = str(self.img_path)
-        if ".zip" in path_str.lower():
-            parts = path_str.split(".zip")
-            zip_full_path = Path(parts[0] + ".zip")
-            inner_path = parts[1].lstrip("\\/")
-            if zip_full_path.exists():
-                if not inner_path: inner_path = 'bg.png'
-                try:
-                    if shared_zip:
-                        with shared_zip.open(inner_path) as f:
-                            img = Image.open(f)
-                            img.load()
-                            self._cached_image = img
-                            return img
-                    with zipfile.ZipFile(zip_full_path) as z:
-                        with z.open(inner_path) as f:
-                            img = Image.open(f)
-                            img.load()
-                            self._cached_image = img
-                            return img
-                except Exception as e:
-                    logger.error(e)
-                    return None
-        p = Path(path_str)
-        if p.exists() and p.is_file():
-            self._cached_image = Image.open(p)
-            self._cached_image.load()
-            return self._cached_image
-        return None
-
-    @property
-    def image(self) -> Optional[Image.Image]:
-        return self.get_image()
 
     @property
     def charts(self) -> dict[DifficultyID, MaiChart]:

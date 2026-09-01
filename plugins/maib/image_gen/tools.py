@@ -28,8 +28,6 @@ __all__ = [
     "get_image_bytes",
     # 圆角矩形切割
     "rounded_image",
-    # zip 文件句柄管理
-    "open_zip_handles",
     # 网格化排列图片
     "image_grid_board",
     # 拼接图片并转换为 RGB
@@ -218,21 +216,6 @@ def rounded_image(img: Image.Image, size: tuple[int, int], outline_width: int, r
 
     mask.close()
     return final_img
-
-# --- 统一管理 zip 句柄 ---
-@contextmanager
-def open_zip_handles(entries: list[tuple[MaiData, DifficultyID]]):
-    """统一打开并管理所有需要的 zip 句柄"""
-    handles: dict[Path, zipfile.ZipFile] = {}
-    try:
-        for maidata, _ in entries:
-            zip_path = maidata.zip_path
-            if zip_path and zip_path not in handles:
-                handles[zip_path] = zipfile.ZipFile(zip_path, "r")
-        yield handles
-    finally:
-        for handle in handles.values():
-            handle.close()
 
 # --- 网格化排列图片 ---
 def image_grid_board(image_iter: Iterable[Image.Image], 

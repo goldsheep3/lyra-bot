@@ -12,7 +12,7 @@ from ...utils.enums import UICode, Server
 from .. import color as Color
 from ..utils import MS, ImageManager
 from . import CopyrightBadge, B50BoxBadge, UserHeaderBadge
-from ..tools import open_zip_handles, image_grid_board
+from ..tools import image_grid_board
 
 
 class B50Board:
@@ -37,36 +37,34 @@ class B50Board:
             display_content=f"Update: [{server.value}] {update_time}", dan=None, ms=ms
         )
 
-        with open_zip_handles([*b35_entries, *b15_entries]) as zip_handles:
-            def generator(entries: list[tuple[MaiData, DifficultyID]], is_b15: bool):
-                for index, (maidata, difficulty) in enumerate(entries, start=1):
-                    yield B50BoxBadge.b50_box(
-                        maidata=maidata, difficulty=difficulty, server=server,
-                        current_version=current_version, index=index,
-                        is_b15=is_b15, ms=ms, ui_code=ui_code,
-                        shared_zip=zip_handles.get(maidata.zip_path) if maidata.zip_path else None,
-                    )
+        def generator(entries: list[tuple[MaiData, DifficultyID]], is_b15: bool):
+            for index, (maidata, difficulty) in enumerate(entries, start=1):
+                yield B50BoxBadge.b50_box(
+                    maidata=maidata, difficulty=difficulty, server=server,
+                    current_version=current_version, index=index,
+                    is_b15=is_b15, ms=ms, ui_code=ui_code
+                )
             
-            box_size = B50BoxBadge.size()
-            b35_count = len(b35_entries)
-            b15_count = len(b15_entries)
+        box_size = B50BoxBadge.size()
+        b35_count = len(b35_entries)
+        b15_count = len(b15_entries)
             
-            board_b35 = image_grid_board(
-                image_iter=generator(b35_entries, is_b15=False),
-                cols=line_width,
-                gap_px=ms.x(5),
-                total_count=b35_count,
-                box_size_px=ms.xy(*box_size),
-                first_img=None if line_width == 5 else Image.new("RGBA", (0, 0), Color.TRANSPARENT),
-            )
-            board_b15 = image_grid_board(
-                image_iter=generator(b15_entries, is_b15=True),
-                cols=line_width,
-                gap_px=ms.x(5),
-                total_count=b15_count,
-                box_size_px=ms.xy(*box_size),
-                first_img=None if line_width == 5 else Image.new("RGBA", (0, 0), Color.TRANSPARENT),
-            )
+        board_b35 = image_grid_board(
+            image_iter=generator(b35_entries, is_b15=False),
+            cols=line_width,
+            gap_px=ms.x(5),
+            total_count=b35_count,
+            box_size_px=ms.xy(*box_size),
+            first_img=None if line_width == 5 else Image.new("RGBA", (0, 0), Color.TRANSPARENT),
+        )
+        board_b15 = image_grid_board(
+            image_iter=generator(b15_entries, is_b15=True),
+            cols=line_width,
+            gap_px=ms.x(5),
+            total_count=b15_count,
+            box_size_px=ms.xy(*box_size),
+            first_img=None if line_width == 5 else Image.new("RGBA", (0, 0), Color.TRANSPARENT),
+        )
 
         board_last = CopyrightBadge.copyright(width_px=width, ms=ms)
 

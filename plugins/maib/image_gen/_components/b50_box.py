@@ -21,13 +21,12 @@ class B50BoxBadge(MiniBoxBadge):
     @classmethod
     def b50_box(cls, maidata: MaiData, difficulty: int, server: Server,
                 current_version: int, index: int, is_b15: Optional[bool] = None,
-                ms: MS = MS(), ui_code: UICode = UICode.JP,
-                shared_zip: zipfile.ZipFile | None = None) -> Image.Image:
+                ms: MS = MS(), ui_code: UICode = UICode.JP) -> Image.Image:
         chart = maidata.get_chart(difficulty)
         if not chart:
             return cls.empty(ms=ms)
         img = cls.box(
-            maidata=maidata, difficulty=difficulty, server=server, ms=ms, ui_code=ui_code, shared_zip=shared_zip
+            maidata=maidata, difficulty=difficulty, server=server, ms=ms, ui_code=ui_code
         )
         drawer = Drawer(img, ms=ms)
         drawer.rounded_rect(54, 25, 42, 5, fill=bcm(get_difficulty_style(chart.difficulty).bg, '#0009'), radius=4)
