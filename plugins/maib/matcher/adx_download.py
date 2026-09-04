@@ -224,6 +224,7 @@ async def adx_download_handled(bot: Bot, event: Event, matcher: Matcher, groups:
                     use_stream=True,
                 )
             except Exception as e:
+                logger.warning(f"上传异常类型: {type(e).__module__}.{type(e).__qualname__}: {e}")
                 if not _is_call_api_timeout(e, "upload_group_file"):
                     logger.error(f"上传失败: {e}")
                     await matcher.finish(reply("ad.error"))
