@@ -13,10 +13,10 @@ if __name__ == "__main__":
     # 绝对导入
     from plugins.maib.debug import public_data as pd
     
-    from plugins.maib.image_gen._components.chart_box import ChartBoxBadgeV2
+    from plugins.maib.image_gen._components.chart_box import ChartBoxBadge
     from plugins.maib.utils.enums import Server, UICode
 
-    result_img = ChartBoxBadgeV2._box(
+    result_img = ChartBoxBadge._box(
         pd.maidata().charts[5], 'DX', Server.JP, plus=True, utage=None, floor_rating=263, ui_code=UICode.INTL,
     )
     result_img.show()

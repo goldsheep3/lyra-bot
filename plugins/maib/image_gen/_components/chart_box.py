@@ -20,7 +20,7 @@ from . import (
 )
 
 
-class ChartBoxBadgeV2:
+class ChartBoxBadge:
 
     width = 118
     height = 28
@@ -169,16 +169,17 @@ class ChartBoxBadgeV2:
         else:
             ach_server = Server.JP
             level = chart.lv
-        level_img = LevelBadge.level(
-            level, chart.difficulty, plus, 'question_mask' if utage else 'display', ms=ms, ui_code=ui_code
-        )
         
         img = cls._base(difficulty=chart.difficulty, cabinet=cabinet,
                         is_cn=ach_server == Server.CN, is_cn_all=ui_code.is_cn_all, ms=ms).copy()
         drawer = Drawer(img, ms=ms)
-
+        
+        diff_x = DifficultyBadge.difficulty(difficulty=chart.difficulty, ms=ms, is_cn_all=ui_code.is_cn_all).size[0]
         # 等级定数
-        img.paste(level_img, (round(ms.x(ow+96) - level_img.size[0]), round(ms.x(ow+4.5) - level_img.size[1] / 2)), level_img)
+        level_img = LevelBadge.level(
+            level, chart.difficulty, plus, 'question_mask' if utage else 'display', ms=ms, ui_code=ui_code
+        )
+        img.paste(level_img, (ms.x(ow+4) + diff_x, round(ms.x(ow+4.5) - level_img.size[1] / 2)), level_img)
         # 达成率
         ach = chart.get_ach(server=ach_server)
         ach_value = round(ach.achievement * 10000)

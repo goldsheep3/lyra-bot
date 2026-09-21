@@ -16,8 +16,8 @@ from ..utils import MS, FontCode, FontManager, ImageManager
 from ..tools import FullWidthConverter
 from ..style import get_genre_style
 from .base import TextDrawStyle, Drawer
-from . import CopyrightBadge, ChartBoxBadgeV2
-from ..tools import image_listed_to_rgb, image_grid_board
+from . import CopyrightBadge, ChartBoxBadge
+from ..tools import image_grid_board
 
 
 @dataclass
@@ -173,11 +173,11 @@ class MaiChartInfoBoard:
         def generate():
             for chart in charts:
                 plus = chart.lv * 10 % 10 >= get_level_plus_line(version=version) if version else False
-                yield ChartBoxBadgeV2.box(
+                yield ChartBoxBadge.box(
                     chart=chart, cabinet=cabinet, server=server, plus=plus, floor_rating=floor_rating,
                     ms=ms, ui_code=ui_code
                 )
-        chart_box_w, chart_box_h = ChartBoxBadgeV2.size()
+        chart_box_w, chart_box_h = ChartBoxBadge.size()
         grid_img = image_grid_board(generate(), cols=1, gap_px=ms.x(margin/2), total_count=len(charts),
                                     box_size_px=ms.xy(chart_box_w, chart_box_h))
         if grid_img is None:
