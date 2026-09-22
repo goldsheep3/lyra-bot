@@ -15,6 +15,7 @@ from sqlalchemy import select
 from . import config, utils, services, network
 from .utils.enums import Server, SLevelSource
 from .utils.map import VersionID, Versions, Genres
+from .utils.map.version import mapping_jp_to_cn
 
 
 ChartFileChange = tuple[str, str]
@@ -363,8 +364,9 @@ async def _build_cn_update_lists(sy_data: Sequence[Any]) -> tuple[list[tuple[int
         raw_version: str = basic_info.get("from", "") if isinstance(basic_info, Mapping) else ""
         version: VersionID | Literal[-1] = Versions.find_id(raw_version, default=-1)
         if version >= 0:
-            version_update_list.append((sid, version))
-
+            cn_version = mapping_jp_to_cn(version)
+            if cn_version is not None:
+                version_update_list.append((sid, cn_version))
         ds_list = sy_item.get("ds", [])
         if not isinstance(ds_list, Iterable) or isinstance(ds_list, (str, bytes)):
             continue

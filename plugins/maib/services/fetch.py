@@ -86,7 +86,7 @@ async def set_mct_version(shortid: int, version: int, server: Server,
         mdt = result.scalar_one_or_none()
 
         if mdt:
-            setattr(mdt, SLevelSource.server(server).lv_field, version)
+            setattr(mdt, server.version_field, version)
         return
 
     await execute_func.action(_set_mct_version, session=session)
