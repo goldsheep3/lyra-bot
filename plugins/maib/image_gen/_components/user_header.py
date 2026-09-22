@@ -28,6 +28,8 @@ class UserHeaderBadge:
 
         img_filename = get_dxra_frame_filename(dxrating, cirp_frame=cirp_frame)
         img = ImageManager.dxrating_image(img_filename, size=ms.xy(cls.dxrating_width, cls.dxrating_height))
+        if img is not None:
+            img = img.copy()
         if img is None:
             img = Image.new("RGBA", ms.xy(cls.dxrating_width, cls.dxrating_height), TRANSPARENT)
             drawer = Drawer(img, ms=ms)
