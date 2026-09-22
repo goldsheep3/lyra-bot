@@ -145,7 +145,7 @@ class get_mca_list:
                 .order_by(MaiChartAch.dxrating.desc(), MaiChartAch.achievement.desc())
             )
 
-            version_field = getattr(MaiData, SLevelSource.server(server).lv_field, MaiData.version)
+            version_field = getattr(MaiData, server.version_field, MaiData.version)
             if target == "b35":
                 statement = statement.where(version_field < cut_version).limit(35)
             elif target == "b15":

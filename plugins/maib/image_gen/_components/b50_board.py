@@ -39,7 +39,7 @@ def draw_b50_board(
     def generator(entries: list[tuple[MaiData, DifficultyID]], is_b15: bool):
         if line_width == 4:
             ra = dxrating_data.b15.total if is_b15 else dxrating_data.b35.total
-            ver = current_version if is_b15 else cut_version
+            ver = current_version if is_b15 else (cut_version - 1)
             yield B50BoxBadge.header_box(ra, ver, is_b15=is_b15, ms=ms)
         for index, (maidata, difficulty) in enumerate(entries, start=1):
             yield B50BoxBadge.b50_box(
