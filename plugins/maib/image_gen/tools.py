@@ -4,7 +4,7 @@ image_gen.tools
 """
 import io
 import bisect
-from typing import Optional, Iterable, Sequence
+from typing import Optional, Iterable, Sequence, Literal
 from PIL import Image, ImageDraw, ImageFont
 
 from .color import TRANSPARENT
@@ -54,7 +54,7 @@ convert_to_full_width = FullWidthConverter.convert
 
 # --- dxrating 外框 ---
 class _DXRatingBoundaries:
-    FINALE = [
+    BOTH = [
         0,      # 白框
         1000,   # 蓝框
         2000,   # 绿框
@@ -84,29 +84,38 @@ class _DXRatingBoundaries:
         16750,  # 虹框（極）（极彩框）★4
     ]
     
-    @property
-    def finale(self):
-        return self.FINALE
+    @classmethod
+    def both(cls):
+        return cls.BOTH
     
-    @property
-    def dx(self):
-        return self.FINALE + self.DX
+    @classmethod
+    def dx(cls):
+        return cls.BOTH + cls.DX
 
-    @property
-    def cirp(self):
-        return self.FINALE + self.CIRP
+    @classmethod
+    def cirp(cls):
+        return cls.BOTH + cls.CIRP
 
-_BOUNDS = _DXRatingBoundaries()
+    @classmethod
+    def both_length(cls):
+        return len(cls.BOTH)
 
-def get_dxra_frame_filename(dxrating: int, cirp_frame: bool = True) -> str:
+def get_dxra_frame_filename(dxrating: int,
+                            cirp_frame: bool = True,
+                            scale: Literal[50, 35, 15] = 50) -> str:
     """根据 DX Rating 获取对应的外框文件名。"""
-
-    bounds = _BOUNDS.cirp if cirp_frame else _BOUNDS.dx
+    
+    if cirp_frame:
+        bounds = _DXRatingBoundaries.cirp()
+    else:
+        bounds = _DXRatingBoundaries.dx()
+    if scale != 50:
+        # 适应 b50 图片中需要对 b35 和 b15 考虑颜色的关系
+        dxrating = int(dxrating * (50 / scale))
 
     idx = max(0, bisect.bisect_right(bounds, dxrating) - 1)
-    if idx < len(_BOUNDS.finale):
-        return f"JP_{idx}.png"
-    if cirp_frame:
+    # 对 14000+ 以上的 dxrating，若启用 cirp_frame，则使用 JP_CIRP_*.png 文件
+    if (idx >= _DXRatingBoundaries.both_length() and cirp_frame):
         return f"JP_CIRP_{idx}.png"
     return f"JP_{idx}.png"
 

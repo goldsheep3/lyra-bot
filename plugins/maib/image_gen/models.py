@@ -52,7 +52,15 @@ class CabinetColors:
     fill: str
     outline: str
     text: tuple[str, ...]
-    
+
+
+@dataclass(frozen=True)
+class TrophyColors:
+    """称号颜色信息"""
+    bg: tuple[str, ...]
+    highlight: str
+    shadow: str
+    text_shadow: str
 
 # --------------------------------
 # 风格模型

@@ -3,7 +3,7 @@ image_gen.color
 绘图颜色表
 """
 from ..utils.map import GenreID, DifficultyID, ComboID, SyncID
-from .models import GenreColors, DifficultyColors, RateColors, EvaluateColors, CabinetColors
+from .models import GenreColors, DifficultyColors, RateColors, EvaluateColors, CabinetColors, TrophyColors
 
 __all__ = [
     # 常用颜色常量
@@ -82,7 +82,7 @@ DIFFICULTY_STYLE: dict[DifficultyID, DifficultyColors] = {
     # 大师 Master
     5: DifficultyColors(bg='#CC77FF', frame='#661188', text=WHITE, deep='#BB33DD', title_bg='#9944EE', level_text=WHITE),
     # 宗师 Re:MASTER
-    6: DifficultyColors(bg='#EEEDEE', frame='#8822DD', text='#DD55FF', deep='#FFFFFF', title_bg='#BB66FF', level_text=WHITE),
+    6: DifficultyColors(bg='#EEEDEE', frame='#8822DD', text='#DD55FF', deep=WHITE, title_bg='#BB66FF', level_text=WHITE),
     # 宴会场 U·TA·GE
     7: DifficultyColors(bg='#EE66EE', frame='#DD00BB', text=WHITE, deep='#FF66FF', title_bg='#FF44FF', level_text=WHITE),
 }
@@ -133,6 +133,7 @@ RATE_STYLE: dict[str, RateColors] = {
 # 连击-同步 / Combo-Sync 颜色主题
 # --------------------------------
 
+_EVAL_NONE = '#B2B2B2'
 # FC / FC+
 _EVAL_GREEN_FILL   = '#77DD55'
 _EVAL_GREEN_SHADOW = '#116622'
@@ -144,9 +145,10 @@ _EVAL_BLUE_FILL    = '#66DDFF'
 _EVAL_BLUE_SHADOW  = '#003388'
 # SYNC PLAY
 _EVAL_WHITE_FILL   = '#003388'
-_EVAL_WHITE_SHADOW = '#FFFFFF'
+_EVAL_WHITE_SHADOW = WHITE
 
-_N = EvaluateColors(fill=TRANSPARENT, stroke=TRANSPARENT, shadow=TRANSPARENT)
+# _N = EvaluateColors(fill=_EVAL_NONE, stroke=_EVAL_NONE, shadow=_EVAL_NONE)
+_N = EvaluateColors(fill=_EVAL_NONE, stroke=_EVAL_NONE, shadow=TRANSPARENT)
 _GN = EvaluateColors(fill=_EVAL_GREEN_FILL, stroke=_EVAL_GREEN_SHADOW, shadow=_EVAL_GREEN_SHADOW)
 _GD = EvaluateColors(fill=_EVAL_GOLD_FILL, stroke=_EVAL_GOLD_SHADOW, shadow=_EVAL_GOLD_SHADOW)
 _BE = EvaluateColors(fill=_EVAL_BLUE_FILL, stroke=_EVAL_BLUE_SHADOW, shadow=_EVAL_BLUE_SHADOW)
@@ -161,7 +163,24 @@ SYNC_STYLE: dict[SyncID, EvaluateColors] = {0: _N, 1: _W, 2: _BE, 3: _BE, 4: _GD
 # --------------------------------
 
 CABINET_STYLE: dict[str, CabinetColors] = {
-    'SD': CabinetColors(fill='#44AAFF', outline='#44AAFF', text=('#FFFFFF',)),
-    'DX': CabinetColors(fill='#FFFFFF', outline='#2299EE', text=('#FF4646', '#FFA02D', '#FFDC00', '#9AC948', '#00AAE6')),
-    'DX_CN': CabinetColors(fill='#FFFFFF', outline='#FFFFFF', text=('#FF7711',)),
+    'SD': CabinetColors(fill='#44AAFF', outline='#44AAFF', text=(WHITE,)),
+    'DX': CabinetColors(fill=WHITE, outline='#2299EE', text=('#FF4646', '#FFA02D', '#FFDC00', '#9AC948', '#00AAE6')),
+    'DX_CN': CabinetColors(fill=WHITE, outline=WHITE, text=('#FF7711',)),
+    'UTAGE': CabinetColors(fill='#1A3A70', outline='#80E0FF', text=(WHITE,)),
+    'BUDDY': CabinetColors(fill='#5A1A1A', outline='#F0E6A0', text=(WHITE,)),
 }
+
+
+# --------------------------------
+# 称号 / Trophy 颜色主题
+# --------------------------------
+
+TROPHY_STYLE: dict[str, TrophyColors] = {
+    'NORMAL': TrophyColors(bg=('#B8B8B8',), highlight='#F9F9F9', shadow='#5C5D66', text_shadow='#DADADA'),
+    'BRONZE': TrophyColors(bg=('#DD723E',), highlight='#FB9A6A', shadow='#81350F', text_shadow='#DD723E'),
+    'SILVER': TrophyColors(bg=('#B7D2F7',), highlight='#E0E3F8', shadow='#2336AC', text_shadow='#94B5E2'),
+    'GOLD': TrophyColors(bg=('#FFE468',), highlight='#FFDF4B', shadow='#BB3E07', text_shadow='#FABF05'),
+    'RAINBOW': TrophyColors(bg=('#FF6E53','#FFD360', '#FFED6E', '#BDF341', '#7ADEF9', '#FFED6E'),
+                            highlight='#6464647F', shadow='#FFFFFF7F', text_shadow='#C8C8C82F'),
+}
+

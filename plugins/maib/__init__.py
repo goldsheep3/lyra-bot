@@ -17,7 +17,6 @@ class Config(BaseModel):
     # 有效范围: >= 5，不在范围内会被设定为默认值（40）
     MAX_BLUR_SEARCH_RESULTS: int = 40
 
-is_image_gen_debug = os.getenv("MAIB_IMAGE_GEN_DEBUG") == "1"
 
 try:
         
@@ -58,9 +57,7 @@ try:
     napcat_stream.install_hook()
 
 except RuntimeError as e:
-    if not is_image_gen_debug:
-        # 重新抛出错误
-        raise e
-    else:
+    if os.getenv("MAIB_IMAGE_GEN_DEBUG") == "1":
         from loguru import logger
         logger.warning("插件 maib 因 RuntimeError 未被加载。根据环境设置，可能是正在调试 image_gen 模块。如果并非调试过程，请关注错误原因。")
+    raise e  # 非调试，重新抛出

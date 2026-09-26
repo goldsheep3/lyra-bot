@@ -27,7 +27,8 @@ def maidata(version: int = 18):
                       aliases=[MaiAlias(shortid=11451, alias=a, create_time=datetime_now, create_qq=-1, create_qq_group=None) for a in aliases])
     for i in range(2, 7):
         chart = MaiChart(shortid=11451, difficulty=i, lv=1 + i * 3)
-        chart.set_ach(MaiChartAch(shortid=11451, difficulty=i, server=Server.JP, achievement=97.6 + i * 0.5, combo=3, sync=2))
+        chart.set_ach(MaiChartAch(shortid=11451, difficulty=i, server=Server.JP, achievement=97.6 + i * 0.5,
+                                  combo=random.randint(0, 4), sync=random.randint(0, 5)))
         maidata.set_chart(chart)
 
     return maidata
