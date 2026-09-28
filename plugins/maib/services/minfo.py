@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ..utils.exceptions import BlurSearchTooManyResultsError
-from ..constants import server
+from ..utils.enums import Server
 from .. import config
 from . import execute_func
 from .models import MaiData, MaiChart, MaiChartAch, MaiAlias
@@ -170,7 +170,7 @@ async def add_mct(shortid: int, mct: MaiChart,
 
 
 
-async def get_mca(user_id: int, server: server, shortid: int, difficulty: int,
+async def get_mca(user_id: int, server: Server, shortid: int, difficulty: int,
                   *, session: AsyncSession) -> Optional[MaiChartAch]:
     """通过 `user_id, server, shortid, difficulty` 获取 `MaiChartAch`（唯一）"""
     async def _select(session: AsyncSession):

@@ -12,7 +12,8 @@ from sqlalchemy import String, Integer, Float, BigInteger, DateTime, ForeignKey,
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from .. import utils
-from ..constants import DEFAULT_DATETIME, server
+from ..utils.constants import DEFAULT_DATETIME
+from ..utils.enums import Server
 
 
 __all__ = [
@@ -50,7 +51,7 @@ def _get(source: object | Mapping[str, Any] | None, key: str, default: Any = Non
     return getattr(source, key, default)
 
 
-def _dxra_from_source(source: object | Mapping[str, Any], prefix: server) -> utils.DXRatingData:
+def _dxra_from_source(source: object | Mapping[str, Any], prefix: Server) -> utils.DXRatingData:
     """从 source 中获取 DXRatingData 数据"""
     key_prefix = prefix.lower()
     data = _get(source, f"{key_prefix}_dxra_data")
@@ -119,7 +120,7 @@ class MaiChartAch(Model):
     chart_id: Mapped[int] = mapped_column(ForeignKey("maib_maicharts.id", ondelete="CASCADE"))
 
     difficulty: Mapped[int]
-    server: Mapped[server]
+    server: Mapped[Server] = mapped_column(String(4))
     achievement: Mapped[float]
     dxscore: Mapped[int] = mapped_column(default=0)
     combo: Mapped[int] = mapped_column(default=0)
@@ -387,7 +388,7 @@ class MaiUser(Model):
         unique=True,
     )
     username: Mapped[str] = mapped_column(default="")
-    default_server: Mapped[server] = mapped_column(default="CN")
+    default_server: Mapped[Server] = mapped_column(String(4), default=Server.JP)
     plate_version: Mapped[Optional[int]] = mapped_column(default=None, nullable=True)
     plate_code: Mapped[Optional[int]] = mapped_column(default=None, nullable=True)
 
@@ -425,8 +426,8 @@ class MaiUser(Model):
     @classmethod
     def from_utils(cls, user: utils.MaiUser | Mapping[str, Any] | None = None, **kwargs: Any) -> "MaiUser":
         source: object | Mapping[str, Any] = kwargs or user or {}
-        jp_data = _dxra_from_source(source, "JP")
-        cn_data = _dxra_from_source(source, "CN")
+        jp_data = _dxra_from_source(source, Server.JP)
+        cn_data = _dxra_from_source(source, Server.CN)
         plate = _get(source, "plate", (None, None)) or (None, None)
 
         return cls(
@@ -514,7 +515,7 @@ class MaiRecord(Model):
     cabinet: Mapped[Literal["SD", "DX"]] = mapped_column(String(2), default="SD")
     type: Mapped[Literal["history", "best"]] = mapped_column(String(16), default="history")
     difficulty: Mapped[int] = mapped_column(Integer)
-    server: Mapped[server] = mapped_column(String(16))
+    server: Mapped[Server] = mapped_column(String(4))
     achievement: Mapped[float] = mapped_column(Float, default=0.0)
     dxscore: Mapped[int] = mapped_column(Integer, default=0)
     combo: Mapped[int] = mapped_column(Integer, default=0)

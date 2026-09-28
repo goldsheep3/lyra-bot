@@ -1,7 +1,7 @@
 import time
 
 from .. import services
-from ..constants import ASSETS_PATH
+from ..utils.constants import ASSETS_PATH
 
 from nonebot import on_regex, on_message, on_notice
 from nonebot.params import RegexGroup

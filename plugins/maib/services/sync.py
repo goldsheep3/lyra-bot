@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from .. import utils
-from ..constants import server as Server
+from ..utils.enums import Server
 from . import execute_func
 from .models import MaiChart, MaiChartAch, MaiUser
 from .refresh import rfs_mu_dxra_with_mct_batch

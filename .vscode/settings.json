@@ -6,5 +6,5 @@
         ".venv": true,
         "**/__pycache__": true,
     },
-    "python.analysis.diagnosticMode": "workspace"
+    // "python.analysis.diagnosticMode": "workspace"
 }

@@ -11,3 +11,6 @@ temp/
 
 # 静态资源
 plugins/maib/assets/pic/
+
+# JetBrains IDE 文件
+.idea/

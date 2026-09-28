@@ -1,11 +1,14 @@
-"""image_gen/ 图像生成模块"""
+"""
+image_gen.__init__
+图像构建模块
+"""
 from .tools import get_image_bytes
 from .utils import FontManager, FontCode
 from .builder import (
-    draw_info_box,
-    draw_b50,
-    draw_grid_list,
-    simple_list,
+    draw_simple_board,
+    draw_info_board,
+    draw_grid_board,
+    draw_b50_board,
 )
 
 
@@ -15,9 +18,10 @@ __all__ = [
     # utils
     "FontManager",
     "FontCode",
+    
     # builder
-    "draw_info_box",
-    "draw_b50",
-    "draw_grid_list",
-    "simple_list"
+    "draw_simple_board",
+    "draw_info_board",
+    "draw_grid_board",
+    "draw_b50_board",
 ]
