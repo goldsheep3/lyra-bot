@@ -27,5 +27,6 @@ if __name__ == "__main__":
                                         #    maiuser=_maiuser())
     # result_img = MiniBoxBadge.old_box(maidata=_maidata(), difficulty=5, server=Server.JP, ui_code=UICode.JP)
     # result_img = CopyrightBadge.copyright_mpx(2480)
-    result_img = B50BoxBadge.b50_box(maidata=pd.maidata(), difficulty=5, server=Server.JP, ui_code=UICode.JP, ms=MS(10), current_version=0, index=12)
+    # result_img = B50BoxBadge.b50_box(maidata=pd.maidata(), difficulty=5, server=Server.JP, ui_code=UICode.JP, ms=MS(10), current_version=0, index=12)
+    result_img = B50BoxBadge.base(maidata=pd.maidata(), difficulty=5, ui_code=UICode.JP, ms=MS(10))
     result_img.show()

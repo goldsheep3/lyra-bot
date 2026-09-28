@@ -17,7 +17,7 @@ from .b50_box import B50BoxBadge
 
 from .simple_list_board import SimpleListBoard, draw_simple_board
 from .info_board import MaiChartInfoBoard, draw_info_board
-from .grid_board import GridListBoard, draw_grid_board
+from .grid_board import draw_grid_board
 from .b50_board import draw_b50_board
 
 __all__ = [    
@@ -39,6 +39,6 @@ __all__ = [
     # 三级组件
     "SimpleListBoard", "draw_simple_board",
     "MaiChartInfoBoard", "draw_info_board",
-    "GridListBoard", "draw_grid_board",
+    "draw_grid_board",
     "draw_b50_board",
 ]

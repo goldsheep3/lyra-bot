@@ -4,7 +4,7 @@ image_gen.tools
 """
 import io
 import bisect
-from typing import Optional, Iterable, Sequence, Literal
+from typing import Optional, Iterable, Sequence
 from PIL import Image, ImageDraw, ImageFont
 
 from .color import TRANSPARENT
@@ -100,18 +100,13 @@ class _DXRatingBoundaries:
     def both_length(cls):
         return len(cls.BOTH)
 
-def get_dxra_frame_filename(dxrating: int,
-                            cirp_frame: bool = True,
-                            scale: Literal[50, 35, 15] = 50) -> str:
+def get_dxra_frame_filename(dxrating: int, cirp_frame: bool = True) -> str:
     """根据 DX Rating 获取对应的外框文件名。"""
     
     if cirp_frame:
         bounds = _DXRatingBoundaries.cirp()
     else:
         bounds = _DXRatingBoundaries.dx()
-    if scale != 50:
-        # 适应 b50 图片中需要对 b35 和 b15 考虑颜色的关系
-        dxrating = int(dxrating * (50 / scale))
 
     idx = max(0, bisect.bisect_right(bounds, dxrating) - 1)
     # 对 14000+ 以上的 dxrating，若启用 cirp_frame，则使用 JP_CIRP_*.png 文件

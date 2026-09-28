@@ -44,7 +44,7 @@ class DXScoreBadge:
         title_width = ms.rev(int(title_font.getlength(style.title)+1))
         # 星星
         star_font = FontManager.font(FontCode.NotoSansSymbols2, size=ms.x(2))
-        drawer.text(2.6+title_width, height/2+0.2, text=style.star, tds=TextDrawStyle(fill=style.star_fill, anchor='lm', font=star_font))
+        drawer.text(2.6+title_width, height/2+0.2, text=style.star.replace(' ', ''), tds=TextDrawStyle(fill=style.star_fill, anchor='lm', font=star_font))
         # 分数
         score_font = FontManager.font(FontCode.JBMono_Medium, size=ms.x(2))
         drawer.text(width-1.6, height/2, text=style.content.replace('0', 'O'), tds=TextDrawStyle(fill='#333', anchor='rm', font=score_font))

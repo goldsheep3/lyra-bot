@@ -66,12 +66,8 @@ class MiniBoxBadge:
     evaluate_height = linebar_y + linebar_height + 13
 
     @classmethod
-    def box(cls, maidata: MaiData, difficulty: DifficultyID, server: Server,
-            ms: MS = MS(), ui_code: UICode = UICode.JP) -> Image.Image:
-        chart = maidata.get_chart(difficulty) if maidata else None
-        if not chart:
-            return cls.empty(ms=ms)
-        ach = chart.get_ach(server=server)
+    def base(cls, maidata: MaiData, difficulty: DifficultyID,
+             ms: MS = MS(), ui_code: UICode = UICode.JP) -> Image.Image:
         style = get_difficulty_style(difficulty, is_cn_all=ui_code.is_cn_all)
         
         img = cls._base(difficulty, maidata.cabinet, is_cn=ui_code.is_cn, is_cn_all=ui_code.is_cn_all, ms=ms).copy()
@@ -95,6 +91,21 @@ class MiniBoxBadge:
         title_tds = DifficultyBadge.tds(style, font=FontManager.font(FontCode.NotoSansSC_Bold, ms.x(3.5)), scale=0.65)
         drawer.text(cls.cover_size + CabinetBadge.size()[0]*3/5 + 1, cls.linebar_y + cls.linebar_height/2,
                     text=maidata.title, tds=title_tds)
+
+        return Drawer.masked(
+            img,
+            radius=2.5, ms=ms
+        )
+
+    @classmethod
+    def box(cls, maidata: MaiData, difficulty: DifficultyID, server: Server,
+            ms: MS = MS(), ui_code: UICode = UICode.JP) -> Image.Image:
+        chart = maidata.get_chart(difficulty) if maidata else None
+        if not chart:
+            return cls.empty(ms=ms)
+        ach = chart.get_ach(server=server)
+
+        img = cls.base(maidata=maidata, difficulty=difficulty, ms=ms, ui_code=ui_code)
         
         # Achievement
         achievement = int(ach.achievement*10000)
@@ -109,8 +120,8 @@ class MiniBoxBadge:
         img.paste(achievement_img, ms.xy(cls.cover_size + 1, cls.linebar_y + cls.linebar_height + 1.5), achievement_img)
 
         # FC / FS
-        fc = EvaluateBadge.combo(ach.combo, mini=False, ms=ms, ui_code=ui_code)
-        fs = EvaluateBadge.sync(ach.sync, mini=False, ms=ms, ui_code=ui_code)
+        fc = EvaluateBadge.combo(ach.combo, mini=False, ms=MS(ms*0.8), ui_code=ui_code)
+        fs = EvaluateBadge.sync(ach.sync, mini=False, ms=MS(ms*0.8), ui_code=ui_code)
         img.paste(fc, ms.xy(cls.cover_size + 1, cls.evaluate_height), fc)
         img.paste(fs, ms.xy(cls.cover_size + 27, cls.evaluate_height), fs)
 

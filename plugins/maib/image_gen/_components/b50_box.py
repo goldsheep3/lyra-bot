@@ -57,7 +57,8 @@ class B50BoxBadge(MiniBoxBadge):
         img = Image.new("RGBA", ms.xy(*cls.size()), TRANSPARENT)
         drawer = Drawer(img, ms=ms)
         
-        dxra_img = UserHeaderBadge.dxrating(dxrating=dxrating, cirp_frame=cirp_frame, ms=MS(ms*16/15))
+        dxra_img = UserHeaderBadge.dxrating(dxrating=dxrating, cirp_frame=cirp_frame,
+                                            scale=0.3 if is_b15 else 0.7, ms=MS(ms*16/15))
         img.paste(dxra_img, ms.xy(0, 9), dxra_img)
         
         # 这里颜色通过判断最多的难度的颜色来确定，现在硬编码 5 (master)

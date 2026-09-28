@@ -60,4 +60,5 @@ except RuntimeError as e:
     if os.getenv("MAIB_IMAGE_GEN_DEBUG") == "1":
         from loguru import logger
         logger.warning("插件 maib 因 RuntimeError 未被加载。根据环境设置，可能是正在调试 image_gen 模块。如果并非调试过程，请关注错误原因。")
-    raise e  # 非调试，重新抛出
+    else:
+        raise e  # 非调试，重新抛出

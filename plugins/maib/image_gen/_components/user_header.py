@@ -20,13 +20,13 @@ class UserHeaderBadge:
     dxrating_height: float = 15
     
     @classmethod
-    def dxrating(cls, dxrating: int, cirp_frame: bool = True, ms: MS = MS()) -> Image.Image:
+    def dxrating(cls, dxrating: int, cirp_frame: bool = True, scale: float = 1.0, ms: MS = MS()) -> Image.Image:
         """生成 DXRating 组件"""
         dxra_str = str(dxrating)
         if len(dxra_str) > 5:
             return Image.new("RGBA", ms.xy(cls.dxrating_width, cls.dxrating_height), TRANSPARENT)
 
-        img_filename = get_dxra_frame_filename(dxrating, cirp_frame=cirp_frame)
+        img_filename = get_dxra_frame_filename(int(dxrating / scale), cirp_frame=cirp_frame)
         img = ImageManager.dxrating_image(img_filename, size=ms.xy(cls.dxrating_width, cls.dxrating_height))
         if img is not None:
             img = img.copy()
@@ -79,16 +79,16 @@ class UserHeaderBadge:
                     pass
             elif isinstance(avatar, Image.Image):
                 avatar_img = avatar.copy().convert("RGBA")
-        avatar_img = avatar_img or Image.new("RGBA", ms.xy(*avatar_size), color=BLACK)
-        if avatar_img.size != ms.xy(*avatar_size):
-            resized_avatar = avatar_img.resize(ms.xy(*avatar_size), Image.Resampling.LANCZOS)
-            avatar_img.close()
-            avatar_img = resized_avatar
-        avatar_mask = drawer.get_mask(*avatar_size, radius=avatar_radius, ms=ms)
-        img.paste(avatar_img, ms.xy(*avatar_xy), avatar_mask)
-        avatar_mask.close()
-        drawer.rounded_rect(*avatar_xy, *avatar_size, radius=avatar_radius, fill=None,
-                            outline=GRAY if plate_img else WHITE, width=0.5, closed_interval=False)
+        if avatar_img:
+            if avatar_img.size != ms.xy(*avatar_size):
+                resized_avatar = avatar_img.resize(ms.xy(*avatar_size), Image.Resampling.LANCZOS)
+                avatar_img.close()
+                avatar_img = resized_avatar
+            avatar_mask = drawer.get_mask(*avatar_size, radius=avatar_radius, ms=ms)
+            img.paste(avatar_img, ms.xy(*avatar_xy), avatar_mask)
+            avatar_mask.close()
+            drawer.rounded_rect(*avatar_xy, *avatar_size, radius=avatar_radius, fill=None,
+                                outline=GRAY if plate_img else WHITE, width=0.5, closed_interval=False)
         
         # DXRating
         dxrating_size = (75, 15)
