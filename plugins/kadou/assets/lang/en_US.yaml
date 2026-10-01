@@ -4,8 +4,8 @@ status:
     updated: "{prefix}{label}: {num} people (Updated at {display_time})"
     not_updated: "{prefix}{label}: ? people (Not updated today)"
   hider:
-    updated: "    Hider record: {num} people (Updated at {display_time})"
-    not_updated: "    Hider record: ? people (Not updated today)"
+    updated: "{hider_indent}Hider record: {num} people (Updated at {display_time})"
+    not_updated: "{hider_indent}Hider record: ? people (Not updated today)"
 errors:
   num_less_than_zero: "The count can't drop below zero! щ(ﾟдﾟщ) Did you mistype the number?"
 update:

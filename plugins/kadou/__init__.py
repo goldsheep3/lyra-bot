@@ -104,21 +104,26 @@ def get_store_context(event: OneBotV11GroupMessageEvent, name: str, is_hider: bo
 # ================= 通用业务逻辑 =================
 
 async def format_status(
-    label: str, kadou_data: dict, today_str: str, *, hider: bool = False
+    label: str, kadou_data: dict, today_str: str, *,
+    prefix: str = "",
+    hider: bool = False,
+    hider_indent: str = "",
 ) -> str:
     """Format a localized status message."""
     time_str = kadou_data.get("time", "")
 
     if time_str[:10] != today_str:
         key = "status.hider.not_updated" if hider else "status.common.not_updated"
-        return await Reply(key, prefix="", label=label)
+        if hider:
+            return await Reply(key, hider_indent=hider_indent)
+        return await Reply(key, prefix=prefix, label=label)
 
     num = kadou_data.get("num", 0)
     display_time = time_str[11:] if len(time_str) > 10 else time_str
     key = "status.hider.updated" if hider else "status.common.updated"
-    return await Reply(
-        key, prefix="", label=label, num=num, display_time=display_time
-    )
+    if hider:
+        return await Reply(key, hider_indent=hider_indent, num=num, display_time=display_time)
+    return await Reply(key, prefix=prefix, label=label, num=num, display_time=display_time)
 
 def calculate_new_num(current_num: int, sign: str | None, change_num: int) -> tuple[int, str | None]:
     """
@@ -207,16 +212,18 @@ async def _(event: OneBotV11GroupMessageEvent, args: dict = RegexDict()):
     store_info = ctx["store_info"]
     store_kadou = ctx["kadou"][ctx["store_id"]]
     today_str = now_local().date().isoformat()
-
-    # 普通数据
     store_name = store_info.get("name", name)
-    msg = await format_status(store_name, store_kadou, today_str)
 
-    # Hider 数据
+    manifest = load_json(data_dir / "manifest.json")
+    data_id = manifest.get(str(event.group_id), "")
+    prefix_text = await Reply("status.prefix", city_id=data_id) if data_id else ''
+    msg = await format_status(store_name, store_kadou, today_str, prefix=prefix_text)
+
+    # Hider 数据（仅当群有 hider 权限时显示）
     hider_ctx = get_store_context(event, name, is_hider=True)
     if hider_ctx:
         hider_kadou = hider_ctx["kadou"][hider_ctx["store_id"]]
-        hider_msg = await format_status("Hider", hider_kadou, today_str, hider=True)
+        hider_msg = await format_status("Hider", hider_kadou, today_str, hider=True, hider_indent=" "*4)
         msg += f"\n{hider_msg}"
 
     await matcher_query.finish(msg)
@@ -296,6 +303,7 @@ async def _(event: OneBotV11GroupMessageEvent):
         return
 
     today_str = now_local().date().isoformat()
+    HIDER_INDENT = " "*4
     messages = []
 
     for name_key, store_info in info.items():
@@ -303,7 +311,20 @@ async def _(event: OneBotV11GroupMessageEvent):
         store_name = store_info.get("name", name_key)
 
         store_kadou = kadou.get(store_id, {"num": 0, "time": ""})
-        messages.append(await format_status(store_name, store_kadou, today_str))
+        prefix_text = await Reply("status.prefix", city_id=data_id) if data_id else ''
+        line = await format_status(store_name, store_kadou, today_str, prefix=prefix_text)
+
+        # Hider（仅当群有 hider 权限时显示）
+        hider_ctx = get_store_context(event, name_key, is_hider=True)
+        if hider_ctx:
+            hider_kadou = hider_ctx["kadou"][hider_ctx["store_id"]]
+            hider_line = await format_status(
+                "Hider", hider_kadou, today_str,
+                hider=True, hider_indent=HIDER_INDENT,
+            )
+            line += f"\n{hider_line}"
+
+        messages.append(line)
 
     if messages:
         await matcher_list.finish("\n".join(messages))

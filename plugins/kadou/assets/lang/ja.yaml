@@ -4,8 +4,8 @@ status:
     updated: "{prefix}{label}: {num}人（{display_time} 更新）"
     not_updated: "{prefix}{label}: ?人（本日未更新）"
   hider:
-    updated: "    hider記録: {num}人（{display_time} 更新）"
-    not_updated: "    hider記録: ?人（本日未更新）"
+    updated: "{hider_indent}hider記録: {num}人（{display_time} 更新）"
+    not_updated: "{hider_indent}hider記録: ?人（本日未更新）"
 errors:
   num_less_than_zero: "人数がマイナスになっちゃうよщ(ﾟдﾟщ)数字間違えてない？"
 update:
