@@ -104,7 +104,7 @@ def get_store_context(event: OneBotV11GroupMessageEvent, name: str, is_hider: bo
 # ================= 通用业务逻辑 =================
 
 async def format_status(
-    label: str, kadou_data: dict, today_str: str, *,
+    reply, label: str, kadou_data: dict, today_str: str, *,
     prefix: str = "",
     hider: bool = False,
     hider_indent: str = "",
@@ -115,15 +115,15 @@ async def format_status(
     if time_str[:10] != today_str:
         key = "status.hider.not_updated" if hider else "status.common.not_updated"
         if hider:
-            return await Reply(key, hider_indent=hider_indent)
-        return await Reply(key, prefix=prefix, label=label)
+            return await reply(key, hider_indent=hider_indent)
+        return await reply(key, prefix=prefix, label=label)
 
     num = kadou_data.get("num", 0)
     display_time = time_str[11:] if len(time_str) > 10 else time_str
     key = "status.hider.updated" if hider else "status.common.updated"
     if hider:
-        return await Reply(key, hider_indent=hider_indent, num=num, display_time=display_time)
-    return await Reply(key, prefix=prefix, label=label, num=num, display_time=display_time)
+        return await reply(key, hider_indent=hider_indent, num=num, display_time=display_time)
+    return await reply(key, prefix=prefix, label=label, num=num, display_time=display_time)
 
 def calculate_new_num(current_num: int, sign: str | None, change_num: int) -> tuple[int, str | None]:
     """
@@ -203,7 +203,7 @@ def sync_to_hider(event: OneBotV11GroupMessageEvent, name: str, current_num: int
 matcher_query = on_regex(r"^(?P<name>\S{1,2})几$", priority=10, block=True)
 
 @matcher_query.handle()
-async def _(event: OneBotV11GroupMessageEvent, args: dict = RegexDict()):
+async def _(event: OneBotV11GroupMessageEvent, args: dict = RegexDict(), reply: Reply = Reply):
     name = args.get("name", "")
     ctx = get_store_context(event, name, is_hider=False)
     if not ctx:
@@ -216,14 +216,14 @@ async def _(event: OneBotV11GroupMessageEvent, args: dict = RegexDict()):
 
     manifest = load_json(data_dir / "manifest.json")
     data_id = manifest.get(str(event.group_id), "")
-    prefix_text = await Reply("status.prefix", city_id=data_id) if data_id else ''
-    msg = await format_status(store_name, store_kadou, today_str, prefix=prefix_text)
+    prefix_text = await reply("status.prefix", city_id=data_id) if data_id else ''
+    msg = await format_status(reply, store_name, store_kadou, today_str, prefix=prefix_text)
 
     # Hider 数据（仅当群有 hider 权限时显示）
     hider_ctx = get_store_context(event, name, is_hider=True)
     if hider_ctx:
         hider_kadou = hider_ctx["kadou"][hider_ctx["store_id"]]
-        hider_msg = await format_status("Hider", hider_kadou, today_str, hider=True, hider_indent=" "*4)
+        hider_msg = await format_status(reply, reply, "Hider", hider_kadou, today_str, hider=True, hider_indent=" "*4)
         msg += f"\n{hider_msg}"
 
     await matcher_query.finish(msg)
@@ -233,7 +233,7 @@ async def _(event: OneBotV11GroupMessageEvent, args: dict = RegexDict()):
 matcher_update = on_regex(r"^(?P<name>\S{1,2})(?P<sign>[+-])?(?P<num>\d+)$", priority=10, block=True)
 
 @matcher_update.handle()
-async def _(event: OneBotV11GroupMessageEvent, args: dict = RegexDict()):
+async def _(event: OneBotV11GroupMessageEvent, args: dict = RegexDict(), reply: Reply = Reply):
     name = args.get("name", "")
     sign = args.get("sign")
     num = int(args.get("num", 0))
@@ -246,14 +246,14 @@ async def _(event: OneBotV11GroupMessageEvent, args: dict = RegexDict()):
 
         new_num, error_msg = execute_update(ctx, sign, num)
         if error_msg:
-            await matcher_update.finish(await Reply("errors.num_less_than_zero"))
+            await matcher_update.finish(await reply("errors.num_less_than_zero"))
 
         sync_to_hider(event, name, new_num)
 
         store_info = ctx["store_info"]
         store_name = store_info.get("name", name)
         await matcher_update.finish(
-            await Reply("update.success", store_name=store_name, new_num=new_num)
+            await reply("update.success", store_name=store_name, new_num=new_num)
         )
 
 # ================= Matcher 3: Hider 独立更新 =================
@@ -261,7 +261,7 @@ async def _(event: OneBotV11GroupMessageEvent, args: dict = RegexDict()):
 matcher_hider_update = on_regex(r"^[.。](?P<name>\S{1,2})(?P<sign>[+-])?(?P<num>\d+)$", priority=10, block=True)
 
 @matcher_hider_update.handle()
-async def _(event: OneBotV11GroupMessageEvent, args: dict = RegexDict()):
+async def _(event: OneBotV11GroupMessageEvent, args: dict = RegexDict(), reply: Reply = Reply):
     name = args.get("name", "")
     sign = args.get("sign")
     num = int(args.get("num", 0))
@@ -274,12 +274,12 @@ async def _(event: OneBotV11GroupMessageEvent, args: dict = RegexDict()):
 
         new_num, error_msg = execute_update(ctx, sign, num)
         if error_msg:
-            await matcher_hider_update.finish(await Reply("errors.num_less_than_zero"))
+            await matcher_hider_update.finish(await reply("errors.num_less_than_zero"))
 
         store_info = ctx["store_info"]
         store_name = store_info.get("name", name)
         await matcher_hider_update.finish(
-            await Reply("update.hider_success", store_name=store_name, new_num=new_num)
+            await reply("update.hider_success", store_name=store_name, new_num=new_num)
         )
 
 # ================= Matcher 4: 遍历输出 (/j) =================
@@ -287,7 +287,7 @@ async def _(event: OneBotV11GroupMessageEvent, args: dict = RegexDict()):
 matcher_list = on_regex(r"^/j$", priority=10, block=True)
 
 @matcher_list.handle()
-async def _(event: OneBotV11GroupMessageEvent):
+async def _(event: OneBotV11GroupMessageEvent, reply: Reply = Reply):
     manifest = load_json(data_dir / "manifest.json")
     data_id = manifest.get(str(event.group_id))
     if not data_id:
@@ -311,15 +311,15 @@ async def _(event: OneBotV11GroupMessageEvent):
         store_name = store_info.get("name", name_key)
 
         store_kadou = kadou.get(store_id, {"num": 0, "time": ""})
-        prefix_text = await Reply("status.prefix", city_id=data_id) if data_id else ''
-        line = await format_status(store_name, store_kadou, today_str, prefix=prefix_text)
+        prefix_text = await reply("status.prefix", city_id=data_id) if data_id else ''
+        line = await format_status(reply, store_name, store_kadou, today_str, prefix=prefix_text)
 
         # Hider（仅当群有 hider 权限时显示）
         hider_ctx = get_store_context(event, name_key, is_hider=True)
         if hider_ctx:
             hider_kadou = hider_ctx["kadou"][hider_ctx["store_id"]]
             hider_line = await format_status(
-                "Hider", hider_kadou, today_str,
+                reply, "Hider", hider_kadou, today_str,
                 hider=True, hider_indent=HIDER_INDENT,
             )
             line += f"\n{hider_line}"
