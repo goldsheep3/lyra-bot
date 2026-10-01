@@ -1,5 +1,5 @@
 from pathlib import Path
-from datetime import date, datetime
+from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 import asyncio
 import json
@@ -9,7 +9,11 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotV11GroupMessa
 from nonebot.params import RegexDict
 
 require("nonebot_plugin_localstore")
+require("nonebot_plugin_locales")
 from nonebot_plugin_localstore import get_plugin_data_dir
+from nonebot_plugin_locales import locales_init
+
+Reply = locales_init(Path(__file__).parent / "assets" / "lang")
 
 # 初始化插件数据目录
 data_dir = get_plugin_data_dir()
@@ -50,6 +54,12 @@ def load_json(path: Path) -> dict:
 def save_json(path: Path, data: dict):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
+
+
+def now_local() -> datetime:
+    """Return the business time in UTC+8, independent of host timezone."""
+    tz=timezone(timedelta(hours=8), name="UTC+8")
+    return datetime.now(tz)
 
 # ================= 核心上下文获取 =================
 
@@ -93,17 +103,22 @@ def get_store_context(event: OneBotV11GroupMessageEvent, name: str, is_hider: bo
 
 # ================= 通用业务逻辑 =================
 
-def format_status(label: str, kadou_data: dict, today_str: str, indent: int = 0) -> str:
-    """通用状态格式化，支持缩进"""
-    prefix = " " * indent
+async def format_status(
+    label: str, kadou_data: dict, today_str: str, *, hider: bool = False
+) -> str:
+    """Format a localized status message."""
     time_str = kadou_data.get("time", "")
 
     if time_str[:10] != today_str:
-        return f"{prefix}{label}：今日未更新"
+        key = "status.hider.not_updated" if hider else "status.common.not_updated"
+        return await Reply(key, prefix="", label=label)
 
     num = kadou_data.get("num", 0)
     display_time = time_str[11:] if len(time_str) > 10 else time_str
-    return f"{prefix}{label}：{num}人（更新于{display_time}）"
+    key = "status.hider.updated" if hider else "status.common.updated"
+    return await Reply(
+        key, prefix="", label=label, num=num, display_time=display_time
+    )
 
 def calculate_new_num(current_num: int, sign: str | None, change_num: int) -> tuple[int, str | None]:
     """
@@ -128,7 +143,7 @@ def execute_update(ctx: dict, sign: str | None, num: int) -> tuple[int, str | No
     """
     store_id = ctx["store_id"]
     store_kadou = ctx["kadou"][store_id]
-    today_str = date.today().isoformat()
+    today_str = now_local().date().isoformat()
     time_str = store_kadou.get("time", "")
 
     # 非当日数据重置；包含异常或未来日期，避免它们被误视为今天已更新。
@@ -142,7 +157,7 @@ def execute_update(ctx: dict, sign: str | None, num: int) -> tuple[int, str | No
         return current_num, error_msg
 
     store_kadou["num"] = new_num
-    store_kadou["time"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+    store_kadou["time"] = now_local().strftime("%Y-%m-%d %H:%M")
 
     # 由于 kadou 是 data 的引用，直接保存即可
     save_json(ctx["file_path"], ctx["data"])
@@ -174,7 +189,7 @@ def sync_to_hider(event: OneBotV11GroupMessageEvent, name: str, current_num: int
         hider_kadou[hider_store_id] = {"num": 0, "time": ""}
 
     hider_kadou[hider_store_id]["num"] = current_num
-    hider_kadou[hider_store_id]["time"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+    hider_kadou[hider_store_id]["time"] = now_local().strftime("%Y-%m-%d %H:%M")
 
     save_json(hider_file_path, hider_data)
 
@@ -191,17 +206,17 @@ async def _(event: OneBotV11GroupMessageEvent, args: dict = RegexDict()):
 
     store_info = ctx["store_info"]
     store_kadou = ctx["kadou"][ctx["store_id"]]
-    today_str = date.today().isoformat()
+    today_str = now_local().date().isoformat()
 
     # 普通数据
     store_name = store_info.get("name", name)
-    msg = format_status(store_name, store_kadou, today_str)
+    msg = await format_status(store_name, store_kadou, today_str)
 
     # Hider 数据
     hider_ctx = get_store_context(event, name, is_hider=True)
     if hider_ctx:
         hider_kadou = hider_ctx["kadou"][hider_ctx["store_id"]]
-        hider_msg = format_status("Hider", hider_kadou, today_str, indent=4)
+        hider_msg = await format_status("Hider", hider_kadou, today_str, hider=True)
         msg += f"\n{hider_msg}"
 
     await matcher_query.finish(msg)
@@ -224,13 +239,15 @@ async def _(event: OneBotV11GroupMessageEvent, args: dict = RegexDict()):
 
         new_num, error_msg = execute_update(ctx, sign, num)
         if error_msg:
-            await matcher_update.finish(error_msg)
+            await matcher_update.finish(await Reply("errors.num_less_than_zero"))
 
         sync_to_hider(event, name, new_num)
 
         store_info = ctx["store_info"]
         store_name = store_info.get("name", name)
-        await matcher_update.finish(f"更新成功，现在{store_name}人数为{new_num}人。")
+        await matcher_update.finish(
+            await Reply("update.success", store_name=store_name, new_num=new_num)
+        )
 
 # ================= Matcher 3: Hider 独立更新 =================
 
@@ -250,11 +267,13 @@ async def _(event: OneBotV11GroupMessageEvent, args: dict = RegexDict()):
 
         new_num, error_msg = execute_update(ctx, sign, num)
         if error_msg:
-            await matcher_hider_update.finish(error_msg)
+            await matcher_hider_update.finish(await Reply("errors.num_less_than_zero"))
 
         store_info = ctx["store_info"]
         store_name = store_info.get("name", name)
-        await matcher_hider_update.finish(f"Hider 更新成功，现在{store_name}人数为{new_num}人。")
+        await matcher_hider_update.finish(
+            await Reply("update.hider_success", store_name=store_name, new_num=new_num)
+        )
 
 # ================= Matcher 4: 遍历输出 (/j) =================
 
@@ -276,7 +295,7 @@ async def _(event: OneBotV11GroupMessageEvent):
     if not info:
         return
 
-    today_str = date.today().isoformat()
+    today_str = now_local().date().isoformat()
     messages = []
 
     for name_key, store_info in info.items():
@@ -284,7 +303,7 @@ async def _(event: OneBotV11GroupMessageEvent):
         store_name = store_info.get("name", name_key)
 
         store_kadou = kadou.get(store_id, {"num": 0, "time": ""})
-        messages.append(format_status(store_name, store_kadou, today_str))
+        messages.append(await format_status(store_name, store_kadou, today_str))
 
     if messages:
         await matcher_list.finish("\n".join(messages))

@@ -866,6 +866,7 @@ dependencies = [
     { name = "nonebot-adapter-onebot" },
     { name = "nonebot-adapter-telegram" },
     { name = "nonebot-plugin-datastore" },
+    { name = "nonebot-plugin-locales" },
     { name = "nonebot-plugin-localstore" },
     { name = "nonebot2", extra = ["fastapi"] },
     { name = "numpy" },
@@ -893,6 +894,7 @@ requires-dist = [
     { name = "nonebot-adapter-onebot", specifier = ">=2.4.6" },
     { name = "nonebot-adapter-telegram", specifier = ">=0.1.0b20" },
     { name = "nonebot-plugin-datastore", specifier = ">=1.3.1" },
+    { name = "nonebot-plugin-locales", git = "https://github.com/goldsheep3/nonebot-plugin-locales.git?rev=v0.1.0" },
     { name = "nonebot-plugin-localstore", specifier = ">=0.7.4" },
     { name = "nonebot2", extras = ["fastapi"], specifier = ">=2.5.0" },
     { name = "numpy", specifier = ">=2.4.2" },
@@ -1247,6 +1249,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/5c/21/e0d2d1a3b11962183bc86fc3a48d5f8b41b91761a488f01a5d8d4467d331/nonebot_plugin_datastore-1.3.1.tar.gz", hash = "sha256:099c65ee2edc6c4216f6b9b7dd67aac86d1d050bc9a2195c835eab709be9d1a8", size = 19498, upload-time = "2025-08-13T15:03:19.459Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/4a/3a/3742894d5c774ec9fcc786ef629a058e21760d22c0c7acdc9a7820b57e57/nonebot_plugin_datastore-1.3.1-py3-none-any.whl", hash = "sha256:3f6fa91e9fac8edd143b7213371307c40598faa3c2a5f20fbda1f3b686a4fa95", size = 26791, upload-time = "2025-08-13T15:03:18.244Z" },
+]
+
+[[package]]
+name = "nonebot-plugin-locales"
+version = "0.1.0"
+source = { git = "https://github.com/goldsheep3/nonebot-plugin-locales.git?rev=v0.1.0#0fdea1502511b2c1306cb10673ea45c4a2780ef0" }
+dependencies = [
+    { name = "httpx" },
+    { name = "nonebot-plugin-datastore" },
+    { name = "nonebot-plugin-localstore" },
+    { name = "nonebot2" },
+    { name = "pyyaml" },
 ]
 
 [[package]]

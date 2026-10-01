@@ -1,0 +1,13 @@
+status:
+  prefix: "{city_id} 排卡信息:"
+  common:
+    updated: "{prefix}{label}: {num}人（更新于{display_time}）"
+    not_updated: "{prefix}{label}: ?人（今日未更新）"
+  hider:
+    updated: "    hider记录为 {num}人（更新于{display_time}）"
+    not_updated: "    hider记录为 ?人（今日未更新）"
+errors:
+  num_less_than_zero: "人数不能减少到负数吧щ(ﾟдﾟщ)是不是写错数字了"
+update:
+  success: "已更新记录！{store_name}人数为{new_num}人"
+  hider_success: "已更新hider记录！{store_name}人数为{new_num}人"

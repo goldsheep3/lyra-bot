@@ -1,0 +1,13 @@
+status:
+  prefix: "{city_id} Kadou Status:"
+  common:
+    updated: "{prefix}{label}: {num} people (Updated at {display_time})"
+    not_updated: "{prefix}{label}: ? people (Not updated today)"
+  hider:
+    updated: "    Hider record: {num} people (Updated at {display_time})"
+    not_updated: "    Hider record: ? people (Not updated today)"
+errors:
+  num_less_than_zero: "The count can't drop below zero! щ(ﾟдﾟщ) Did you mistype the number?"
+update:
+  success: "Record updated! The headcount for {store_name} is now {new_num}."
+  hider_success: "Hider record updated! The headcount for {store_name} is now {new_num}."
