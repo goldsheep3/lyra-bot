@@ -1,19 +1,19 @@
-from pathlib import Path
-from datetime import datetime, timedelta, timezone
-from collections import defaultdict
 import asyncio
 import json
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
-from nonebot import require, logger, on_regex
+from nonebot import logger, on_regex, require
 from nonebot.adapters.onebot.v11 import GroupMessageEvent as OneBotV11GroupMessageEvent
 from nonebot.params import RegexDict
 
 require("nonebot_plugin_localstore")
 require("nonebot_plugin_locales")
+from nonebot_plugin_locales import Reply, locales_init
 from nonebot_plugin_localstore import get_plugin_data_dir
-from nonebot_plugin_locales import locales_init
 
-Reply = locales_init(Path(__file__).parent / "assets" / "lang")
+reply = locales_init(Path(__file__).parent / "assets" / "lang")
 
 # 初始化插件数据目录
 data_dir = get_plugin_data_dir()
@@ -203,7 +203,7 @@ def sync_to_hider(event: OneBotV11GroupMessageEvent, name: str, current_num: int
 matcher_query = on_regex(r"^(?P<name>\S{1,2})几$", priority=10, block=True)
 
 @matcher_query.handle()
-async def _(event: OneBotV11GroupMessageEvent, args: dict = RegexDict(), reply: Reply = Reply):
+async def _(event: OneBotV11GroupMessageEvent, args: dict = RegexDict(), reply: Reply = reply):
     name = args.get("name", "")
     ctx = get_store_context(event, name, is_hider=False)
     if not ctx:
@@ -223,7 +223,7 @@ async def _(event: OneBotV11GroupMessageEvent, args: dict = RegexDict(), reply: 
     hider_ctx = get_store_context(event, name, is_hider=True)
     if hider_ctx:
         hider_kadou = hider_ctx["kadou"][hider_ctx["store_id"]]
-        hider_msg = await format_status(reply, reply, "Hider", hider_kadou, today_str, hider=True, hider_indent=" "*4)
+        hider_msg = await format_status(reply, "Hider", hider_kadou, today_str, hider=True, hider_indent=" "*4)
         msg += f"\n{hider_msg}"
 
     await matcher_query.finish(msg)
@@ -233,7 +233,7 @@ async def _(event: OneBotV11GroupMessageEvent, args: dict = RegexDict(), reply: 
 matcher_update = on_regex(r"^(?P<name>\S{1,2})(?P<sign>[+-])?(?P<num>\d+)$", priority=10, block=True)
 
 @matcher_update.handle()
-async def _(event: OneBotV11GroupMessageEvent, args: dict = RegexDict(), reply: Reply = Reply):
+async def _(event: OneBotV11GroupMessageEvent, args: dict = RegexDict(), reply: Reply = reply):
     name = args.get("name", "")
     sign = args.get("sign")
     num = int(args.get("num", 0))
@@ -261,7 +261,7 @@ async def _(event: OneBotV11GroupMessageEvent, args: dict = RegexDict(), reply: 
 matcher_hider_update = on_regex(r"^[.。](?P<name>\S{1,2})(?P<sign>[+-])?(?P<num>\d+)$", priority=10, block=True)
 
 @matcher_hider_update.handle()
-async def _(event: OneBotV11GroupMessageEvent, args: dict = RegexDict(), reply: Reply = Reply):
+async def _(event: OneBotV11GroupMessageEvent, args: dict = RegexDict(), reply: Reply = reply):
     name = args.get("name", "")
     sign = args.get("sign")
     num = int(args.get("num", 0))
@@ -287,7 +287,7 @@ async def _(event: OneBotV11GroupMessageEvent, args: dict = RegexDict(), reply: 
 matcher_list = on_regex(r"^/j$", priority=10, block=True)
 
 @matcher_list.handle()
-async def _(event: OneBotV11GroupMessageEvent, reply: Reply = Reply):
+async def _(event: OneBotV11GroupMessageEvent, reply: Reply = reply):
     manifest = load_json(data_dir / "manifest.json")
     data_id = manifest.get(str(event.group_id))
     if not data_id:
