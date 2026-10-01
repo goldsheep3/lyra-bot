@@ -304,6 +304,7 @@ async def _(event: OneBotV11GroupMessageEvent, reply: Reply = Reply):
 
     today_str = now_local().date().isoformat()
     HIDER_INDENT = " "*4
+    prefix_text = await reply("status.prefix", city_id=data_id) if data_id else ''
     messages = []
 
     for name_key, store_info in info.items():
@@ -311,8 +312,7 @@ async def _(event: OneBotV11GroupMessageEvent, reply: Reply = Reply):
         store_name = store_info.get("name", name_key)
 
         store_kadou = kadou.get(store_id, {"num": 0, "time": ""})
-        prefix_text = await reply("status.prefix", city_id=data_id) if data_id else ''
-        line = await format_status(reply, store_name, store_kadou, today_str, prefix=prefix_text)
+        line = await format_status(reply, store_name, store_kadou, today_str)
 
         # Hider（仅当群有 hider 权限时显示）
         hider_ctx = get_store_context(event, name_key, is_hider=True)
@@ -327,4 +327,7 @@ async def _(event: OneBotV11GroupMessageEvent, reply: Reply = Reply):
         messages.append(line)
 
     if messages:
-        await matcher_list.finish("\n".join(messages))
+        output = "\n".join(messages)
+        if prefix_text:
+            output = prefix_text + "\n" + output
+        await matcher_list.finish(output)
