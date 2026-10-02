@@ -230,7 +230,7 @@ async def _(event: OneBotV11GroupMessageEvent, args: dict = RegexDict(), reply: 
 
 # ================= Matcher 2: 普通更新 (同步 Hider) =================
 
-matcher_update = on_regex(r"^(?P<name>[^\d\s]{1,2})(?P<sign>[+-])?(?P<num>\d+)$", priority=10, block=True)
+matcher_update = on_regex(r"^(?P<name>[^\d\s+-]{1,2})(?P<sign>[+-])?(?P<num>\d+)$", priority=10, block=True)
 
 @matcher_update.handle()
 async def _(event: OneBotV11GroupMessageEvent, args: dict = RegexDict(), reply: Reply = reply):
@@ -258,7 +258,7 @@ async def _(event: OneBotV11GroupMessageEvent, args: dict = RegexDict(), reply: 
 
 # ================= Matcher 3: Hider 独立更新 =================
 
-matcher_hider_update = on_regex(r"^[.。](?P<name>[^\d\s]{1,2})(?P<sign>[+-])?(?P<num>\d+)$", priority=10, block=True)
+matcher_hider_update = on_regex(r"^[.。](?P<name>[^\d\s+-]{1,2})(?P<sign>[+-])?(?P<num>\d+)$", priority=10, block=True)
 
 @matcher_hider_update.handle()
 async def _(event: OneBotV11GroupMessageEvent, args: dict = RegexDict(), reply: Reply = reply):
