@@ -27,7 +27,7 @@ from . import i18n_data, i18n, reply
 
 
 # 下载谱面
-adx_download = on_regex(r"^下载[铺谱]面\s*(\d*)\s*(.*)$", priority=10, block=True)
+adx_download = on_regex(r"^下载[铺谱]面\s*(?:[iI][dD])?\s*(\d*)\s*(.*)$", priority=10, block=True)
 # 群文件上传 notice，用于处理 upload_group_file 超时但实际成功的场景
 group_upload_notice = on_notice(priority=1, block=False, rule=(rule_is_group and rule_is_self))
 
