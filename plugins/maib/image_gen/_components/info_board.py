@@ -33,7 +33,8 @@ class MaiChartInfoBoard:
     ow = 4
     
     @classmethod
-    def _alias_badge(cls, aliases: list[str], width: float, ms: MS = MS()) -> Image.Image:
+    def _alias_badge(cls, aliases: list[str], width: float,
+                     *, light_alias: Optional[str] = None, ms: MS = MS()) -> Image.Image:
         if not aliases:
             return Image.new("RGBA", (0, 0), TRANSPARENT)
         size = 4
@@ -56,15 +57,21 @@ class MaiChartInfoBoard:
         drawer = Drawer(img, ms=ms)
         drawer.text(0, 0, text="这首歌的别名包括：", tds=TextDrawStyle(fill=WHITE, anchor="la", font=font))
         for alias in alias_list:
-            drawer.text(x=alias.x, y=alias.line * size * 1.5, text=alias.alias,
-                        tds=TextDrawStyle(fill=WHITE, anchor="la", font=font))
+            alias_text = alias.alias
+            if alias_text == light_alias:
+                drawer.text(x=alias.x, y=alias.line * size * 1.5, text=alias_text,
+                            tds=TextDrawStyle(fill="#FFFF00", anchor="la", font=font))
+            else:
+                drawer.text(x=alias.x, y=alias.line * size * 1.5, text=alias_text,
+                            tds=TextDrawStyle(fill=WHITE, anchor="la", font=font))
             line_y = (alias.line + 0.8) * size * 1.6
             drawer.line(x0=alias.x, y0=line_y, x1=alias.x + alias.width, y1=line_y, fill=WHITE, width=0.25)
 
         return img
 
     @classmethod
-    def _metadata(cls, maidata: MaiData, ms: MS = MS(), ui_code: UICode = UICode.JP) -> Image.Image:
+    def _metadata(cls, maidata: MaiData, *, light_alias: Optional[str] = None,
+                  ms: MS = MS(), ui_code: UICode = UICode.JP) -> Image.Image:
         width = cls.width
 
         image_size = 44
@@ -76,8 +83,8 @@ class MaiChartInfoBoard:
         cap_width = half_size - margin
         cap_height = image_size*3.4/54 * 1.1
         alias_top = 36
-        alias_img = cls._alias_badge(aliases=[alias.alias for alias in maidata.aliases], ms=ms, 
-                                     width=width - image_size - image_outline_width * 2 - margin)
+        alias_img = cls._alias_badge(aliases=[alias.alias for alias in maidata.aliases], light_alias=light_alias,
+                                     ms=ms, width=width - image_size - image_outline_width * 2 - margin)
         
         height = max(
             cover_y + cap_height + cap_margin,  # 曲绘 + ID/BPM
@@ -239,11 +246,12 @@ class MaiChartInfoBoard:
         return img
 
     @classmethod
-    def board(cls, maidata: MaiData, maiuser: Optional[MaiUser] = None, ms: MS = MS()) -> Image.Image:
+    def board(cls, maidata: MaiData, maiuser: Optional[MaiUser] = None, *, light_alias: Optional[str] = None,
+              ms: MS = MS()) -> Image.Image:
         width = cls.width
         ow = cls.ow
         
-        metadata_img = cls._metadata(maidata=maidata, ms=ms)
+        metadata_img = cls._metadata(maidata=maidata, ms=ms, light_alias=light_alias)
         chart_jp_img = cls._charts(
             charts=list(maidata.charts.values()), server=Server.JP, version=maidata.version, cabinet=maidata.cabinet,
             maiuser=maiuser, ms=ms)
