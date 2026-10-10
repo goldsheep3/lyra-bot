@@ -82,7 +82,8 @@ async def mai_info_handled(event: Event, matcher: Matcher, groups: tuple = Regex
     # 2. 同步水鱼数据 (仅当 target_mu 存在且 scope 为 CN 或 ALL 时)
     if target_mu and scope in [ServerScope.CN, ServerScope.ALL]:
         try:
-            target_mu, report = await sync.check_sync_cn(target_mu, ignore_cache_expire=True)
+            # info：命中缓存则跳过强制同步（b50/sytb 保持强制刷新）
+            target_mu, report = await sync.check_sync_cn(target_mu, ignore_cache_expire=False)
             # 核心修改：只有当有更新时才发送提醒，否则静默
             if report and report.has_changes:
                 if is_querying_self:
