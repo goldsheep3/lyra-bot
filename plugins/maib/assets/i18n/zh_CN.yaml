@@ -65,7 +65,7 @@ b50:
   all_not_supported: "混合成绩图还在开发中，暂时无法使用哦qwq"
   qq_parsing_failed: "小梨没找到合适的查询目标……？请联系监护人确认"
   drawing: "小梨正在绘制 b50 图片，请稍候……"
-  other_updated_drawing: "小梨发现查询对象的水鱼数据有更新，已经为TA更新到了最新！正在尝试绘制 b50 图片，请稍候……"
+  other_updated: "小梨发现查询对象的水鱼数据有更新，已经为TA更新到了最新！"
   no_jp_data: "你还没有日服数据！可以通过 lyra-sync 上传成绩后再试哦！"
   no_cn_data: "你还没有国服数据！可以上传水鱼成绩后再试哦！"
 

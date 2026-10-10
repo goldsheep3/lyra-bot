@@ -215,7 +215,7 @@ async def b50_handled(event: Event, matcher: Matcher, groups: dict = RegexDict()
                 else:
                     # 查询他人：简化提示
                     await build_msg(matcher, event, [
-                        ("at", (sender_username, sender_user_id)), ("text", reply("b50.other_updated_drawing"))
+                        ("at", (sender_username, sender_user_id)), ("text", reply("b50.other_updated")), ("text", reply("b50.drawing"))
                     ], tag='send')
               
             else:

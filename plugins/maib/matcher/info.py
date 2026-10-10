@@ -96,9 +96,9 @@ async def mai_info_handled(event: Event, matcher: Matcher, groups: tuple = Regex
                         sync_payload.append(("image", image_gen.get_image_bytes(diff_img)))
                     await build_msg(matcher, event, sync_payload, tag='send')
                 else:
-                    # 查询他人：简化提示 (此处复用了 b50 的 key，如有需要可改为 info.other_updated)
+                    # 查询他人：简化提示
                     await build_msg(matcher, event, [
-                        ("at", (sender_username, sender_user_id)), ("text", reply("b50.other_updated_drawing"))
+                        ("at", (sender_username, sender_user_id)), ("text", reply("b50.other_updated"))
                     ], tag='send')
         except Exception as e:
             logger.warning(f"强制刷新水鱼数据失败: {e}")
