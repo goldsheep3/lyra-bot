@@ -166,8 +166,15 @@ def build_diff_report(
     detail_text = "\n".join(detail_lines)
     if report.has_changes:
         from ..image_gen import draw_simple_board, FontManager, FontCode
+        from ..image_gen.utils import MS
 
-        detail_image = draw_simple_board(detail_text, font=FontManager.font(FontCode.SmileySans, size=16))
+        # 字号与底图必须同一套 ms：字体按 ms.x(mpx) 生成，画布由函数内部按 ms 换算
+        ms = MS()
+        detail_image = draw_simple_board(
+            detail_text,
+            font=FontManager.font(FontCode.SmileySans, size=ms.x(16)),
+            ms=ms
+        )
     else:
         detail_image = None
 

@@ -200,7 +200,7 @@ def sync_to_hider(event: OneBotV11GroupMessageEvent, name: str, current_num: int
 
 # ================= Matcher 1: 查询单店 (含 Hider) =================
 
-matcher_query = on_regex(r"^(?P<name>\S{1,2})几$", priority=10, block=True)
+matcher_query = on_regex(r"^(?P<name>\S{1,2})[几j]$", priority=10, block=True)
 
 @matcher_query.handle()
 async def _(event: OneBotV11GroupMessageEvent, args: dict = RegexDict(), reply: Reply = reply):
