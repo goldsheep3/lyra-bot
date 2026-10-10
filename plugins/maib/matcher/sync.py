@@ -139,7 +139,12 @@ async def check_sync_cn(qq_user: int | MaiUser, ignore_cache_expire: bool = Fals
     # 2. 缓存有效性检查
     if not ignore_cache_expire:
         cache_ttl = timedelta(hours=config.DATA_PROVIDER_CACHE_EXPIRATION)
-        if datetime.now() - maiuser.cn_update_time < cache_ttl:
+        # 兼容 naive/aware 时间戳：cn_update_time 在 PostgreSQL(timestamptz) 下是 aware、
+        # 在 SQLite 下是 naive，直接与 datetime.now() 相减会因类型不一致抛 TypeError，
+        # 故按 last_update 是否带时区选取同类型的 now。
+        last_update = maiuser.cn_update_time
+        now = datetime.now(last_update.tzinfo) if last_update.tzinfo is not None else datetime.now()
+        if now - last_update < cache_ttl:
             # 缓存未过期，直接返回
             return maiuser, None
     
