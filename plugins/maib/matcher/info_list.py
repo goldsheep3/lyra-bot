@@ -2,7 +2,7 @@ import re
 from typing import Optional, Any, Sequence
 
 from nonebot import logger, on_regex
-from nonebot.params import RegexGroup, RegexDict
+from nonebot.params import RegexDict
 from nonebot.internal.matcher import Matcher
 from nonebot.adapters import Event
 
@@ -13,7 +13,7 @@ from nonebot.adapters.telegram import (Event as TGEvent,)
 
 from .. import config, utils, services, image_gen, network
 from ..utils.report import build_diff_report
-from ..utils.enums import UICode,  ServerScope
+from ..utils.enums import UICode, ServerScope
 from ..utils.map import Versions
 from . import i18n_data, i18n, reply, sync
 from .context import get_args
@@ -42,7 +42,6 @@ SCORELIST_PATTERN_GENRE = re.compile(
     r"^(.+?)",
     re.VERBOSE
 )
-
 
 
 # --- matcher ---
@@ -193,41 +192,41 @@ async def b50_handled(event: Event, matcher: Matcher, groups: dict = RegexDict()
         await matcher.finish(reply("b50.qq_parsing_failed"))
         return
     try:
-        target_maiuser = (await services.check_mu(target_qq)).to_utils()
+        target_mu = await services.check_mu(target_qq)
     except ValueError as e:
         await matcher.finish(str(e))
         return
-
-    payload: list[tuple[str, Any]] = [("at", (sender_username, sender_user_id)), ("text", reply("b50.drawing"))]
-    # extra. 查询内容含国服，强制刷新水鱼数据
+    
     if scope in [ServerScope.CN, ServerScope.ALL]:
         try:
-            report = await sync.get_sy_and_upload(target_qq)
-            if report.has_changes:
-                # 有变化，考虑查询者是否在查询自己，展示不同的报告细节
+            target_mu, report = await sync.check_sync_cn(target_mu, ignore_cache_expire=True)
+            if report and report.has_changes:
                 if is_querying_self:
+                    # 查询自己：展示详细的同步报告
                     summary_text, diff_img = build_diff_report(report)
                     sync_payload: list[tuple[str, Any]] = [
-                        ("text", f"已同步水鱼数据！以下是水鱼数据的同步详情：\n\n{summary_text}")
+                        ("at", (sender_username, sender_user_id)),
+                        ("text", f" 已同步水鱼数据！以下是水鱼数据的同步详情：\n\n{summary_text}")
                     ]
                     if diff_img:
                         sync_payload.append(("image", image_gen.get_image_bytes(diff_img)))
+                    sync_payload += [("text", reply("b50.drawing"))]
                     await build_msg(matcher, event, sync_payload, tag='send')
-                    await build_msg(matcher, event, payload, tag='send')
                 else:
                     # 查询他人：简化提示
-                    payload[1] = ("text", reply("b50.other_updated_drawing"))
-                    await build_msg(matcher, event, payload, tag='send')
+                    await build_msg(matcher, event, [
+                        ("at", (sender_username, sender_user_id)), ("text", reply("b50.other_updated_drawing"))
+                    ], tag='send')
+              
             else:
-                await build_msg(matcher, event, payload, tag='send')
+                await build_msg(matcher, event, [
+                    ("at", (sender_username, sender_user_id)), ("text", reply("b50.drawing"))
+                ], tag='send')
+                
         except Exception as e:
             logger.warning(f"强制刷新水鱼数据失败: {e}")
-        
-        # 由于进行了更新，刷新 MaiUser 数据
-        target_maiuser = (await services.check_mu(target_qq)).to_utils()
-    else:
-        await build_msg(matcher, event, payload, tag='send')
 
+    target_maiuser = target_mu.to_utils()
 
     # 确定版本并获取 achs 数据
     if scope == ServerScope.ALL:

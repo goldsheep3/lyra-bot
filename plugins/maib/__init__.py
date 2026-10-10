@@ -10,6 +10,10 @@ class Config(BaseModel):
     LOW_MEMORY_TIP: str | None = None
     # Diving-Fish Developer Token: 水鱼开发者 token，若不设置则无法使用水鱼的查分服务
     DIVING_FISH_DEVELOPER_TOKEN: str | None = None
+    DIVING_FISH_CLIENT_ID: str | None = None
+    DIVING_FISH_CLIENT_SECRET: str | None = None
+    # Data Provider Cache Expiration: 在线数据源缓存过期时间，单位为小时，默认 24 小时
+    DATA_PROVIDER_CACHE_EXPIRATION: float = 24
     # Cache Expiration: 缓存过期时间，单位为小时，默认 72 小时
     # 替代 [LYRA_FETCH_SKIP]
     CACHE_EXPIRATION: int = 72

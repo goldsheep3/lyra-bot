@@ -1,6 +1,7 @@
 import hashlib
 from pathlib import Path
 from typing import Optional, Any, cast
+from datetime import datetime, timedelta
 
 import aiofiles
 import orjson
@@ -17,6 +18,7 @@ from nonebot.adapters.telegram import Bot as TGBot
 from nonebot.adapters.telegram.event import PrivateMessageEvent as TGPrivateMessageEvent
 
 from .. import config, utils, services, image_gen, network
+from ..services.models import MaiUser
 from ..utils.report import MaiChartAchDiffReport, build_diff_report
 from ..utils.sync import build_legacy_lyra_ach_list, build_lyra_records_v3, parse_lyra_maisync_data
 from . import i18n_data, i18n, reply, rule_is_private
@@ -125,6 +127,31 @@ async def get_sy_and_upload(user_id: int) -> MaiChartAchDiffReport:
 
     await services.set_last_sy_hash(user_id, sy_hash)
     return report
+
+
+async def check_sync_cn(qq_user: int | MaiUser, ignore_cache_expire: bool = False) -> tuple[MaiUser, MaiChartAchDiffReport | None]:
+    # 1. 统一获取 MaiUser 对象
+    if isinstance(qq_user, int):
+        maiuser = await services.check_mu(qq_user)
+    else:
+        maiuser = qq_user
+    
+    # 2. 缓存有效性检查
+    if not ignore_cache_expire:
+        cache_ttl = timedelta(hours=config.DATA_PROVIDER_CACHE_EXPIRATION)
+        if datetime.now() - maiuser.cn_update_time < cache_ttl:
+            # 缓存未过期，直接返回
+            return maiuser, None
+    
+    # 3. 执行同步并获取差异报告
+    report = await get_sy_and_upload(maiuser.user_id)
+    
+    # 4. 若有变更，重新拉取最新的用户信息
+    if report.has_changes:
+        maiuser = await services.check_mu(maiuser.user_id)
+    
+    return maiuser, report
+
 
 @sytb.handle()
 async def sytb_handled(event: Event, matcher: Matcher, _i18n = i18n):
