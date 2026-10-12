@@ -3,13 +3,14 @@ import time
 from .. import services
 from ..utils.constants import ASSETS_PATH
 
-from nonebot import on_regex, on_message, on_notice
+from nonebot import on_regex
 from nonebot.params import RegexGroup
 from nonebot.internal.matcher import Matcher
 from nonebot.adapters import Event
 
 # -- platform adapter --
 from nonebot.adapters.onebot.v11 import (Event as OneBotV11Event,
+                                         MessageEvent as OneBotV11MessageEvent,
                                          PrivateMessageEvent as OneBotV11PrivateMessageEvent,
                                          GroupMessageEvent as OneBotV11GroupMessageEvent)
 from nonebot.adapters.telegram import Event as TGEvent
@@ -38,7 +39,7 @@ def rule_is_private(event: Event) -> bool:
         TGPrivateMessageEvent
     ))
 
-def rule_is_self(event: OneBotV11Event) -> bool:
+def rule_is_self(event: OneBotV11MessageEvent) -> bool:
     return event.get_user_id() == str(event.self_id)
 
 
