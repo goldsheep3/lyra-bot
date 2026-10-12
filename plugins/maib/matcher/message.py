@@ -1,5 +1,7 @@
 from typing import Any, Literal
+from time import perf_counter
 
+from nonebot import logger
 from nonebot.adapters import Event
 from nonebot.internal.matcher import Matcher
 
@@ -29,7 +31,10 @@ async def build_msg(
     tag: MessageAction = "send",
 ) -> None:
     """Build and send adapter-specific messages from a shared payload."""
+    started_at = perf_counter()
+    image_count = sum(type_ == "image" for type_, _ in msg_segments)
     if isinstance(event, OneBotV11Event):
+        build_started_at = perf_counter()
         onebotv11_msg = OneBotV11Message()
         for type_, content in msg_segments:
             if type_ == "text":
@@ -44,10 +49,23 @@ async def build_msg(
 
         if not onebotv11_msg:
             return
+        logger.info(
+            f"maib message perf: build adapter=onebot_v11 tag={tag} segments={len(msg_segments)} "
+            f"images={image_count} elapsed={perf_counter() - build_started_at:.3f}s"
+        )
         func = matcher.send if tag == "send" else matcher.finish
-        await func(onebotv11_msg)
+        send_started_at = perf_counter()
+        try:
+            await func(onebotv11_msg)
+        finally:
+            logger.info(
+                f"maib message perf: send adapter=onebot_v11 tag={tag} segments={len(msg_segments)} "
+                f"images={image_count} elapsed={perf_counter() - send_started_at:.3f}s "
+                f"total={perf_counter() - started_at:.3f}s"
+            )
 
     elif isinstance(event, TGEvent):
+        build_started_at = perf_counter()
         tg_msg = TGMessage()
         for type_, content in msg_segments:
             if type_ == "text":
@@ -65,5 +83,17 @@ async def build_msg(
 
         if not tg_msg:
             return
+        logger.info(
+            f"maib message perf: build adapter=telegram tag={tag} segments={len(msg_segments)} "
+            f"images={image_count} elapsed={perf_counter() - build_started_at:.3f}s"
+        )
         func = matcher.send if tag == "send" else matcher.finish
-        await func(tg_msg)
+        send_started_at = perf_counter()
+        try:
+            await func(tg_msg)
+        finally:
+            logger.info(
+                f"maib message perf: send adapter=telegram tag={tag} segments={len(msg_segments)} "
+                f"images={image_count} elapsed={perf_counter() - send_started_at:.3f}s "
+                f"total={perf_counter() - started_at:.3f}s"
+            )

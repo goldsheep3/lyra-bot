@@ -1,4 +1,5 @@
 from typing import Optional, Any
+from time import perf_counter
 
 from nonebot import on_regex, logger
 from nonebot.params import RegexGroup
@@ -23,6 +24,7 @@ mai_what_song = on_regex(r"^(.+?)是什么歌([?？]?)$", priority=10, block=Tru
 @mai_info.handle()
 async def mai_info_handled(event: Event, matcher: Matcher, groups: tuple = RegexGroup(), _i18n = i18n):
     """处理命令: id11451 / info11451"""
+    started_at = perf_counter()
     i18n_data.set(_i18n)
     _, short_id, args_text = groups
     
@@ -74,7 +76,9 @@ async def mai_info_handled(event: Event, matcher: Matcher, groups: tuple = Regex
     target_mu = None
     if target_qq is not None:
         try:
+            check_mu_started_at = perf_counter()
             target_mu = await services.check_mu(target_qq)
+            logger.info(f"maib info perf: check_mu shortid={shortid} elapsed={perf_counter() - check_mu_started_at:.3f}s")
         except ValueError:
             # 获取 MaiUser 失败（如未绑定或数据异常），降级为无成绩模式
             target_mu = None
@@ -83,7 +87,9 @@ async def mai_info_handled(event: Event, matcher: Matcher, groups: tuple = Regex
     if target_mu and scope in [ServerScope.CN, ServerScope.ALL]:
         try:
             # info：命中缓存则跳过强制同步（b50/sytb 保持强制刷新）
+            sync_started_at = perf_counter()
             target_mu, report = await sync.check_sync_cn(target_mu, ignore_cache_expire=False)
+            logger.info(f"maib info perf: sync CN shortid={shortid} elapsed={perf_counter() - sync_started_at:.3f}s")
             # 核心修改：只有当有更新时才发送提醒，否则静默
             if report and report.has_changes:
                 if is_querying_self:
@@ -105,17 +111,27 @@ async def mai_info_handled(event: Event, matcher: Matcher, groups: tuple = Regex
             logger.warning(f"强制刷新水鱼数据失败: {e}")
 
     # 3. 转化为 maiuser (使用同步后最新的 target_mu)
+    maiuser_started_at = perf_counter()
     target_maiuser = target_mu.to_utils() if target_mu else None
+    logger.info(f"maib info perf: maiuser conversion shortid={shortid} elapsed={perf_counter() - maiuser_started_at:.3f}s")
 
     # 查询乐曲信息
+    maidata_query_started_at = perf_counter()
     mdt: Optional[services.MaiData] = await services.get_mdt.id(shortid, target_qq)
+    logger.info(f"maib info perf: maidata query shortid={shortid} elapsed={perf_counter() - maidata_query_started_at:.3f}s")
     if mdt is None:
         await matcher.finish(reply("info.maidata_not_found", short_id=shortid))
         return
+    maidata_convert_started_at = perf_counter()
     maidata = mdt.to_utils(achs_user_id=target_qq)
+    logger.info(f"maib info perf: maidata conversion shortid={shortid} elapsed={perf_counter() - maidata_convert_started_at:.3f}s")
 
+    draw_started_at = perf_counter()
     info_box = image_gen.draw_info_board(maidata, maiuser=target_maiuser)
+    logger.info(f"maib info perf: draw info board shortid={shortid} elapsed={perf_counter() - draw_started_at:.3f}s")
+    encode_started_at = perf_counter()
     info_box_bytes = image_gen.get_image_bytes(info_box)
+    logger.info(f"maib info perf: encode info board shortid={shortid} elapsed={perf_counter() - encode_started_at:.3f}s")
     
     payload = [
         ("text", f"{mdt.shortid}. {mdt.title}"),
@@ -126,19 +142,23 @@ async def mai_info_handled(event: Event, matcher: Matcher, groups: tuple = Regex
     if target_qq is None or target_maiuser is None:
         payload.append(("text", reply("link.get_more_info")))
         
+    logger.info(f"maib info perf: before send shortid={shortid} total={perf_counter() - started_at:.3f}s")
     await build_msg(matcher, event, payload, tag='finish')
 
 @mai_what_song.handle()
 async def mai_what_song_handled(event: Event, matcher: Matcher, groups: tuple = RegexGroup(), _i18n = i18n):
     """处理命令: xxx是什么歌"""
+    started_at = perf_counter()
     i18n_data.set(_i18n)
     keyword, all_tag = groups
     blur_search = bool(all_tag and all_tag.strip() in ['?', '？'])
     keyword = keyword.strip(' ')
 
     try:
+        maiuser_started_at = perf_counter()
         maiuser = await get_maiuser(event)
         qq = int(maiuser.user_id)
+        logger.info(f"maib info perf: what-song get maiuser keyword={keyword!r} elapsed={perf_counter() - maiuser_started_at:.3f}s")
     except NoLinkQQError as e:
         # 未绑定 QQ
         maiuser = None
@@ -149,7 +169,9 @@ async def mai_what_song_handled(event: Event, matcher: Matcher, groups: tuple = 
 
     try:
         # 搜索歌曲
+        search_started_at = perf_counter()
         mdt_list = list(await services.get_mdt.title(keyword, achs_user_id=qq, way="blur" if blur_search else "smart"))
+        logger.info(f"maib info perf: what-song search keyword={keyword!r} results={len(mdt_list)} elapsed={perf_counter() - search_started_at:.3f}s")
     except ValueError as exc:
         await matcher.finish(str(exc))
         return
@@ -172,11 +194,21 @@ async def mai_what_song_handled(event: Event, matcher: Matcher, groups: tuple = 
 
     def generate_single_info_box(mdt, matched_alias: str | None = None) -> bytes:
         """生成单首乐曲的 info box 图片字节，返回 (图片字节, 别名匹配提示)"""
+        started_at = perf_counter()
+        convert_started_at = perf_counter()
         maidata = mdt.to_utils(achs_user_id=qq)
+        logger.info(f"maib info perf: what-song maidata conversion shortid={mdt.shortid} elapsed={perf_counter() - convert_started_at:.3f}s")
         if matched_alias:
             maidata._matched_alias = matched_alias
+        draw_started_at = perf_counter()
         info_box = image_gen.draw_info_board(maidata, maiuser=maiuser, light_alias=matched_alias)
+        logger.info(f"maib info perf: what-song draw info board shortid={mdt.shortid} elapsed={perf_counter() - draw_started_at:.3f}s")
+        encode_started_at = perf_counter()
         info_bytes = image_gen.get_image_bytes(info_box)
+        logger.info(
+            f"maib info perf: what-song encode info board shortid={mdt.shortid} bytes={len(info_bytes)} "
+            f"elapsed={perf_counter() - encode_started_at:.3f}s total={perf_counter() - started_at:.3f}s"
+        )
         return info_bytes
 
     # 输出结果
@@ -217,4 +249,10 @@ async def mai_what_song_handled(event: Event, matcher: Matcher, groups: tuple = 
         return
 
     # 4. 统一发送消息
+    image_count = sum(type_ == "image" for type_, _ in payload)
+    image_bytes = sum(len(content) for type_, content in payload if type_ == "image")
+    logger.info(
+        f"maib info perf: what-song before send keyword={keyword!r} results={len(mdt_list)} "
+        f"images={image_count} bytes={image_bytes} total={perf_counter() - started_at:.3f}s"
+    )
     await build_msg(matcher, event, payload, tag='finish')

@@ -302,17 +302,31 @@ class MaiChartInfoBoard:
         assembly_started_at = perf_counter()
         height = metadata_img.height + max(chart_jp_img.height, chart_cn_img.height)    
         total_height_px = height + ms.x(ow*1.5) + copyright_img.height
+        canvas_started_at = perf_counter()
         img = Image.new("RGBA", (total_width_px, total_height_px), TRANSPARENT)
+        logger.info(f"maib image perf: info board canvas shortid={maidata.shortid} size={img.size} elapsed={perf_counter() - canvas_started_at:.3f}s")
         
+        background_started_at = perf_counter()
         bg_img = ImageManager.background(size=(total_width_px, total_height_px))
+        logger.info(f"maib image perf: info board background load shortid={maidata.shortid} elapsed={perf_counter() - background_started_at:.3f}s")
         if bg_img:
+            background_paste_started_at = perf_counter()
             img.paste(bg_img, (0, 0))
+            logger.info(f"maib image perf: info board background paste shortid={maidata.shortid} elapsed={perf_counter() - background_paste_started_at:.3f}s")
+        metadata_paste_started_at = perf_counter()
         img.paste(metadata_img, ms.xy(ow, ow), metadata_img)
+        logger.info(f"maib image perf: info board metadata paste shortid={maidata.shortid} elapsed={perf_counter() - metadata_paste_started_at:.3f}s")
+        jp_paste_started_at = perf_counter()
         img.paste(chart_jp_img, (ms.x(ow), metadata_img.height + ms.x(ow/2)), chart_jp_img)
+        logger.info(f"maib image perf: info board JP paste shortid={maidata.shortid} elapsed={perf_counter() - jp_paste_started_at:.3f}s")
+        cn_paste_started_at = perf_counter()
         img.paste(chart_cn_img, (ms.x(ow) + chart_jp_img.width, metadata_img.height + ms.x(ow/2)), chart_cn_img)
+        logger.info(f"maib image perf: info board CN paste shortid={maidata.shortid} elapsed={perf_counter() - cn_paste_started_at:.3f}s")
+        copyright_paste_started_at = perf_counter()
         img.paste(copyright_img,
                   (0, metadata_img.height + max(chart_jp_img.height, chart_cn_img.height) + ms.x(ow*1.5)),
                   copyright_img)
+        logger.info(f"maib image perf: info board copyright paste shortid={maidata.shortid} elapsed={perf_counter() - copyright_paste_started_at:.3f}s")
         logger.info(
             f"maib image perf: info board assembly shortid={maidata.shortid} size={img.size} "
             f"elapsed={perf_counter() - assembly_started_at:.3f}s"
