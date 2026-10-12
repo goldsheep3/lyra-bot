@@ -30,7 +30,7 @@ class MS:
     # {multiple: {val_int: scaled_value, ...}, ...}
     _cache: dict[float, dict[float, int]] = {}
     
-    def __init__(self, multiple: float = 10.0):
+    def __init__(self, multiple: float = 6.0):
         self.multiple = round(multiple, 2)
 
     def x(self, mpx: float) -> int:
@@ -63,6 +63,11 @@ class MS:
 
     def __hash__(self): 
         return hash(self.multiple)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, MS):
+            return NotImplemented
+        return self.multiple == other.multiple
 
     def __str__(self): 
         return f"MS({self.multiple:.2f})"
@@ -245,7 +250,7 @@ class ImageManager:
     @classmethod
     def background(cls, name: str = "bakamai.png", size: tuple[int, int] = (0, 0), **kwargs) -> Optional[Image.Image]:
         """获取背景图"""
-        return cls._get_image(cls._img_path / name, size, **kwargs)
+        return cls._get_image(cls._img_path / name, size, **kwargs, resize_filter=Image.Resampling.BILINEAR)
 
     @classmethod
     def version_image(cls, version: int, size: tuple[int, int] = (0, 0), **kwargs) -> Optional[Image.Image]:
