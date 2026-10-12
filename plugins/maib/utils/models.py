@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import io
 from datetime import datetime
+from time import perf_counter
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -265,6 +266,7 @@ class MaiData:
         """
         上下文管理器：打开图片，使用后自动关闭底层资源。
         """
+        started_at = perf_counter()
         path_str = str(self.img_path)
         lower = path_str.lower()
         zip_pos = lower.find(".zip")
@@ -284,6 +286,10 @@ class MaiData:
                     
                     img = Image.open(buf)
                     stack.callback(img.close)
+                    logger.info(
+                        f"maib image perf: open cover source=zip shortid={self.shortid} size={img.size} "
+                        f"elapsed={perf_counter() - started_at:.3f}s"
+                    )
 
                 except Exception as exc:
                     stack.close()
@@ -305,6 +311,10 @@ class MaiData:
         try:
             img = Image.open(p)
             stack.callback(img.close)
+            logger.info(
+                f"maib image perf: open cover source=file shortid={self.shortid} size={img.size} "
+                f"elapsed={perf_counter() - started_at:.3f}s"
+            )
         except Exception as exc:
             stack.close()
             logger.error(f"Failed to open image file: {exc}")

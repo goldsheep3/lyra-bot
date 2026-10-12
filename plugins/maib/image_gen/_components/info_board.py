@@ -4,7 +4,9 @@ MaiChartInfo 看板构建器
 """
 from typing import Optional, Literal
 from dataclasses import dataclass
+from time import perf_counter
 
+from loguru import logger
 from PIL import Image
 
 from ...utils.models import MaiData, MaiUser, MaiChart, MaiChartAch
@@ -72,6 +74,7 @@ class MaiChartInfoBoard:
     @classmethod
     def _metadata(cls, maidata: MaiData, *, light_alias: Optional[str] = None,
                   ms: MS = MS(), ui_code: UICode = UICode.JP) -> Image.Image:
+        started_at = perf_counter()
         width = cls.width
 
         image_size = 44
@@ -94,6 +97,7 @@ class MaiChartInfoBoard:
         drawer = Drawer(img, ms=ms)
 
         # 曲绘
+        cover_started_at = perf_counter()
         with maidata.image() as cover_img:
             if cover_img is None:
                 cover_img_now = Image.new("RGB", ms.xy(image_size, image_size), color=GRAY)
@@ -105,6 +109,10 @@ class MaiChartInfoBoard:
             mask = Drawer.get_mask(w=image_size, h=image_size, radius=5, ms=ms)
             img.paste(cover_img_now, ms.xy(image_outline_width, image_outline_width), mask)
             mask.close()
+        logger.info(
+            f"maib image perf: info metadata cover shortid={maidata.shortid} "
+            f"elapsed={perf_counter() - cover_started_at:.3f}s"
+        )
         drawer.rounded_rect(image_outline_width, image_outline_width, image_size, image_size,
                             radius=5, fill=None, outline=GRAY, width=image_outline_width, closed_interval=False)
         
@@ -156,6 +164,10 @@ class MaiChartInfoBoard:
         img.paste(alias_img, ms.xy(dx, alias_top), alias_img)
         alias_img.close()
         
+        logger.info(
+            f"maib image perf: info metadata shortid={maidata.shortid} size={img.size} "
+            f"elapsed={perf_counter() - started_at:.3f}s"
+        )
         return img
 
     _charts_margin = 2
@@ -180,13 +192,24 @@ class MaiChartInfoBoard:
         def generate():
             for chart in charts:
                 plus = chart.lv * 10 % 10 >= get_level_plus_line(version=version) if version else False
-                yield ChartBoxBadge.box(
+                chart_started_at = perf_counter()
+                chart_img = ChartBoxBadge.box(
                     chart=chart, cabinet=cabinet, server=server, plus=plus, floor_rating=floor_rating,
                     ms=ms, ui_code=ui_code
                 )
+                logger.info(
+                    f"maib image perf: info chart box shortid={chart.shortid} difficulty={chart.difficulty} "
+                    f"server={server} elapsed={perf_counter() - chart_started_at:.3f}s"
+                )
+                yield chart_img
         chart_box_w, chart_box_h = ChartBoxBadge.size()
+        grid_started_at = perf_counter()
         grid_img = image_grid_board(generate(), cols=1, gap_px=ms.x(margin/2), total_count=len(charts),
                                     box_size_px=ms.xy(chart_box_w, chart_box_h))
+        logger.info(
+            f"maib image perf: info chart grid server={server} charts={len(charts)} "
+            f"elapsed={perf_counter() - grid_started_at:.3f}s"
+        )
         if grid_img is None:
             return Image.new("RGBA", (0, 0), TRANSPARENT)
 
@@ -243,26 +266,40 @@ class MaiChartInfoBoard:
         # 谱面列表粘贴
         img.paste(grid_img, ms.xy(x_margin, grid_y), grid_img)
     
+        logger.info(
+            f"maib image perf: info charts server={server} charts={len(charts)} size={img.size} "
+            f"elapsed={perf_counter() - grid_started_at:.3f}s"
+        )
         return img
 
     @classmethod
     def board(cls, maidata: MaiData, maiuser: Optional[MaiUser] = None, *, light_alias: Optional[str] = None,
               ms: MS = MS()) -> Image.Image:
+        started_at = perf_counter()
         width = cls.width
         ow = cls.ow
         
+        metadata_started_at = perf_counter()
         metadata_img = cls._metadata(maidata=maidata, ms=ms, light_alias=light_alias)
+        logger.info(f"maib image perf: info board metadata shortid={maidata.shortid} elapsed={perf_counter() - metadata_started_at:.3f}s")
+        chart_jp_started_at = perf_counter()
         chart_jp_img = cls._charts(
             charts=list(maidata.charts.values()), server=Server.JP, version=maidata.version, cabinet=maidata.cabinet,
             maiuser=maiuser, ms=ms)
+        logger.info(f"maib image perf: info board JP charts shortid={maidata.shortid} elapsed={perf_counter() - chart_jp_started_at:.3f}s")
+        chart_cn_started_at = perf_counter()
         chart_cn_img = cls._charts(
             charts=list(maidata.charts.values()), server=Server.CN, version=maidata.version_cn, cabinet=maidata.cabinet,
             maiuser=maiuser, ms=ms)
+        logger.info(f"maib image perf: info board CN charts shortid={maidata.shortid} elapsed={perf_counter() - chart_cn_started_at:.3f}s")
         
         total_width = width + ow*2
         total_width_px = ms.x(total_width)
+        copyright_started_at = perf_counter()
         copyright_img = CopyrightBadge.copyright_mpx(width_mpx=total_width, ms=ms)
+        logger.info(f"maib image perf: info board copyright shortid={maidata.shortid} elapsed={perf_counter() - copyright_started_at:.3f}s")
     
+        assembly_started_at = perf_counter()
         height = metadata_img.height + max(chart_jp_img.height, chart_cn_img.height)    
         total_height_px = height + ms.x(ow*1.5) + copyright_img.height
         img = Image.new("RGBA", (total_width_px, total_height_px), TRANSPARENT)
@@ -276,7 +313,15 @@ class MaiChartInfoBoard:
         img.paste(copyright_img,
                   (0, metadata_img.height + max(chart_jp_img.height, chart_cn_img.height) + ms.x(ow*1.5)),
                   copyright_img)
+        logger.info(
+            f"maib image perf: info board assembly shortid={maidata.shortid} size={img.size} "
+            f"elapsed={perf_counter() - assembly_started_at:.3f}s"
+        )
         
+        logger.info(
+            f"maib image perf: info board total shortid={maidata.shortid} size={img.size} "
+            f"elapsed={perf_counter() - started_at:.3f}s"
+        )
         return img
 
 draw_info_board = MaiChartInfoBoard.board

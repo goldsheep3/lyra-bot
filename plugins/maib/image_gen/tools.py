@@ -4,8 +4,10 @@ image_gen.tools
 """
 import io
 import bisect
+from time import perf_counter
 from typing import Optional, Iterable, Sequence
 from PIL import Image, ImageDraw, ImageFont
+from loguru import logger
 
 from .color import TRANSPARENT
 
@@ -165,6 +167,8 @@ def limit_text(text: str, font: ImageFont.FreeTypeFont, max_width: Optional[floa
 # --- PIL Image 转字节流 ---
 def get_image_bytes(img: Image.Image, format: str = "jpeg") -> bytes:
     """将 PIL Image 对象转换为字节流"""
+    started_at = perf_counter()
+    requested_format = format
     with io.BytesIO() as output:
         if format.lower() == "jpeg" and max(img.size) > 65500:
             format = "png"
@@ -176,7 +180,12 @@ def get_image_bytes(img: Image.Image, format: str = "jpeg") -> bytes:
             output.seek(0)
             output.truncate(0)
             img.save(output, format="png")
-        return output.getvalue()
+        result = output.getvalue()
+        logger.info(
+            f"maib image perf: encode requested_format={requested_format} output_format={format} "
+            f"size={img.size} bytes={len(result)} elapsed={perf_counter() - started_at:.3f}s"
+        )
+        return result
 
 # --- 圆角矩形切割函数 ---
 def rounded_image(img: Image.Image, size: tuple[int, int], outline_width: int, radius=4):

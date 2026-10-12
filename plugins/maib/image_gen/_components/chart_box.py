@@ -5,7 +5,9 @@ image_gen.components.chart_box
 from typing import Literal, Optional, cast
 from PIL import Image
 from functools import lru_cache
+from time import perf_counter
 
+from loguru import logger
 from ...utils import MaiChart
 from ...utils.enums import UICode, Server
 from ...utils.map import DifficultyID, AchievementMap
@@ -63,6 +65,7 @@ class ChartBoxBadge:
     @classmethod
     def _capsule(cls, chart: MaiChart, level: float, floor_rating: Optional[int], difficulty_style: DifficultyStyle,
                  server: Server = Server.JP, ms: MS = MS()):
+        started_at = perf_counter()
         w, h = 20, 3
         margin = 2/3
         count = 5
@@ -102,6 +105,10 @@ class ChartBoxBadge:
 
         window_size = 5 - i
         if window_size <= 0:
+            logger.info(
+                f"maib image perf: chart box capsule shortid={chart.shortid} difficulty={chart.difficulty} "
+                f"server={server} elapsed={perf_counter() - started_at:.3f}s"
+            )
             return img
         
         # 位置2~5 DXRating分数显示
@@ -122,6 +129,7 @@ class ChartBoxBadge:
 
         _maps: dict[str, tuple[Achievement, str]] = {}
 
+        rating_started_at = perf_counter()
         for r, achievement in _r_a_map.items():
             ra = chart.get_dxrating(server, ap_bonus=0, achievement=achievement)
             ra_delta = ""
@@ -133,6 +141,10 @@ class ChartBoxBadge:
 
             _maps[r] = (ra, ra_delta)
 
+        logger.info(
+            f"maib image perf: chart box dxrating shortid={chart.shortid} difficulty={chart.difficulty} "
+            f"server={server} ratings={len(_r_a_map)} elapsed={perf_counter() - rating_started_at:.3f}s"
+        )
         items = list(_maps.items())
         maps: dict[str, tuple[Achievement, str]] = {}
 
@@ -155,12 +167,17 @@ class ChartBoxBadge:
             drawer.text(w/2, y+h/2, content.replace('0', 'O'), tds=tds)
             i += 1
         
+        logger.info(
+            f"maib image perf: chart box capsule shortid={chart.shortid} difficulty={chart.difficulty} "
+            f"server={server} elapsed={perf_counter() - started_at:.3f}s"
+        )
         return img
 
     @classmethod
     def _box(cls, chart: MaiChart, cabinet: Literal['SD', 'DX'], server: Server, plus: bool,
              utage: Optional[Literal['utage', 'buddy']] = None, floor_rating: Optional[int] = None,
              *, ms: MS = MS(), ui_code: UICode = UICode.JP) -> Image.Image:
+        started_at = perf_counter()
         ow = cls.ow
         difficulty_style = get_difficulty_style(chart.difficulty, ui_code.is_cn_all)
         ach_server = server
@@ -205,7 +222,12 @@ class ChartBoxBadge:
             shadow=difficulty_style.title_bg, shadow_width=0.2,
         ))
         # 拟合定数 / 可获得的 DXRating
+        capsule_started_at = perf_counter()
         capsule_img = cls._capsule(chart, level, floor_rating, difficulty_style, server=ach_server, ms=ms)
+        logger.info(
+            f"maib image perf: chart box capsule compose shortid={chart.shortid} difficulty={chart.difficulty} "
+            f"server={server} elapsed={perf_counter() - capsule_started_at:.3f}s"
+        )
         img.alpha_composite(capsule_img, ms.xy(ow+97, ow+9))
         capsule_img.close()
 
@@ -216,6 +238,10 @@ class ChartBoxBadge:
         Drawer(final_img, ms=ms).rounded_rect(ow, ow, weight-ow, height-ow, radius=4, fill=None,
                                               outline=difficulty_style.frame, width=1, closed_interval=False)
 
+        logger.info(
+            f"maib image perf: chart box total shortid={chart.shortid} difficulty={chart.difficulty} "
+            f"server={server} size={final_img.size} elapsed={perf_counter() - started_at:.3f}s"
+        )
         return final_img
 
     @classmethod
