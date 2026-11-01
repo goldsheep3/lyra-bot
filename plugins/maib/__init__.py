@@ -35,6 +35,7 @@ try:
         # 在 __init__.py 中预导入，便于在其他文件直接 import
         require("nonebot_plugin_localstore")
         require("nonebot_plugin_datastore")
+        require("nonebot_plugin_locales")
 
     __plugin_meta__ = PluginMetadata(
         name="nonebot-plugin-performai",

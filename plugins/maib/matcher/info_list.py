@@ -15,7 +15,7 @@ from .. import config, utils, services, image_gen, network
 from ..utils.report import build_diff_report
 from ..utils.enums import UICode, ServerScope
 from ..utils.map import Versions
-from . import i18n_data, i18n, reply, sync
+from . import Reply, reply, sync
 from .context import get_args
 from .message import build_msg
 from ..services import get_mct_list
@@ -52,7 +52,7 @@ b50 = on_regex(r'^(?:b50|kkb)\s*(?P<args>.*)', priority=1, block=True)
 
 
 @scorelist.handle()
-async def scorelist_handled(event: Event, matcher: Matcher, groups: dict = RegexDict(), _i18n = i18n):
+async def scorelist_handled(event: Event, matcher: Matcher, groups: dict = RegexDict(), reply: Reply = reply):
     """处理命令: xxx完成表/xxx进度/xxx列表"""
     return  # 暂未实现，暂时忽略
     i18n_data.set(_i18n)
@@ -127,16 +127,14 @@ async def scorelist_handled(event: Event, matcher: Matcher, groups: dict = Regex
 
 
 @b50.handle()
-async def b50_handled(event: Event, matcher: Matcher, groups: dict = RegexDict(), _i18n = i18n):
+async def b50_handled(event: Event, matcher: Matcher, groups: dict = RegexDict(), reply: Reply = reply):
     """处理命令: xxxb50/xxxkkb xxx"""
-    i18n_data.set(_i18n)
-
     # 低内存模式，短路拦截
     if config.LOW_MEMORY_MODE:
         if config.LOW_MEMORY_TIP:
             await matcher.finish(config.LOW_MEMORY_TIP)
         if config.LOW_MEMORY_TIP is None:
-            await matcher.finish(reply("error.low_memory"))
+            await matcher.finish(await reply("error.low_memory"))
         return
 
     args_text = groups.get("args", "").strip()
@@ -147,7 +145,7 @@ async def b50_handled(event: Event, matcher: Matcher, groups: dict = RegexDict()
     scope: ServerScope = target_server or ServerScope.CN
 
     if scope == 'ALL':
-        await matcher.finish(reply("b50.all_not_supported"))
+        await matcher.finish(await reply("b50.all_not_supported"))
         return
 
     # 解析用户
@@ -189,7 +187,7 @@ async def b50_handled(event: Event, matcher: Matcher, groups: dict = RegexDict()
     is_querying_self = target_qq == sender_qq
     if target_qq is None:
         logger.warning(f"未能解析出目标 QQ，无法继续执行 b50 命令。平台：{type(event)}")
-        await matcher.finish(reply("b50.qq_parsing_failed"))
+        await matcher.finish(await reply("b50.qq_parsing_failed"))
         return
     try:
         target_mu = await services.check_mu(target_qq)
@@ -210,17 +208,17 @@ async def b50_handled(event: Event, matcher: Matcher, groups: dict = RegexDict()
                     ]
                     if diff_img:
                         sync_payload.append(("image", image_gen.get_image_bytes(diff_img)))
-                    sync_payload += [("text", reply("b50.drawing"))]
+                    sync_payload += [("text", await reply("b50.drawing"))]
                     await build_msg(matcher, event, sync_payload, tag='send')
                 else:
                     # 查询他人：简化提示
                     await build_msg(matcher, event, [
-                        ("at", (sender_username, sender_user_id)), ("text", reply("b50.other_updated")), ("text", reply("b50.drawing"))
+                        ("at", (sender_username, sender_user_id)), ("text", await reply("b50.other_updated")), ("text", reply("b50.drawing"))
                     ], tag='send')
               
             else:
                 await build_msg(matcher, event, [
-                    ("at", (sender_username, sender_user_id)), ("text", reply("b50.drawing"))
+                    ("at", (sender_username, sender_user_id)), ("text", await reply("b50.drawing"))
                 ], tag='send')
                 
         except Exception as e:
@@ -231,7 +229,7 @@ async def b50_handled(event: Event, matcher: Matcher, groups: dict = RegexDict()
     # 确定版本并获取 achs 数据
     if scope == ServerScope.ALL:
         # 目前不兼容 ALL 混合模式
-        await matcher.finish(reply("b50.all_not_supported"))
+        await matcher.finish(await reply("b50.all_not_supported"))
         return
     current_version = Versions.latest(scope.to_server())
     cut_version = Versions.b50_cut_version(current_version)
@@ -260,9 +258,9 @@ async def b50_handled(event: Event, matcher: Matcher, groups: dict = RegexDict()
     if not (b35_entries or b15_entries):
         # 无谱面数据
         if scope == ServerScope.CN:
-            await build_msg(matcher, event, [("text", reply("b50.no_cn_data"))], tag='finish')
+            await build_msg(matcher, event, [("text", await reply("b50.no_cn_data"))], tag='finish')
         elif scope == ServerScope.JP:
-            await build_msg(matcher, event, [("text", reply("b50.no_jp_data"))], tag='finish')
+            await build_msg(matcher, event, [("text", await reply("b50.no_jp_data"))], tag='finish')
         return
 
     # 绘制 b50

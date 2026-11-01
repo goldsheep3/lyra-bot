@@ -23,11 +23,12 @@ from nonebot_plugin_localstore import get_plugin_data_dir
 from . import rule_is_group, rule_is_self
 from .. import services
 from ..utils import file_api
-from . import i18n_data, i18n, reply
+from . import Reply, reply
 
 
 # 下载谱面
 adx_download = on_regex(r"^下载[铺谱]面\s*(?:[iI][dD])?\s*(\d*)\s*(.*)$", priority=10, block=True)
+adx_download_en = on_regex(r"^download\s*(?:[iI][dD])?\s*(\d*)\s*(.*)$", priority=10, block=True)
 # 群文件上传 notice，用于处理 upload_group_file 超时但实际成功的场景
 group_upload_notice = on_notice(priority=1, block=False, rule=(rule_is_group and rule_is_self))
 
@@ -149,9 +150,10 @@ async def _cleanup_expired_group_files(bot: OneBotV11Bot, group_id: int, folder_
             break
 
 @adx_download.handle()
-async def adx_download_handled(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup(), _i18n = i18n): 
+@adx_download_en.handle()
+async def adx_download_handled(
+    bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup(), reply: Reply = reply): 
     """处理命令: 下载谱面11568"""
-    i18n_data.set(_i18n)
     # 硬编码拦截：OneBotV11 私聊暂时不支持谱面下载
     if isinstance(event, OneBotV11PrivateMessageEvent):
         await matcher.finish("由于部分原因，暂停私聊谱面发送，请通过支持的群聊或加入 672460250 下载谱面~")
@@ -185,21 +187,21 @@ async def adx_download_handled(bot: Bot, event: Event, matcher: Matcher, groups:
         # **大家当做无事发生**
         return
     elif not (0 < target_short_id < 999999):
-        await matcher.finish(reply("ad.bad_id"))
+        await matcher.finish(await reply("ad.bad_id"))
         return
 
     # 获取 MaiData
     mdt: Optional[services.MaiData] = await services.get_mdt.id(target_short_id)
     if not mdt:
-        await matcher.finish(reply("ad.no_maidata", short_id=target_short_id))
+        await matcher.finish(await reply("ad.no_maidata", short_id=target_short_id))
         return
     chart_file_path = get_plugin_data_dir() / mdt.zip_path
     if not chart_file_path.exists():
-        await matcher.finish(reply("ad.no_chart_file", short_id=target_short_id))
+        await matcher.finish(await reply("ad.no_chart_file", short_id=target_short_id))
         return
 
     # 开始着手上传
-    await matcher.send(reply("ad.prepare", target_short_id=target_short_id))
+    await matcher.send(await reply("ad.prepare", target_short_id=target_short_id))
     
     file_ext = "zip" if "zip" in archive_type else "adx"
     file_name = f"{target_short_id}.{file_ext}"
@@ -212,7 +214,7 @@ async def adx_download_handled(bot: Bot, event: Event, matcher: Matcher, groups:
             group_id = event.group_id
             folder_id = await _get_adx_folder(bot, group_id)
             if not folder_id:
-                await matcher.finish(reply("ad.error"))
+                await matcher.finish(await reply("ad.error"))
                 return
             waiter_key, upload_notice_future = _register_group_upload_waiter(
                 group_id,
@@ -232,23 +234,23 @@ async def adx_download_handled(bot: Bot, event: Event, matcher: Matcher, groups:
                 logger.warning(f"上传异常类型: {type(e).__module__}.{type(e).__qualname__}: {e}")
                 if not _is_call_api_timeout(e, "upload_group_file"):
                     logger.error(f"上传失败: {e}")
-                    await matcher.finish(reply("ad.error"))
+                    await matcher.finish(await reply("ad.error"))
                     return
 
                 logger.warning(f"群文件上传 API 超时，等待 group_upload notice 确认结果: {e}")
                 notice_file = await _wait_group_upload_notice(upload_notice_future)
                 if notice_file is None:
                     logger.error(f"上传失败: {e}")
-                    await matcher.finish(reply("ad.error"))
+                    await matcher.finish(await reply("ad.error"))
                     return
                 result = {"file_id": notice_file.get("id") or notice_file.get("file_id"), "file": notice_file}
             finally:
                 _remove_group_upload_waiter(waiter_key, upload_notice_future)
 
             if result.get("file_id", None) is None:
-                await matcher.finish(reply("ad.error"))
+                await matcher.finish(await reply("ad.error"))
                 return
-            await matcher.send(reply("ad.success.qq_group", song_name=title))
+            await matcher.send(await reply("ad.success.qq_group", song_name=title))
             # 清理逻辑
             await _cleanup_expired_group_files(bot, group_id, folder_id)
             return
@@ -266,15 +268,15 @@ async def adx_download_handled(bot: Bot, event: Event, matcher: Matcher, groups:
                 )
             except Exception as e:
                 logger.error(f"上传失败: {e}")
-                await matcher.finish(reply("ad.error"))
+                await matcher.finish(await reply("ad.error"))
                 return
             else:
-                await matcher.finish(reply("ad.success.qq_private", song_name=title))
+                await matcher.finish(await reply("ad.success.qq_private", song_name=title))
                 return
             
         else:
             # 其他类型消息，理论上不应触发该命令
-            await matcher.finish(reply("ad.error"))
+            await matcher.finish(await reply("ad.error"))
             return
     elif isinstance(event, TGEvent) and isinstance(bot, TGBot):
         session_id = event.get_session_id()
@@ -290,7 +292,7 @@ async def adx_download_handled(bot: Bot, event: Event, matcher: Matcher, groups:
                     chat_id=chat_id,
                     document=mdt.tg_file_id_cache
                 )
-                await matcher.finish(reply("ad.success.tg", song_name=title))
+                await matcher.finish(await reply("ad.success.tg", song_name=title))
                 return
             except Exception as e:
                 # 极少情况下，TG 端的 file_id 可能会失效，需要重新上传
@@ -300,7 +302,7 @@ async def adx_download_handled(bot: Bot, event: Event, matcher: Matcher, groups:
         try:
             # 读取本地文件字节流
             if not chart_file_path.exists():
-                await matcher.send(reply("ad.no_chart_file", short_id=target_short_id))
+                await matcher.send(await reply("ad.no_chart_file", short_id=target_short_id))
                 return
                 
             bytes_data = chart_file_path.read_bytes()
@@ -316,11 +318,11 @@ async def adx_download_handled(bot: Bot, event: Event, matcher: Matcher, groups:
                 logger.debug(f"成功获取 file_id: {new_file_id}，正在写入缓存...")
                 await services.upd_mdt_tg_fileid(target_short_id, new_file_id)
 
-            await matcher.finish(reply("ad.success.tg", song_name=title))
+            await matcher.finish(await reply("ad.success.tg", song_name=title))
             return
         except Exception as e:
             logger.error(f"Telegram 谱面文件上传失败: {e}")
-            await matcher.finish(reply("ad.error"))
+            await matcher.finish(await reply("ad.error"))
             return
 
     logger.warning(f"未处理的事件类型: {type(event)} 或 bot 类型: {type(bot)}")

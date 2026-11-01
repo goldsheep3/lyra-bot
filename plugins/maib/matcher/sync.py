@@ -21,7 +21,7 @@ from .. import config, utils, services, image_gen, network
 from ..services.models import MaiUser
 from ..utils.report import MaiChartAchDiffReport, build_diff_report
 from ..utils.sync import build_legacy_lyra_ach_list, build_lyra_records_v3, parse_lyra_maisync_data
-from . import i18n_data, i18n, reply, rule_is_private
+from . import Reply, reply, rule_is_private
 from .context import get_maiuser
 from .message import build_msg
 
@@ -159,10 +159,8 @@ async def check_sync_cn(qq_user: int | MaiUser, ignore_cache_expire: bool = Fals
 
 
 @sytb.handle()
-async def sytb_handled(event: Event, matcher: Matcher, _i18n = i18n):
+async def sytb_handled(event: Event, matcher: Matcher, reply: Reply = reply):
     """处理命令: sytb (水鱼同步)"""
-    i18n_data.set(_i18n)
-
     try:
         user_id = int(event.get_user_id())
         maiuser: utils.MaiUser = await get_maiuser(event, user_id=user_id)
@@ -177,22 +175,20 @@ async def sytb_handled(event: Event, matcher: Matcher, _i18n = i18n):
     ]
 
     if report.has_changes:
-        await matcher.send(reply("sync.sy.syncing"))
+        await matcher.send(await reply("sync.sy.syncing"))
         summary_text, diff_img = build_diff_report(report)
         
         payload.append(("text", f"{summary_text}\n"))
         if diff_img:
             payload.append(("image", image_gen.get_image_bytes(diff_img)))
     else:
-        payload.append(("text", reply("sync.sy.no_update")))
+        payload.append(("text", await reply("sync.sy.no_update")))
 
     await build_msg(matcher, event, payload, tag='finish')
 
 
 @get_sync_code.handle()
-async def get_sync_code_handled(event: Event, matcher: Matcher, _i18n = i18n):
-    i18n_data.set(_i18n)
-
+async def get_sync_code_handled(event: Event, matcher: Matcher, reply: Reply = reply):
     try:
         maiuser = await get_maiuser(event)
     except Exception as e:
@@ -212,9 +208,7 @@ async def get_sync_code_handled(event: Event, matcher: Matcher, _i18n = i18n):
 # --- JP 更新线路 ---
 
 @file_receiver.handle()
-async def file_receiver_handled(bot: Bot, event: Event, matcher: Matcher, _i18n = i18n):
-    i18n_data.set(_i18n)
-
+async def file_receiver_handled(bot: Bot, event: Event, matcher: Matcher, reply: Reply = reply):
     file_name: str = ""
     file_version: Optional[str] = None
     file_data: Optional[Any] = None

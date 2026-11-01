@@ -15,7 +15,7 @@ from ..utils.enums import Server
 from ..utils.map import Versions
 from ..services.models import MaiChartAch, MaiUser
 from ..services.refresh import _calc_mca_dxrating, _refresh_single_user_dxrating_cache
-from . import reply
+from . import Reply, reply
 
 # temp=True - 临时模块，可能随时移除
 __maib_temp__ = True

@@ -4,8 +4,7 @@ from nonebot.adapters import Event
 from nonebot.adapters.onebot.v11 import Event as OneBotV11Event
 from nonebot.adapters.telegram import Event as TGEvent
 
-from plugins.nonebot_plugin_i18n import reply
-
+from . import Reply, reply
 from .. import config, network, services, utils
 from ..utils.enums import Server, ServerScope, SLevelSource
 from ..utils import NoLinkQQError
@@ -43,23 +42,24 @@ def get_args(args_text: str) -> tuple[Optional[int], Optional[ServerScope]]:
     return target_user_id, target_server
 
 
-async def get_maiuser(event: Event, user_id: int | None = None) -> utils.MaiUser:
+
+async def get_maiuser(event: Event, user_id: int | None = None, reply: Reply = reply) -> utils.MaiUser:
     """Resolve the current platform user to a maimai user."""
     if user_id is None:
         raw_uid = event.get_user_id()
         try:
             user_id = int(raw_uid)
         except ValueError as e:
-            raise ValueError(reply("error.invalid_user_id", raw_uid=raw_uid)) from e
+            raise ValueError(await reply("error.invalid_user_id", raw_uid=raw_uid)) from e
 
     if isinstance(event, OneBotV11Event):
         mu = await services.check_mu(user_id)
     elif isinstance(event, TGEvent):
         mu = await services.get_mu_from_tgid(user_id)
         if mu is None:
-            raise NoLinkQQError(reply("error.user_not_found"))
+            raise NoLinkQQError(await reply("error.user_not_found"))
     else:
-        raise ValueError(reply("error.unexpected"))
+        raise ValueError(await reply("error.unexpected"))
 
     if not mu.username:
         qq = mu.user_id

@@ -1,0 +1,110 @@
+# link 查询与绑定
+link:
+  query_disabled: "The query feature is under development. Please look forward to it!"
+  only_qq: "This operation is only supported via QQ"
+  tip: "Please enter the following command in LyraBot on another platform to complete the binding. This information is valid for five minutes."
+  invalid_hash: "The provided hash value is invalid or has expired"
+  not_found: "No matching binding information found"
+  success: "Binding successful!"
+  unlink_success: "Unbinding successful!"
+  not_platform: "Unknown platform"
+  not_linked: "You don't seem to have bound a QQ number yet~ Please try using \"bind link\" to bind"
+  onebot_no_bind: "QQ accounts that can be directly operated () cannot be bound to each other"
+  get_more_info: "You haven't bound a QQ number yet. Once bound, you can sync your gameplay data!"
+
+# ra_calc
+rc:
+  help: |-
+    ra_calc: ra <constant> [achievement]
+        Calculates DXRating
+        Constant: Can be entered directly, or use the form id11951紫 to get the chart constant
+        Achievement: Can be entered directly, or use expressions like "鳥加" "sss+", or leave blank to calculate tiered ra for s~sss+
+  achievement_invalid: "Please provide a valid score qwq"
+  maidata_invalid: "Xiao Li couldn't parse the song information you provided TT"
+  level_invalid: "Please provide a valid constant qwq"
+  level_failed: "Xiao Li couldn't parse the constant information you provided TT"
+  success:
+    tip: "Xiao Li has calculated it!"
+    common: "Constant {level}*{achievement}% -> Rating: {ra}"
+    blur: "Constant {level} {rate} -> Rating: {ra}"
+  excluding_ap_bouns: "This ra does not include the AP bonus score!"
+
+# adx_download (ad)
+ad:
+  no_maidata: "No chart data found for id {short_id}! It may not have been indexed yet. Please contact the guardian to confirm qwq"
+  bad_id: "Please provide a valid song ID qwq"
+  no_chart_file: "Chart file does not exist! It may not have been indexed yet. Please contact the guardian to confirm qwq"
+  prepare: "Please wait——Xiao Li is preparing the chart file for id {target_short_id}!"
+  error: "Xiao Li encountered a problem while processing the chart file. Please contact the guardian to confirm qwq"
+  success:
+    qq_private: "Ta-da~ Please check the chart {song_name}!"
+    qq_group: "Xiao Li has sent the adx chart for {song_name} to the group!"
+    tg: "wu~ Xiao Li has sent the chart for {song_name}!"
+
+# mai_info
+info:
+  invalid_id: "Please provide a valid song ID qwq"
+  maidata_not_found: "No song data found for id {short_id} qwq"
+  # what_song
+  found_none: "No song data containing \"{keyword}\" was found qwq"
+  found_single: "You might be looking for: {shortid}. {title}"
+  found_multiple: "Xiao Li found {count} songs. Please check if any match your expectations w"
+  found_many: "Xiao Li found so many songs... wow, {count} songs ()"
+  found_too_many_abort: "Too many! Please narrow down your search qwq"
+
+# mai_alias (alias)
+alias:
+  add:
+    success: "Successfully added alias [{alias}] for {shortid}!"
+    already_exists: "This alias seems to already exist~"
+  remove:
+    deletion_not_supported: "Self-service alias deletion is not supported yet~"
+
+# b50
+b50:
+  all_not_supported: "Mixed score images are still under development and cannot be used yet qwq"
+  qq_parsing_failed: "Xiao Li couldn't find a suitable query target...? Please contact the guardian to confirm"
+  drawing: "Xiao Li is drawing the b50 image, please wait..."
+  other_updated: "Xiao Li noticed that the queried target's Suiyu data has been updated and has updated it to the latest!"
+  no_jp_data: "You don't have JP server data yet! Please upload your scores via lyra-sync and try again!"
+  no_cn_data: "You don't have CN server data yet! Please upload your Suiyu scores and try again!"
+
+# sync
+sync:
+  sy:
+    syncing: "Xiao Li is trying to fetch your latest score data from the Suiyu score tracker!"
+    no_update: "Checked! The score data recorded by Xiao Li is already up to date."
+
+# maime
+maime:
+  link:
+    success: "This card has been bound to your account~"
+    error:
+      unknown: "An unexpected error occurred while binding the card. Please contact the guardian to confirm qwq"
+      linked: "This card has already been bound to another account~"
+  unlink:
+    success: "This card has been unbound from your account~"
+    error:
+      unknown: "An unexpected error occurred while unbinding the card. Please contact the guardian to confirm qwq"
+      not_found: "No binding information found for this card~"
+      not_owner: "This card does not belong to your account~"
+  lost:
+    success: "Card number {card} belongs to {qq}. You can try contacting this rhythm game addict meow ("
+    error:
+      not_found: "This card has never been bound here, or is in an unbound state meow ("
+      multiple_found: "This card is bound to multiple accounts. Please retry with the full access qwq"
+
+  list:
+    empty: "You haven't bound any cards yet~"
+    header: "You have bound the following cards:"
+    item: "{masked} ({create_at})"
+    item_full: "{access} ({create_at})"
+
+# Exception Tip
+error:
+  low_memory: "Currently in low memory mode, image generation for this feature has been paused meow ( ๑ŏ ﹏ ŏ๑ )"
+  invalid_user_id: "Unable to parse str-format user_id: {raw_uid}"
+  user_not_found: "No bound QQ account found. Please use the link feature to bind your QQ number first"
+  unexpected: "Unsupported platform type"
+  common: "Xiao Li encountered an unexpected error. Please contact the guardian to confirm qwq"
+  platform_not_supported: "Unexpected error (Platform Not Supported). Please contact the guardian to confirm qwq"

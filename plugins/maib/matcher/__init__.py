@@ -1,4 +1,5 @@
 import time
+from pathlib import Path
 
 from .. import services
 from ..utils.constants import ASSETS_PATH
@@ -20,9 +21,8 @@ from nonebot.adapters.telegram.event import (PrivateMessageEvent as TGPrivateMes
 
 # --- i18n configs ---
 
-from plugins.nonebot_plugin_i18n import use_i18n, reply, current_i18n_data as i18n_data
-i18n_dir = ASSETS_PATH / "i18n"
-i18n = use_i18n(i18n_dir)
+from nonebot_plugin_locales import Reply, locales_init
+reply = locales_init(Path(__file__).parent / "assets" / "i18n")
 
 
 # --- rules ---
@@ -53,9 +53,8 @@ link_cache = {}
 link_hash_index = {}
 
 @link.handle()
-async def link_handled(event: Event, matcher: Matcher, groups: tuple = RegexGroup(), _i18n = i18n):
+async def link_handled(event: Event, matcher: Matcher, groups: tuple = RegexGroup(), reply: Reply = reply):
     """处理命令: link"""
-    i18n_data.set(_i18n)
     action, args_text = groups
     global link_cache, link_hash_index
 
@@ -73,14 +72,14 @@ async def link_handled(event: Event, matcher: Matcher, groups: tuple = RegexGrou
     
     # 查询分支
     if action == "查询":
-        await matcher.finish(reply("link.query_disabled"))
+        await matcher.finish(await reply("link.query_disabled"))
         return
     
     # 获取/绑定分支
     elif action in ("获取", "绑定"):
         # 检查是否为 Onebot (QQ) 平台
         if not isinstance(event, OneBotV11Event):
-            await matcher.finish(reply("link.only_qq"))
+            await matcher.finish(await reply("link.only_qq"))
             return
         
         # 生成随机 hash 并设置五分钟到期
@@ -97,7 +96,7 @@ async def link_handled(event: Event, matcher: Matcher, groups: tuple = RegexGrou
         link_hash_index[hash_value] = user_id
         
         # 发送提示文案和绑定指令
-        await matcher.send(reply("link.tip"))
+        await matcher.send(await reply("link.tip"))
         await matcher.finish(f"link {hash_value}")
         return
     
@@ -107,7 +106,7 @@ async def link_handled(event: Event, matcher: Matcher, groups: tuple = RegexGrou
             # QQ 端解绑全部
             user_id = int(event.get_user_id())
             await services.del_mu_tgid(user_id)
-            await matcher.finish(reply("link.unlink_success"))
+            await matcher.finish(await reply("link.unlink_success"))
             return
         elif isinstance(event, TGEvent):
             # TG 端解绑当前账号
@@ -115,34 +114,34 @@ async def link_handled(event: Event, matcher: Matcher, groups: tuple = RegexGrou
             mu = await services.get_mu_from_tgid(telegram_id)
             if mu:
                 await services.del_mu_tgid(mu.user_id)
-            await matcher.finish(reply("link.unlink_success"))
+            await matcher.finish(await reply("link.unlink_success"))
             return
-        await matcher.finish(reply("link.not_platform"))
+        await matcher.finish(await reply("link.not_platform"))
     
     # 验证分支（action为空）
     else:
         if not args_text:
-            await matcher.finish(reply("link.invalid_hash"))
+            await matcher.finish(await reply("link.invalid_hash"))
             return
         
         provided_hash = args_text.strip()
         
         # 通过反向索引直接查找
         if provided_hash not in link_hash_index:
-            await matcher.finish(reply("link.not_found"))
+            await matcher.finish(await reply("link.not_found"))
             return
         
         user_id = link_hash_index[provided_hash]
         cache_entry = link_cache.get(user_id)
         if cache_entry is None or cache_entry[0] != provided_hash:
             link_hash_index.pop(provided_hash, None)
-            await matcher.finish(reply("link.not_found"))
+            await matcher.finish(await reply("link.not_found"))
             return
         
         # 验证成功，执行绑定逻辑
         if isinstance(event, OneBotV11Event):
             # 但 OneBotV11 不需要绑定 qq
-            await matcher.finish(reply("link.onebot_no_bind"))
+            await matcher.finish(await reply("link.onebot_no_bind"))
             return
         elif isinstance(event, TGEvent):
             await services.set_mu_tgid(user_id, telegram_id=int(event.get_user_id()))
@@ -150,11 +149,11 @@ async def link_handled(event: Event, matcher: Matcher, groups: tuple = RegexGrou
             # 清理缓存
             del link_cache[user_id]
             del link_hash_index[provided_hash]
-            await matcher.finish(reply("link.success"))
+            await matcher.finish(await reply("link.success"))
             return
         
         # 非支持平台（理论上不会到达）
-        await matcher.finish(reply("link.not_platform"))
+        await matcher.finish(await reply("link.not_platform"))
         return
 
 

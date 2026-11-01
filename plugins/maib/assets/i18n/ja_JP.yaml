@@ -1,0 +1,110 @@
+# link 查询与绑定
+link:
+  query_disabled: "クエリ機能は開発中です。もうしばらくお待ちください！"
+  only_qq: "この操作は QQ でのみサポートされています"
+  tip: "他のプラットフォームの LyraBot で以下のコマンドを入力してバインドを完了してください。この情報は5分間有効です。"
+  invalid_hash: "提供されたハッシュ値が無効か、期限切れです"
+  not_found: "一致するバインド情報が見つかりませんでした"
+  success: "バインド成功！"
+  unlink_success: "バインド解除成功！"
+  not_platform: "不明なプラットフォーム"
+  not_linked: "まだ QQ 番号をバインドしていないようです～「バインドlink」でバインドを試してみてください"
+  onebot_no_bind: "直接操作できる（）QQ 同士はバインドできません"
+  get_more_info: "まだ QQ 番号をバインドしていません。バインドするとプレイデータを同期できますよ！"
+
+# ra_calc
+rc:
+  help: |-
+    ra_calc: ra <定数> [達成率]
+        DXRating を計算できます
+        定数: 直接入力するか、id11951紫 の形式で譜面定数を取得できます
+        達成率: 直接入力するか、「鳥加」「sss+」などの表現を使うか、省略して s～sss+ の段階別 ra を計算できます
+  achievement_invalid: "正しい成績スコアを入力してくださいねqwq"
+  maidata_invalid: "小梨はあなたが提供した楽曲情報を解析できませんでしたTT"
+  level_invalid: "正しい定数を入力してくださいねqwq"
+  level_failed: "小梨はあなたが提供した定数情報を解析できませんでしたTT"
+  success:
+    tip: "小梨が計算しました！"
+    common: "定数{level}*{achievement}% -> Rating: {ra}"
+    blur: "定数{level} {rate} -> Rating: {ra}"
+  excluding_ap_bouns: "この ra は AP のボーナススコアを含みません！"
+
+# adx_download (ad)
+ad:
+  no_maidata: "id{short_id}の譜面データが見つかりませんでした！まだ収録されていない可能性があります。保護者に確認してくださいねqwq"
+  bad_id: "正しい楽曲 ID を入力してくださいねqwq"
+  no_chart_file: "譜面ファイルが存在しません！まだ収録されていない可能性があります。保護者に確認してくださいねqwq"
+  prepare: "少々お待ちください——小梨が id{target_short_id} の譜面ファイルを準備します！"
+  error: "小梨が譜面ファイルの処理中に問題が発生しました。保護者に確認してくださいねqwq"
+  success:
+    qq_private: "じゃじゃーん～譜面 {song_name} をお受け取りください！"
+    qq_group: "小梨が {song_name} のadx譜面をグループに送信しました！"
+    tg: "wu～小梨が {song_name} の譜面を送信しました！"
+
+# mai_info
+info:
+  invalid_id: "正しい楽曲 ID を入力してくださいねqwq"
+  maidata_not_found: "id{short_id} の楽曲データが見つかりませんでしたqwq"
+  # what_song
+  found_none: "「{keyword}」を含む楽曲データが見つかりませんでしたqwq"
+  found_single: "お探しはこちらですか：{shortid}. {title}"
+  found_multiple: "小梨が {count} 曲見つけました。お探しのものがあるか確認してくださいねw"
+  found_many: "小梨がたくさん見つけました……うわぁ、{count}曲（）"
+  found_too_many_abort: "多すぎます！検索範囲を絞ってくださいねqwq"
+
+# mai_alias (alias)
+alias:
+  add:
+    success: "{shortid} に別名【{alias}】を追加しました！"
+    already_exists: "この別名はすでに存在するようです～"
+  remove:
+    deletion_not_supported: "現在、別名のセルフ削除はサポートされていません～"
+
+# b50
+b50:
+  all_not_supported: "混合成績画像は開発中です。現在ご利用いただけませんqwq"
+  qq_parsing_failed: "小梨が適切なクエリ対象を見つけられませんでした……？保護者に確認してください"
+  drawing: "小梨が b50 画像を描画中です。少々お待ちください……"
+  other_updated: "小梨がクエリ対象の水魚データに更新があることを検出し、最新版に更新しました！"
+  no_jp_data: "日本サーバーのデータがありません！lyra-sync で成績をアップロードしてから再試行してください！"
+  no_cn_data: "中国サーバーのデータがありません！水魚に成績をアップロードしてから再試行してください！"
+
+# sync
+sync:
+  sy:
+    syncing: "小梨が水魚查分器から最新の成績データを取得しようとしています！"
+    no_update: "確認しました！小梨が記録している成績データはすでに最新です。"
+
+# maime
+maime:
+  link:
+    success: "このカードをあなたのアカウントにバインドしました～"
+    error:
+      unknown: "カードのバインド中に予期しないエラーが発生しました。保護者に確認してくださいねqwq"
+      linked: "このカードはすでに他のアカウントにバインドされています～"
+  unlink:
+    success: "このカードをあなたのアカウントからバインド解除しました～"
+    error:
+      unknown: "カードのバインド解除中に予期しないエラーが発生しました。保護者に確認してくださいねqwq"
+      not_found: "このカードのバインド情報が見つかりませんでした～"
+      not_owner: "このカードはあなたのアカウントに属していません～"
+  lost:
+    success: "カード番号 {card} は {qq} のものです。その音ゲー中毒者に連絡してみてくださいにゃ（"
+    error:
+      not_found: "このカードはまだここでバインドされたことがないか、バインド解除された状態ですにゃ（"
+      multiple_found: "このカードは複数のアカウントにバインドされています。完全な access で再試行してくださいqwq"
+
+  list:
+    empty: "まだカードをバインドしていません～"
+    header: "以下のカードをバインドしています："
+    item: "{masked} ({create_at})"
+    item_full: "{access} ({create_at})"
+
+# Exception Tip
+error:
+  low_memory: "現在低メモリモードのため、この機能の画像生成を一時停止していますにゃ( ๑ŏ ﹏ ŏ๑ )"
+  invalid_user_id: "str 形式の user_id を解析できません: {raw_uid}"
+  user_not_found: "バインドされた QQ アカウントが見つかりません。先に link 機能で QQ 番号をバインドしてください"
+  unexpected: "サポートされていないプラットフォームタイプです"
+  common: "小梨に予期しないエラーが発生しました。保護者に確認してくださいねqwq"
+  platform_not_supported: "予期しないエラー(Platform Not Supported)、保護者に確認してくださいねqwq"

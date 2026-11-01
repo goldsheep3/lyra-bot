@@ -11,7 +11,7 @@ from .. import services, image_gen
 from ..utils.report import build_diff_report
 from ..utils import NoLinkQQError
 from ..utils.enums import ServerScope
-from . import i18n_data, i18n, reply, sync
+from . import Reply, reply, sync
 from .context import get_args, get_maiuser
 from .message import build_msg
 
@@ -21,14 +21,13 @@ mai_what_song = on_regex(r"^(.+?)是什么歌([?？]?)$", priority=10, block=Tru
 
 
 @mai_info.handle()
-async def mai_info_handled(event: Event, matcher: Matcher, groups: tuple = RegexGroup(), _i18n = i18n):
+async def mai_info_handled(event: Event, matcher: Matcher, groups: tuple = RegexGroup(), reply: Reply = reply):
     """处理命令: id11451 / info11451"""
-    i18n_data.set(_i18n)
     _, short_id, args_text = groups
     
     # shortid 判断
     if not short_id.isdigit():
-        await matcher.finish(reply("info.invalid_id"))
+        await matcher.finish(await reply("info.invalid_id"))
         return
     shortid = int(short_id)
 
@@ -99,7 +98,7 @@ async def mai_info_handled(event: Event, matcher: Matcher, groups: tuple = Regex
                 else:
                     # 查询他人：简化提示
                     await build_msg(matcher, event, [
-                        ("at", (sender_username, sender_user_id)), ("text", reply("b50.other_updated"))
+                        ("at", (sender_username, sender_user_id)), ("text", await reply("b50.other_updated"))
                     ], tag='send')
         except Exception as e:
             logger.warning(f"强制刷新水鱼数据失败: {e}")
@@ -110,7 +109,7 @@ async def mai_info_handled(event: Event, matcher: Matcher, groups: tuple = Regex
     # 查询乐曲信息
     mdt: Optional[services.MaiData] = await services.get_mdt.id(shortid, target_qq)
     if mdt is None:
-        await matcher.finish(reply("info.maidata_not_found", short_id=shortid))
+        await matcher.finish(await reply("info.maidata_not_found", short_id=shortid))
         return
     maidata = mdt.to_utils(achs_user_id=target_qq)
 
@@ -124,14 +123,13 @@ async def mai_info_handled(event: Event, matcher: Matcher, groups: tuple = Regex
     
     # 如果未绑定或获取用户信息失败，提示绑定以获取更多信息
     if target_qq is None or target_maiuser is None:
-        payload.append(("text", reply("link.get_more_info")))
+        payload.append(("text", await reply("link.get_more_info")))
         
     await build_msg(matcher, event, payload, tag='finish')
 
 @mai_what_song.handle()
-async def mai_what_song_handled(event: Event, matcher: Matcher, groups: tuple = RegexGroup(), _i18n = i18n):
+async def mai_what_song_handled(event: Event, matcher: Matcher, groups: tuple = RegexGroup(), reply: Reply = reply):
     """处理命令: xxx是什么歌"""
-    i18n_data.set(_i18n)
     keyword, all_tag = groups
     blur_search = bool(all_tag and all_tag.strip() in ['?', '？'])
     keyword = keyword.strip(' ')
@@ -157,7 +155,7 @@ async def mai_what_song_handled(event: Event, matcher: Matcher, groups: tuple = 
     # 过滤宴会场 (shortid >= 100000)
     # mdt_list = [mdt for mdt in mdt_list if mdt.shortid < 100000]
     if not mdt_list:
-        await matcher.finish(reply("info.found_none", keyword=keyword))
+        await matcher.finish(await reply("info.found_none", keyword=keyword))
         return
 
     def _inject_matched_alias(mdt, keyword: str) -> str | None:
@@ -185,12 +183,12 @@ async def mai_what_song_handled(event: Event, matcher: Matcher, groups: tuple = 
     if len(mdt_list) == 1:
         mdt = mdt_list[0]
         matched_alias = _inject_matched_alias(mdt, keyword)
-        payload.append(("text", reply("info.found_single", shortid=mdt.shortid, title=mdt.title)))
+        payload.append(("text", await reply("info.found_single", shortid=mdt.shortid, title=mdt.title)))
         img_bytes = generate_single_info_box(mdt, matched_alias)
         payload.append(("image", img_bytes))
 
     elif len(mdt_list) <= 4:
-        payload.append(("text", reply("info.found_multiple", count=len(mdt_list))))
+        payload.append(("text", await reply("info.found_multiple", count=len(mdt_list))))
         for mdt in mdt_list:
             matched_alias = _inject_matched_alias(mdt, keyword)
             img_bytes = generate_single_info_box(mdt, matched_alias)
@@ -209,11 +207,11 @@ async def mai_what_song_handled(event: Event, matcher: Matcher, groups: tuple = 
         img = image_gen.draw_simple_board("\n".join(lines))
         
         img_bytes = image_gen.get_image_bytes(img)
-        payload.append(("text", reply("info.found_many", count=len(mdt_list))))
+        payload.append(("text", await reply("info.found_many", count=len(mdt_list))))
         payload.append(("image", img_bytes))
 
     else:
-        await matcher.finish(reply("info.found_too_many_abort"))
+        await matcher.finish(await reply("info.found_too_many_abort"))
         return
 
     # 4. 统一发送消息
