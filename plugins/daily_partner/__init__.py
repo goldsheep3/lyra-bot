@@ -2,7 +2,7 @@ from pydantic import BaseModel
 from nonebot.plugin import PluginMetadata
 
 from nonebot import require, get_plugin_config
-# require("nonebot_plugin_i18n")
+# require("nonebot_plugin_locales")
 
 class Config(BaseModel):
     MAX_SWAP_COUNT: int = 3  # 每个用户每天换老婆的最大次数

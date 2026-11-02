@@ -22,7 +22,7 @@ from nonebot.adapters.telegram.event import (PrivateMessageEvent as TGPrivateMes
 # --- i18n configs ---
 
 from nonebot_plugin_locales import Reply, locales_init
-reply = locales_init(Path(__file__).parent / "assets" / "i18n")
+reply = locales_init(ASSETS_PATH / "i18n")
 
 
 # --- rules ---

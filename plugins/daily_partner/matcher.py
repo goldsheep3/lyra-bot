@@ -23,7 +23,7 @@ from nonebot.adapters.onebot.v11 import (Bot as OneBotV11Bot,
                                          PrivateMessageEvent as OneBotV11PrivateMessageEvent,)
 from nonebot.adapters.onebot.v11.permission import GROUP_ADMIN, GROUP_OWNER
 
-from plugins.nonebot_plugin_i18n import use_i18n, reply, current_i18n_data as i18n_data
+from nonebot_plugin_locales import Reply, locales_init
 
 # 暂不考虑支持 Telegram：TG Bot 无法直接获取 Telegram 群成员列表，而且不确定 ADMIN / OWNER 等权限的排布
 
@@ -31,7 +31,7 @@ from plugins.nonebot_plugin_i18n import use_i18n, reply, current_i18n_data as i1
 # --- i18n settings ---
 
 i18n_dir = Path(__file__).parent / "assets" / "i18n"
-i18n = use_i18n(i18n_dir)
+reply = locales_init(i18n_dir)
 
 
 # --- tool functions ---
@@ -176,9 +176,8 @@ def partner_gacha(targets: dict[str, User], hope_id: Optional[str] = None) -> Us
 
 
 @jrlp.handle()
-async def jrlp_handled(bot: Bot, event: Event, matcher: Matcher, _i18n = i18n):
+async def jrlp_handled(bot: Bot, event: Event, matcher: Matcher, reply: Reply = reply):
     """处理指令: jrlp"""
-    i18n_data.set(_i18n)  # 将依赖注入返回的语言包数据注入当前协程上下文
     platform = get_platform(event)
     user_id = event.get_user_id()
     group_id = get_group_id(event)
@@ -193,7 +192,7 @@ async def jrlp_handled(bot: Bot, event: Event, matcher: Matcher, _i18n = i18n):
     
     # wife 离婚惩罚状态逻辑
     if record.is_divorced:
-        segments = [("at", (None, user_id)), ("text", reply("jrlp.failed.discovered"))]
+        segments = [("at", (None, user_id)), ("text", await reply("jrlp.failed.discovered"))]
         await build_msg(matcher, event, segments, tag='finish')
         return
 
@@ -201,7 +200,7 @@ async def jrlp_handled(bot: Bot, event: Event, matcher: Matcher, _i18n = i18n):
     if record.wife_id is not None:
         target_username = await get_user_display_name(bot, group_id, record.wife_id)
         segments = [("at", (None, user_id)),
-                    ("text", reply("jrlp.failed.already", username=target_username)),
+                    ("text", await reply("jrlp.failed.already", username=target_username)),
                     ("image", get_user_avatar_url(record.wife_id))]
         await build_msg(matcher, event, segments, tag='finish')
         return
@@ -211,7 +210,7 @@ async def jrlp_handled(bot: Bot, event: Event, matcher: Matcher, _i18n = i18n):
         filter_active = (await services.check_group(platform, group_id)).filter_activate
         active_member_ids = await get_pool(bot, group_id, filter_active=filter_active)
     else:
-        segments = [("at", (None, user_id)), ("text", reply("not_allow_platform"))]
+        segments = [("at", (None, user_id)), ("text", await reply("not_allow_platform"))]
         await build_msg(matcher, event, segments, tag='finish')
         return
 
@@ -220,7 +219,7 @@ async def jrlp_handled(bot: Bot, event: Event, matcher: Matcher, _i18n = i18n):
     # 池子无目标水仙逻辑
     if not targets:
         await services.set_today_wife(platform, group_id, user_id, user_id)
-        segments = [("at", (None, user_id)), ("text", reply("jrlp.success.self"))]
+        segments = [("at", (None, user_id)), ("text", await reply("jrlp.success.self"))]
         await build_msg(matcher, event, segments, tag='finish')
         return
     
@@ -230,16 +229,15 @@ async def jrlp_handled(bot: Bot, event: Event, matcher: Matcher, _i18n = i18n):
 
     target_username = await get_user_display_name(bot, group_id, target.user_id)
     segments = [("at", (None, user_id)),
-                ("text", reply("jrlp.success.common", username=target_username)),
+                ("text", await reply("jrlp.success.common", username=target_username)),
                 ("image", get_user_avatar_url(target.user_id))]
     await build_msg(matcher, event, segments, tag='finish')
     return
     
 
 @hlp.handle()
-async def hlp_handled(bot: Bot, event: Event, matcher: Matcher, _i18n = i18n):
+async def hlp_handled(bot: Bot, event: Event, matcher: Matcher, reply: Reply = reply):
     """处理指令: hlp"""
-    i18n_data.set(_i18n)
     platform = get_platform(event)
     user_id = event.get_user_id()
     group_id = get_group_id(event)
@@ -254,13 +252,13 @@ async def hlp_handled(bot: Bot, event: Event, matcher: Matcher, _i18n = i18n):
     
     # wife 离婚惩罚状态逻辑
     if record.is_divorced:
-        segments = [("at", (None, user_id)), ("text", reply("hlp.failed.discovered"))]
+        segments = [("at", (None, user_id)), ("text", await reply("hlp.failed.discovered"))]
         await build_msg(matcher, event, segments, tag='finish')
         return
         
     # 没有老婆逻辑
     if record.wife_id is None:
-        segments = [("at", (None, user_id)), ("text", reply("hlp.failed.none"))]
+        segments = [("at", (None, user_id)), ("text", await reply("hlp.failed.none"))]
         await build_msg(matcher, event, segments, tag='finish')
         return
         
@@ -268,7 +266,7 @@ async def hlp_handled(bot: Bot, event: Event, matcher: Matcher, _i18n = i18n):
     if record.swap_count >= config.MAX_SWAP_COUNT:
         # 超过换老婆次数上限，对标主动离婚（调用 set_today_wife 将 wife_id 置空并惩罚）
         await services.set_today_wife(platform, group_id, user_id, wife_id=None, is_divorced=True)
-        segments = [("at", (None, user_id)), ("text", reply("hlp.failed.limit"))]
+        segments = [("at", (None, user_id)), ("text", await reply("hlp.failed.limit"))]
         await build_msg(matcher, event, segments, tag='finish')
         return
     
@@ -277,7 +275,7 @@ async def hlp_handled(bot: Bot, event: Event, matcher: Matcher, _i18n = i18n):
         filter_active = (await services.check_group(platform, group_id)).filter_activate
         active_member_ids = await get_pool(bot, group_id, filter_active=filter_active)
     else:
-        segments = [("at", (None, user_id)), ("text", reply("not_allow_platform"))]
+        segments = [("at", (None, user_id)), ("text", await reply("not_allow_platform"))]
         await build_msg(matcher, event, segments, tag='finish')
         return
 
@@ -291,14 +289,14 @@ async def hlp_handled(bot: Bot, event: Event, matcher: Matcher, _i18n = i18n):
     if not targets:
         if record.wife_id == user_id:
             # 自己已经是老婆了，且池子里没别人，没有可换余地
-            segments = [("at", (None, user_id)), ("text", reply("hlp.failed.not_wife"))]
+            segments = [("at", (None, user_id)), ("text", await reply("hlp.failed.not_wife"))]
             await build_msg(matcher, event, segments, tag='finish')
             return
         else:
             # 没有可选对象，只能设置自己为老婆
             await services.set_today_wife(platform, group_id, user_id, wife_id=user_id)
             reply_key = "hlp.success.self.common" if record.swap_count + 1 < config.MAX_SWAP_COUNT else "hlp.success.self.last"
-            segments = [("at", (None, user_id)), ("text", reply(reply_key))]
+            segments = [("at", (None, user_id)), ("text", await reply(reply_key))]
             await build_msg(matcher, event, segments, tag='finish')
             return
             
@@ -310,15 +308,14 @@ async def hlp_handled(bot: Bot, event: Event, matcher: Matcher, _i18n = i18n):
     target_username = await get_user_display_name(bot, group_id, result.user_id)
     reply_key = "hlp.success.common" if record.swap_count + 1 < config.MAX_SWAP_COUNT else "hlp.success.last"
     segments = [("at", (None, user_id)),
-                ("text", reply(reply_key, username=target_username)),
+                ("text", await reply(reply_key, username=target_username)),
                 ("image", get_user_avatar_url(result.user_id))]
     await build_msg(matcher, event, segments, tag='finish')
 
 
 @lh.handle()
-async def lh_handled(bot: Bot, event: Event, matcher: Matcher, _i18n = i18n):
+async def lh_handled(bot: Bot, event: Event, matcher: Matcher, reply: Reply = reply):
     """处理指令: lh"""
-    i18n_data.set(_i18n)
     platform = get_platform(event)
     user_id = event.get_user_id()
     group_id = get_group_id(event)
@@ -333,13 +330,13 @@ async def lh_handled(bot: Bot, event: Event, matcher: Matcher, _i18n = i18n):
     
     # wife 离婚惩罚状态逻辑
     if record.is_divorced:
-        segments = [("at", (None, user_id)), ("text", reply("lh.failed.already"))]
+        segments = [("at", (None, user_id)), ("text", await reply("lh.failed.already"))]
         await build_msg(matcher, event, segments, tag='finish')
         return
 
     # 没有老婆逻辑
     if record.wife_id is None:
-        segments = [("at", (None, user_id)), ("text", reply("lh.failed.none"))]
+        segments = [("at", (None, user_id)), ("text", await reply("lh.failed.none"))]
         await build_msg(matcher, event, segments, tag='finish')
         return
     
@@ -348,14 +345,13 @@ async def lh_handled(bot: Bot, event: Event, matcher: Matcher, _i18n = i18n):
     await services.set_today_wife(platform, group_id, user_id, wife_id=None, is_divorced=True)
     reply_key = "lh.success.self" if old_wife_id == user_id else "lh.success.common"
     target_username = await get_user_display_name(bot, group_id, old_wife_id)
-    segments = [("at", (None, user_id)), ("text", reply(reply_key, username=target_username))]
+    segments = [("at", (None, user_id)), ("text", await reply(reply_key, username=target_username))]
     await build_msg(matcher, event, segments, tag='finish')
 
 
 @qq.handle()
-async def qq_handled(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup(), _i18n = i18n):
+async def qq_handled(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup(), reply: Reply = reply):
     """处理指令: qq"""
-    i18n_data.set(_i18n)
     platform = get_platform(event)
     user_id = event.get_user_id()
     group_id = get_group_id(event)
@@ -370,13 +366,13 @@ async def qq_handled(bot: Bot, event: Event, matcher: Matcher, groups: tuple = R
     
     # wife 离婚惩罚状态逻辑
     if record.is_divorced:
-        segments = [("at", (None, user_id)), ("text", reply("qq.group.failed.discovered"))]
+        segments = [("at", (None, user_id)), ("text", await reply("qq.group.failed.discovered"))]
         await build_msg(matcher, event, segments, tag='finish')
         return
     
     # 更换次数过多逻辑
     if record.swap_count >= config.MAX_SWAP_COUNT:
-        segments = [("at", (None, user_id)), ("text", reply("hlp.failed.limit"))]
+        segments = [("at", (None, user_id)), ("text", await reply("hlp.failed.limit"))]
         await build_msg(matcher, event, segments, tag='finish')
         return
 
@@ -395,13 +391,13 @@ async def qq_handled(bot: Bot, event: Event, matcher: Matcher, groups: tuple = R
 
     # 强娶目标为 bot 自身，驳回请求
     if getattr(event, 'to_me', False) or str(target_user_id) == str(bot.self_id):
-        segments = [("at", (None, user_id)), ("text", reply("qq.group.failed.with_lyra"))]
+        segments = [("at", (None, user_id)), ("text", await reply("qq.group.failed.with_lyra"))]
         await build_msg(matcher, event, segments, tag='finish')
         return
 
     # 未获取到强娶目标，驳回请求
     if target_user_id is None:
-        segments = [("at", (None, user_id)), ("text", reply("qq.group.usage"))]
+        segments = [("at", (None, user_id)), ("text", await reply("qq.group.usage"))]
         await build_msg(matcher, event, segments, tag='finish')
         return
 
@@ -411,18 +407,18 @@ async def qq_handled(bot: Bot, event: Event, matcher: Matcher, groups: tuple = R
             await bot.get_group_member_info(group_id=int(group_id), user_id=int(target_user_id))
         except Exception:
             # 如果不在群里或 API 失败，会抛出异常
-            segments = [("at", (None, user_id)), ("text", reply("qq.group.failed.not_in_group"))]
+            segments = [("at", (None, user_id)), ("text", await reply("qq.group.failed.not_in_group"))]
             await build_msg(matcher, event, segments, tag='finish')
             return
     else:
-        segments = [("at", (None, user_id)), ("text", reply("not_allow_platform"))]
+        segments = [("at", (None, user_id)), ("text", await reply("not_allow_platform"))]
         await build_msg(matcher, event, segments, tag='finish')
         return
 
     # 被强娶对象未开启功能，驳回请求
     target_user = await services.check_user(platform, target_user_id)
     if target_user.is_enabled is False:
-        segments = [("at", (None, user_id)), ("text", reply("qq.group.failed.disabled"))]
+        segments = [("at", (None, user_id)), ("text", await reply("qq.group.failed.disabled"))]
         await build_msg(matcher, event, segments, tag='finish')
         return
     
@@ -435,7 +431,7 @@ async def qq_handled(bot: Bot, event: Event, matcher: Matcher, groups: tuple = R
             ntr = True  # 权限狗 NTR 启动！
         else:
             segments = [("at", (None, user_id)),
-                        ("text", reply("qq.group.failed.married"))]
+                        ("text", await reply("qq.group.failed.married"))]
             await build_msg(matcher, event, segments, tag='finish')
             return
 
@@ -456,15 +452,14 @@ async def qq_handled(bot: Bot, event: Event, matcher: Matcher, groups: tuple = R
         reply_key = "qq.group.success.common" if not_last_tag else "qq.group.success.last"
     # 构建消息
     segments = [("at", (None, user_id)),
-                ("text", reply(reply_key, username=target_username)),
+                ("text", await reply(reply_key, username=target_username)),
                 ("image", get_user_avatar_url(target_user_id))]
     await build_msg(matcher, event, segments, tag='finish')
     return   
 
 @qq_private.handle()
-async def qq_private_handled(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup(), _i18n = i18n):
+async def qq_private_handled(bot: Bot, event: Event, matcher: Matcher, groups: tuple = RegexGroup(), reply: Reply = reply):
     """处理指令: qq_private"""
-    i18n_data.set(_i18n)
     platform = get_platform(event)
     user_id = event.get_user_id()
     group_id = get_group_id(event)
@@ -484,7 +479,7 @@ async def qq_private_handled(bot: Bot, event: Event, matcher: Matcher, groups: t
 
     # 强娶目标为 bot 自身，驳回请求
     if (getattr(event, 'to_me', False)) or (goal_user_id == bot.self_id):
-        segments = [("at", (None, user_id)), ("text", reply("qq.group.failed.with_lyra"))]
+        segments = [("at", (None, user_id)), ("text", await reply("qq.group.failed.with_lyra"))]
         await build_msg(matcher, event, segments, tag='finish')
         return
     
@@ -492,14 +487,13 @@ async def qq_private_handled(bot: Bot, event: Event, matcher: Matcher, groups: t
     # 这里忽略了心选是否启用功能 —— 万一心选想玩了呢（
     await services.update_user_setting(platform, user_id, hope_id=goal_user_id)
     reply_key = "qq.private.success" if goal_user_id else "qq.private.cleared"
-    segments = [("at", (None, user_id)), ("text", reply(reply_key, qq=goal_user_id))]
+    segments = [("at", (None, user_id)), ("text", await reply(reply_key, qq=goal_user_id))]
     await build_msg(matcher, event, segments, tag='finish')
 
 
 @jrlg.handle()
-async def jrlg_handled(bot: Bot, event: Event, matcher: Matcher, _i18n = i18n):
+async def jrlg_handled(bot: Bot, event: Event, matcher: Matcher, reply: Reply = reply):
     """处理指令: jrlg"""
-    i18n_data.set(_i18n)
     platform = get_platform(event)
     user_id = event.get_user_id()
     group_id = get_group_id(event)
@@ -514,23 +508,22 @@ async def jrlg_handled(bot: Bot, event: Event, matcher: Matcher, _i18n = i18n):
     
     # 没有老公逻辑
     if record.husband_id is None:
-        segments = [("at", (None, user_id)), ("text", reply("jrlg.failed.none"))]
+        segments = [("at", (None, user_id)), ("text", await reply("jrlg.failed.none"))]
         await build_msg(matcher, event, segments, tag='finish')
         return
     # 有老公逻辑
     else:
         target_username = await get_user_display_name(bot, group_id, record.husband_id)
         segments = [("at", (None, user_id)),
-                    ("text", reply("jrlg.success.common", username=target_username)),
+                    ("text", await reply("jrlg.success.common", username=target_username)),
                     ("image", get_user_avatar_url(record.husband_id))]
         await build_msg(matcher, event, segments, tag='finish')
         return
 
 
 @hlg.handle()
-async def hlg_handled(bot: Bot, event: Event, matcher: Matcher, _i18n = i18n):
+async def hlg_handled(bot: Bot, event: Event, matcher: Matcher, reply: Reply = reply):
     """处理指令: hlg"""
-    i18n_data.set(_i18n)
     platform = get_platform(event)
     user_id = event.get_user_id()
     group_id = get_group_id(event)
@@ -545,14 +538,14 @@ async def hlg_handled(bot: Bot, event: Event, matcher: Matcher, _i18n = i18n):
     
     # 没有老公逻辑
     if record.husband_id is None:
-        segments = [("at", (None, user_id)), ("text", reply("hlg.failed.none"))]
+        segments = [("at", (None, user_id)), ("text", await reply("hlg.failed.none"))]
         await build_msg(matcher, event, segments, tag='finish')
         return
 
     # 更换次数上限
     if record.swap_count >= config.MAX_SWAP_COUNT:
         # 超过换老公次数上限，驳回请求
-        segments = [("at", (None, user_id)), ("text", reply("hlp.failed.limit"))]
+        segments = [("at", (None, user_id)), ("text", await reply("hlp.failed.limit"))]
         await build_msg(matcher, event, segments, tag='finish')
         return
     
@@ -560,14 +553,13 @@ async def hlg_handled(bot: Bot, event: Event, matcher: Matcher, _i18n = i18n):
     await services.set_today_husband(platform, group_id, user_id, husband_id=None)
     reply_key = "hlg.success.common" if record.swap_count + 1 < config.MAX_SWAP_COUNT else "hlg.success.last"
     target_username = await get_user_display_name(bot, group_id, record.husband_id)
-    segments = [("at", (None, user_id)), ("text", reply(reply_key, username=target_username))]
+    segments = [("at", (None, user_id)), ("text", await reply(reply_key, username=target_username))]
     await build_msg(matcher, event, segments, tag='finish')
 
 
 @toggle_status.handle()
-async def toggle_status_handled(event: Event, matcher: Matcher, groups: tuple = RegexGroup(), _i18n = i18n):
+async def toggle_status_handled(event: Event, matcher: Matcher, groups: tuple = RegexGroup(), reply: Reply = reply):
     """处理指令: toggle_status"""
-    i18n_data.set(_i18n)
     platform = get_platform(event)
     user_id = event.get_user_id()
     await services.check_user(platform, user_id)
@@ -576,39 +568,38 @@ async def toggle_status_handled(event: Event, matcher: Matcher, groups: tuple = 
     
     if cmd == "不当老婆":
         await services.update_user_setting(platform, user_id, is_enabled=False)
-        segments = [("at", (None, user_id)), ("text", reply("toggle.enable.disabled"))]
+        segments = [("at", (None, user_id)), ("text", await reply("toggle.enable.disabled"))]
         await build_msg(matcher, event, segments, tag='finish')
         
     elif cmd == "当老婆":
         await services.update_user_setting(platform, user_id, is_enabled=True)
-        segments = [("at", (None, user_id)), ("text", reply("toggle.enable.enabled"))]
+        segments = [("at", (None, user_id)), ("text", await reply("toggle.enable.enabled"))]
         await build_msg(matcher, event, segments, tag='finish')
     
     elif cmd == "不娶bot":
         await services.update_user_setting(platform, user_id, allow_bot=False)
-        segments = [("at", (None, user_id)), ("text", reply("toggle.allow_bot.disabled"))]
+        segments = [("at", (None, user_id)), ("text", await reply("toggle.allow_bot.disabled"))]
         await build_msg(matcher, event, segments, tag='finish')
         
     elif cmd == "娶bot":
         await services.update_user_setting(platform, user_id, allow_bot=True)
-        segments = [("at", (None, user_id)), ("text", reply("toggle.allow_bot.enabled"))]
+        segments = [("at", (None, user_id)), ("text", await reply("toggle.allow_bot.enabled"))]
         await build_msg(matcher, event, segments, tag='finish')
 
     elif cmd == "我是bot":
         await services.update_user_setting(platform, user_id, is_bot=True)
-        segments = [("at", (None, user_id)), ("text", reply("toggle.is_bot.enabled"))]
+        segments = [("at", (None, user_id)), ("text", await reply("toggle.is_bot.enabled"))]
         await build_msg(matcher, event, segments, tag='finish')
 
     elif cmd == "我不是bot":
         await services.update_user_setting(platform, user_id, is_bot=False)
-        segments = [("at", (None, user_id)), ("text", reply("toggle.is_bot.disabled"))]
+        segments = [("at", (None, user_id)), ("text", await reply("toggle.is_bot.disabled"))]
         await build_msg(matcher, event, segments, tag='finish')
 
 
 @sudo.handle()
-async def sudo_handled(event: OneBotV11GroupMessageEvent, matcher: Matcher, groups: tuple = RegexGroup(), _i18n = i18n):
+async def sudo_handled(event: OneBotV11GroupMessageEvent, matcher: Matcher, groups: tuple = RegexGroup(), reply: Reply = reply):
     """处理指令: sudo"""
-    i18n_data.set(_i18n)
     _, cmd = groups  # groups[0] 是插件名，groups[1] 是命令内容
     cmd = cmd.strip()
     parts = cmd.split()
@@ -617,7 +608,7 @@ async def sudo_handled(event: OneBotV11GroupMessageEvent, matcher: Matcher, grou
     group_id = get_group_id(event)
     # Permission check 已经在 on_regex 的 permission 参数中完成，这里不再重复检查
     if not group_id:
-        await build_msg(matcher, event, reply("plugin.sudo.failed.not_in_group"), tag='finish')
+        await build_msg(matcher, event, await reply("plugin.sudo.failed.not_in_group"), tag='finish')
         return
     
     # sudo jrlp filter_activate <on|off>
@@ -629,16 +620,16 @@ async def sudo_handled(event: OneBotV11GroupMessageEvent, matcher: Matcher, grou
             elif action.lower() == "off":
                 status = False
             else:
-                await build_msg(matcher, event, reply("plugin.sudo.filter_activate.usage"), tag='finish')
+                await build_msg(matcher, event, await reply("plugin.sudo.filter_activate.usage"), tag='finish')
                 return
             await services.check_group(platform, group_id, filter_activate=status)
             reply_key = "plugin.sudo.filter_activate.enabled" if status else "plugin.sudo.filter_activate.disabled"
-            await build_msg(matcher, event, reply(reply_key), tag='finish')
+            await build_msg(matcher, event, await reply(reply_key), tag='finish')
             return
 
     # sudo jrlp set_bot <bot_qq | @bot> <is_bot>
     if cmd.startswith("set_bot"):
-        await build_msg(matcher, event, reply("plugin.sudo.set_bot.disabled"), tag='finish')
+        await build_msg(matcher, event, await reply("plugin.sudo.set_bot.disabled"), tag='finish')
         return
         parts = cmd.split()
         if len(parts) == 3:
@@ -648,13 +639,13 @@ async def sudo_handled(event: OneBotV11GroupMessageEvent, matcher: Matcher, grou
             elif is_bot_str.lower() == "false":
                 is_bot = False
             else:
-                await build_msg(matcher, event, reply("plugin.sudo.set_bot.usage"), tag='finish')
+                await build_msg(matcher, event, await reply("plugin.sudo.set_bot.usage"), tag='finish')
                 return
             await services.check_user(platform, bot_qq, is_bot=is_bot)
             reply_key = "plugin.sudo.set_bot.enabled" if is_bot else "plugin.sudo.set_bot.disabled"
-            await build_msg(matcher, event, reply(reply_key, qq=bot_qq), tag='finish')
+            await build_msg(matcher, event, await reply(reply_key, qq=bot_qq), tag='finish')
             return
 
-    segments = [("at", (None, user_id)), ("text", reply("plugin.sudo.help"))]
+    segments = [("at", (None, user_id)), ("text", await reply("plugin.sudo.help"))]
     await build_msg(matcher, event, segments, tag='finish')
     return
