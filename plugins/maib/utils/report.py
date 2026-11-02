@@ -169,7 +169,7 @@ def build_diff_report(
         from ..image_gen.utils import MS
 
         # 字号与底图必须同一套 ms：字体按 ms.x(mpx) 生成，画布由函数内部按 ms 换算
-        ms = MS()
+        ms = MS(1)
         detail_image = draw_simple_board(
             detail_text,
             font=FontManager.font(FontCode.SmileySans, size=ms.x(16)),

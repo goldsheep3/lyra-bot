@@ -41,6 +41,7 @@ builtin_plugins = []
 "@local" = []
 nonebot-plugin-localstore = ["nonebot_plugin_localstore"]
 nonebot-plugin-datastore = ["nonebot_plugin_datastore"]
+nonebot-plugin-locales = ["nonebot_plugin_locales"]
 
 
 [tool.nonebot.adapters]
