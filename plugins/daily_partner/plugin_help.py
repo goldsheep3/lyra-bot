@@ -2,15 +2,17 @@
 # with i18n support
 from pathlib import Path
 from nonebot import on_regex
-from plugins.nonebot_plugin_i18n import use_i18n, reply, current_i18n_data as i18n_data
+from nonebot_plugin_locales import Reply, locales_init
 
 i18n_dir = Path(__file__).parent / "assets" / "i18n"
-i18n = use_i18n(i18n_dir)
+reply = locales_init(i18n_dir)
 
 _help = on_regex(r"^(帮助|help)\s*(今日老婆|jrlp)$", priority=10, block=True)
 
 @_help.handle()
-async def _(_i18n = i18n):
-    i18n_data.set(_i18n)
-    msg = f"Lyra's Help | {reply("plugin.code")}({reply("plugin.name")})\n\n{reply("plugin.help")}".strip()
+async def _(reply: Reply = reply):
+    code = await reply("plugin.code")
+    name = await reply("plugin.name")
+    help_text = await reply("plugin.help")
+    msg = f"Lyra's Help | {code}({name})\n\n{help_text}".strip()
     await _help.finish(msg)
