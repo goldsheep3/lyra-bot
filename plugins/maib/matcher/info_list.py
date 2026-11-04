@@ -110,12 +110,12 @@ async def scorelist_handled(event: Event, matcher: Matcher, groups: dict = Regex
     
     # 解析失败
     if parser_status is False:
-        await matcher.finish(reply("scorelist.invalid_format"))
+        await matcher.finish(await reply("scorelist.invalid_format"))
         return
     
     # TODO: 处理 mca_list，生成完成表/进度/列表，并发送消息
     if not mca_list:
-        await matcher.finish(reply("scorelist.no_data"))
+        await matcher.finish(await reply("scorelist.no_data"))
         return
     
     if config.LOW_MEMORY_MODE:

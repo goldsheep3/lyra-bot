@@ -14,7 +14,7 @@ async def _(event: Event, reply: Reply = reply):
         "",
         await reply("ad.help"),
         await reply("b50.help"),
-        await reply("ra.help"),
+        await reply("rc.help"),
         await reply("sync.help"),
         await reply("info.help"),
         await reply("alias.help"),

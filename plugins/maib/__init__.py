@@ -56,7 +56,7 @@ try:
         config.MAX_BLUR_SEARCH_RESULTS = 40
 
 
-    from . import matcher, services, utils, plugin_help, fetch, napcat_stream, webapi
+    from . import matcher, services, utils, fetch, napcat_stream, webapi
 
     # 注入 hook 以支持 stream 获取文件
     napcat_stream.install_hook()

@@ -167,5 +167,8 @@ from . import sync as _sync_handlers
 # maime - Aime 卡片绑定
 from . import maime as _maime_handlers
 
+# plugin_help - 帮助信息
+from . import plugin_help as _plugin_help_handlers
+
 # temp - 临时管理命令，可能随时移除
 from . import temp as _temp_handlers
