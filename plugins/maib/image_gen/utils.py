@@ -158,7 +158,7 @@ class FontCode(StrEnum):
     # NotoSansSC_Thin = "Noto_Sans_SC/static/NotoSansSC-Thin.ttf"
     # NotoSansSC_Light = "Noto_Sans_SC/static/NotoSansSC-Light.ttf"
     # NotoSansSC_ExtraLight = "Noto_Sans_SC/static/NotoSansSC-ExtraLight.ttf"
-    # NotoSansSC_Regular = "Noto_Sans_SC/static/NotoSansSC-Regular.ttf"
+    NotoSansSC_Regular = "Noto_Sans_SC/static/NotoSansSC-Regular.ttf"
     NotoSansSC_Medium = "Noto_Sans_SC/static/NotoSansSC-Medium.ttf"
     # NotoSansSC_SemiBold = "Noto_Sans_SC/static/NotoSansSC-SemiBold.ttf"
     NotoSansSC_Bold = "Noto_Sans_SC/static/NotoSansSC-Bold.ttf"
