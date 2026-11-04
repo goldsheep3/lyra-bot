@@ -1,3 +1,7 @@
+# 插件名
+plugin_name: "maib / 小梨音游核心"
+help: "帮助"
+
 # link 查询与绑定
 link:
   query_disabled: "查询功能正在开发中，敬请期待！"
@@ -15,10 +19,10 @@ link:
 # ra_calc
 rc:
   help: |-
-    ra_calc: ra <定数> [完成率]
-        可以计算 DXRating
-        定数: 可以直接输入，也可以使用 id11951紫 形式获取谱面定数
-        完成率: 可以直接输入，也可以使用“鸟家”“sss+”等表达方式，或留空以计算s~sss+的分档ra
+    ra <定数> [完成率]
+      可以计算 DXRating
+      定数: 可以直接输入，也可以使用 id11951紫 形式获取谱面定数
+      完成率: 可以直接输入，也可以使用“鸟家”“sss+”等表达方式，或留空以计算s~sss+的分档ra
   achievement_invalid: "请提供正确的成绩分数哦qwq"
   maidata_invalid: "小梨无法解析你提供的歌曲信息喔TT"
   level_invalid: "请提供正确的定数哦qwq"
@@ -31,6 +35,11 @@ rc:
 
 # adx_download (ad)
 ad:
+  help: |-
+    下载谱面 [id] [ADX|ZIP]
+      可以下载当前数据库中存在的 Simai 谱面文件
+      可以直接回复任何 bot 消息中，包含谱面 id 数字的消息自动获取 id
+      [ADX|ZIP] 选择谱面文件格式，默认为 AstroDX 可直接读取的 .adx
   no_maidata: "没有找到id为{short_id}的谱面的数据！可能还没被收录，请联系监护人确认喔qwq"
   bad_id: "请提供正确的乐曲 ID 哦qwq"
   no_chart_file: "谱面文件不存在！可能还没被收录，请联系监护人确认喔qwq"
@@ -43,6 +52,11 @@ ad:
 
 # mai_info
 info:
+  help: |-
+    id<id> 或 info<id>
+      通过 id 查询乐曲信息
+    <乐曲名/别名>是什么歌
+      通过乐曲名或别名查询乐曲信息，有一定的模糊匹配能力
   invalid_id: "请提供正确的乐曲 ID 哦qwq"
   maidata_not_found: "没有找到 id{short_id} 的乐曲数据qwq"
   # what_song
@@ -54,6 +68,9 @@ info:
 
 # mai_alias (alias)
 alias:
+  help: |-
+    添加别名 id<id> <别名>
+      为乐曲添加别名，注意标准谱面和DX谱面的别名不互通哦
   add:
     success: "成功为 {shortid} 添加别名【{alias}】！"
     already_exists: "这个别名似乎已经存在了捏~"
@@ -62,6 +79,11 @@ alias:
 
 # b50
 b50:
+  help: |-
+    b50 [CN|JP] 或 kkb [CN|JP]
+      可以绘制 b50 成绩图
+      [CN|JP] 表示绘制国服或日服的成绩图
+      如果需要绘制日服成绩图，请先通过 lyra-sync 上传日服成绩数据
   all_not_supported: "混合成绩图还在开发中，暂时无法使用哦qwq"
   qq_parsing_failed: "小梨没找到合适的查询目标……？请联系监护人确认"
   drawing: "小梨正在绘制 b50 图片，请稍候……"
@@ -71,12 +93,26 @@ b50:
 
 # sync
 sync:
+  help: |-
+    sytb
+      强制同步你当前用户的水鱼数据。b50 绘图时会自动尝试同步水鱼数据
+    获取同步码
+      获取一个 lyra-maisync 同步码，用于 lyra-maisync 篡改猴脚本的自动上传
+      脚本安装链接：https://github.com/goldsheep3/lyra-bot/raw/refs/heads/maib/plugins/maib/sync/lyra-maisync.user.js
+      脚本中需要设置的远程地址：https://lyra-ciane.icu
   sy:
     syncing: "小梨正在尝试从水鱼查分器获取你的最新成绩数据！"
     no_update: "检查过啦！小梨记录的成绩数据已经是最新的啦。"
 
 # maime
 maime:
+  help: |-
+    绑定aime <ACCESS完整卡号>
+      绑定 Aime 的 ACCESS 卡号到你的账户
+    解绑aime <ACCESS完整卡号>
+      从你的账户解绑 Aime 的 ACCESS 卡号
+    查询aime <ACCESS后四位|ACCESS完整卡号>
+      查询该 ACCESS 卡号的绑定信息以寻找卡片主人
   link:
     success: "已经将该卡片绑定到你的账户~"
     error:
