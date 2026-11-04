@@ -1,0 +1,153 @@
+# 플러그인 이름
+plugin_name: "maib / 샤오리 리듬 게임 코어"
+help: "도움말"
+
+# link 조회 및 연동
+link:
+  query_disabled: "조회 기능은 현재 개발 중입니다. 조금만 기다려 주세요!"
+  only_qq: "이 작업은 QQ에서만 지원됩니다"
+  tip: "다른 플랫폼의 LyraBot에서 아래 명령어를 입력해 연동을 완료해 주세요. 이 정보는 5분 동안 유효합니다."
+  invalid_hash: "제공된 hash 값이 유효하지 않거나 만료되었습니다"
+  not_found: "일치하는 연동 정보를 찾을 수 없습니다"
+  success: "연동에 성공했습니다!"
+  unlink_success: "연동이 해제되었습니다!"
+  not_platform: "알 수 없는 플랫폼"
+  not_linked: "아직 QQ 번호를 연동하지 않은 것 같아요~ 「绑定link」로 연동을 시도해 보세요"
+  onebot_no_bind: "직접 조작할 수 있는 () QQ 계정끼리는 연동할 수 없습니다"
+  get_more_info: "아직 QQ 번호를 연동하지 않았습니다. 연동하면 플레이 데이터를 동기화할 수 있어요!"
+
+# ra_calc
+rc:
+  help: |-
+    ra <정수> [달성률]
+        DXRating을 계산할 수 있습니다
+        정수: 직접 입력하거나 id11951紫 형식으로 채보 정수를 가져올 수 있습니다
+        달성률: 직접 입력하거나 "鳥加", "sss+" 같은 표현을 사용하거나, 비워 두어 s~sss+ 구간별 ra를 계산할 수 있습니다
+  achievement_invalid: "올바른 성적 점수를 입력해 주세요 qwq"
+  maidata_invalid: "샤오리가 제공하신 곡 정보를 해석하지 못했어요 TT"
+  level_invalid: "올바른 정수를 입력해 주세요 qwq"
+  level_failed: "샤오리가 제공하신 정수 정보를 해석하지 못했어요 TT"
+  success:
+    tip: "샤오리가 계산했어요!"
+    common: "정수 {level}*{achievement}% -> Rating: {ra}"
+    blur: "정수 {level} {rate} -> Rating: {ra}"
+  excluding_ap_bouns: "이 ra에는 AP 추가 점수가 포함되지 않습니다!"
+
+# adx_download (ad)
+ad:
+  help: |-
+    download [id] [ADX|ZIP]
+        현재 데이터베이스에 있는 Simai 채보 파일을 다운로드할 수 있습니다
+        채보 ID 숫자가 포함된 모든 bot 메시지에 답장하면 자동으로 ID를 가져올 수 있습니다
+        [ADX|ZIP]에서 채보 파일 형식을 선택합니다. 기본값은 AstroDX에서 바로 읽을 수 있는 .adx입니다
+  no_maidata: "id {short_id}의 채보 데이터를 찾을 수 없습니다! 아직 수록되지 않았을 수 있으니 관리자에게 확인해 주세요 qwq"
+  bad_id: "올바른 곡 ID를 입력해 주세요 qwq"
+  no_chart_file: "채보 파일이 없습니다! 아직 수록되지 않았을 수 있으니 관리자에게 확인해 주세요 qwq"
+  prepare: "잠시만 기다려 주세요——샤오리가 id {target_short_id}의 채보 파일을 준비하고 있어요!"
+  error: "샤오리가 채보 파일을 처리하는 중 문제가 발생했습니다. 관리자에게 확인해 주세요 qwq"
+  success:
+    qq_private: "짜잔~ 채보 {song_name}을 받아 주세요!"
+    qq_group: "샤오리가 {song_name}의 adx 채보를 그룹에 올렸어요!"
+    tg: "우~ 샤오리가 {song_name}의 채보를 보냈어요!"
+
+# mai_info
+info:
+  help: |-
+    id<id> 또는 info<id>
+        ID로 곡 정보를 조회합니다
+
+    <乐曲名/别名>是什么歌
+        곡명이나 별칭으로 곡 정보를 조회하며, 일부 유사 검색도 지원합니다
+  invalid_id: "올바른 곡 ID를 입력해 주세요 qwq"
+  maidata_not_found: "id {short_id}의 곡 데이터를 찾을 수 없습니다 qwq"
+  # what_song
+  found_none: "「{keyword}」를 포함하는 곡 데이터를 찾을 수 없습니다 qwq"
+  found_single: "찾으시는 곡은 이것인가요: {shortid}. {title}"
+  found_multiple: "샤오리가 {count}곡을 찾았어요. 원하시는 곡이 있는지 확인해 주세요 w"
+  found_many: "샤오리가 아주 많은 곡을 찾았어요……우와, {count}곡이에요 ()"
+  found_too_many_abort: "너무 많아요! 검색 범위를 조금 좁혀 주세요 qwq"
+
+# mai_alias (alias)
+alias:
+  help: |-
+    添加别名 id<id> <별칭>
+        곡에 별칭을 추가합니다. 일반 채보와 DX 채보의 별칭은 서로 공유되지 않으니 주의해 주세요
+  add:
+    success: "{shortid}에 별칭 【{alias}】을(를) 추가했습니다!"
+    already_exists: "이 별칭은 이미 있는 것 같아요~"
+  remove:
+    deletion_not_supported: "현재 별칭을 직접 삭제하는 기능은 지원되지 않아요~"
+
+# b50
+b50:
+  help: |-
+    b50 [CN|JP] 또는 kkb [CN|JP]
+        b50 성적 이미지를 생성할 수 있습니다
+        [CN|JP]는 중국 서버 또는 일본 서버의 성적 이미지를 생성하는 옵션입니다
+        일본 서버 성적 이미지를 생성하려면 먼저 lyra-sync로 일본 서버 성적 데이터를 업로드해 주세요
+  all_not_supported: "혼합 성적 이미지는 아직 개발 중이라 사용할 수 없어요 qwq"
+  qq_parsing_failed: "샤오리가 적절한 조회 대상을 찾지 못했어요……? 관리자에게 확인해 주세요"
+  drawing: "샤오리가 b50 이미지를 그리고 있어요. 잠시만 기다려 주세요……"
+  other_updated: "샤오리가 조회 대상의 수어 데이터가 갱신된 것을 확인하고 최신 상태로 업데이트했어요!"
+  no_jp_data: "일본 서버 데이터가 없어요! lyra-sync로 성적을 업로드한 뒤 다시 시도해 주세요!"
+  no_cn_data: "중국 서버 데이터가 없어요! 수어에 성적을 업로드한 뒤 다시 시도해 주세요!"
+
+# sync
+sync:
+  help: |-
+    sytb
+        현재 사용자의 수어 데이터를 강제로 동기화합니다. b50 이미지 생성 시에도 수어 데이터 동기화를 자동으로 시도합니다
+
+    获取同步码
+        lyra-maisync 동기화 코드를 받아 lyra-maisync 유저스크립트를 통한 자동 업로드에 사용합니다
+        /help maisync에서 스크립트 링크와 원격 주소를 확인할 수 있습니다
+  help_maisync: |-
+    lyra-maisync
+    스크립트 설치 링크: https://github.com/goldsheep3/lyra-bot/raw/refs/heads/maib/plugins/maib/sync/lyra-maisync.user.js
+    스크립트에 설정할 원격 주소: https://lyra-ciane.icu
+  sy:
+    syncing: "샤오리가 수어 점수 조회기에서 최신 성적 데이터를 가져오려고 하고 있어요!"
+    no_update: "확인했어요! 샤오리가 기록한 성적 데이터는 이미 최신이에요."
+
+# maime
+maime:
+  help: |-
+    绑定aime <ACCESS 카드 번호 전체>
+        Aime ACCESS 카드 번호를 계정에 연동합니다
+
+    解绑aime <ACCESS 카드 번호 전체>
+        계정에서 Aime ACCESS 카드 번호의 연동을 해제합니다
+
+    查询aime <ACCESS 뒤 4자리|ACCESS 카드 번호 전체>
+        ACCESS 카드 번호의 연동 정보를 조회하여 카드 주인을 찾습니다
+  link:
+    success: "이 카드를 계정에 연동했어요~"
+    error:
+      unknown: "카드를 연동하는 중 예상치 못한 오류가 발생했습니다. 관리자에게 확인해 주세요 qwq"
+      linked: "이 카드는 이미 다른 계정에 연동되어 있어요~"
+  unlink:
+    success: "이 카드를 계정에서 연동 해제했어요~"
+    error:
+      unknown: "카드 연동을 해제하는 중 예상치 못한 오류가 발생했습니다. 관리자에게 확인해 주세요 qwq"
+      not_found: "이 카드의 연동 정보를 찾을 수 없어요~"
+      not_owner: "이 카드는 회원님의 계정에 속하지 않아요~"
+  lost:
+    success: "카드 번호 {card}의 주인은 {qq}입니다. 그 리듬 게임 고수에게 연락해 보세요 냥("
+    error:
+      not_found: "이 카드는 여기에서 연동된 적이 없거나, 연동이 해제된 상태예요 냥("
+      multiple_found: "이 카드는 여러 계정에 연동되어 있습니다. 전체 access 번호로 다시 시도해 주세요 qwq"
+
+  list:
+    empty: "아직 연동한 카드가 없어요~"
+    header: "다음 카드를 연동했습니다:"
+    item: "{masked} ({create_at})"
+    item_full: "{access} ({create_at})"
+
+# 예외 안내
+error:
+  low_memory: "현재 저메모리 모드이므로 이 기능의 이미지 생성을 일시 중지했어요 냥( ๑ŏ ﹏ ŏ๑ )"
+  invalid_user_id: "str 형식의 user_id를 해석할 수 없습니다: {raw_uid}"
+  user_not_found: "연동된 QQ 계정을 찾을 수 없습니다. 먼저 link 기능으로 QQ 번호를 연동해 주세요"
+  unexpected: "지원하지 않는 플랫폼 유형입니다"
+  common: "샤오리에게 예상치 못한 오류가 발생했습니다. 관리자에게 확인해 주세요 qwq"
+  platform_not_supported: "예상치 못한 오류(Platform Not Supported)가 발생했습니다. 관리자에게 확인해 주세요 qwq"

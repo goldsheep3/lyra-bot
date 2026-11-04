@@ -1,4 +1,8 @@
-# link 查询与绑定
+# Plugin name
+plugin_name: "maib / Xiaoli Rhythm Game Core"
+help: "Help"
+
+# Link lookup and binding
 link:
   query_disabled: "The query feature is under development. Please look forward to it!"
   only_qq: "This operation is only supported via QQ"
@@ -15,7 +19,7 @@ link:
 # ra_calc
 rc:
   help: |-
-    ra_calc: ra <constant> [achievement]
+    ra <constant> [achievement]
         Calculates DXRating
         Constant: Can be entered directly, or use the form id11951紫 to get the chart constant
         Achievement: Can be entered directly, or use expressions like "鳥加" "sss+", or leave blank to calculate tiered ra for s~sss+
@@ -31,6 +35,11 @@ rc:
 
 # adx_download (ad)
 ad:
+  help: |-
+    download [id] [ADX|ZIP]
+        Downloads a Simai chart file available in the current database
+        You can also reply to any bot message containing a numeric chart ID to retrieve it automatically
+        [ADX|ZIP] selects the chart-file format; the default is .adx, which AstroDX can read directly
   no_maidata: "No chart data found for id {short_id}! It may not have been indexed yet. Please contact the guardian to confirm qwq"
   bad_id: "Please provide a valid song ID qwq"
   no_chart_file: "Chart file does not exist! It may not have been indexed yet. Please contact the guardian to confirm qwq"
@@ -43,6 +52,12 @@ ad:
 
 # mai_info
 info:
+  help: |-
+    id<id> or info<id>
+        Look up song information by ID
+
+    <乐曲名/别名>是什么歌
+        Look up song information by song name or alias, with some fuzzy-matching support
   invalid_id: "Please provide a valid song ID qwq"
   maidata_not_found: "No song data found for id {short_id} qwq"
   # what_song
@@ -54,6 +69,9 @@ info:
 
 # mai_alias (alias)
 alias:
+  help: |-
+    添加别名 id<id> <alias>
+        Adds an alias for a song. Note that standard-chart and DX-chart aliases are not shared
   add:
     success: "Successfully added alias [{alias}] for {shortid}!"
     already_exists: "This alias seems to already exist~"
@@ -62,6 +80,11 @@ alias:
 
 # b50
 b50:
+  help: |-
+    b50 [CN|JP] or kkb [CN|JP]
+        Generates a b50 score image
+        [CN|JP] specifies whether to generate an image for the Chinese or Japanese server
+        To generate a Japanese-server score image, first upload your Japanese-server score data via lyra-sync
   all_not_supported: "Mixed score images are still under development and cannot be used yet qwq"
   qq_parsing_failed: "Xiao Li couldn't find a suitable query target...? Please contact the guardian to confirm"
   drawing: "Xiao Li is drawing the b50 image, please wait..."
@@ -71,12 +94,32 @@ b50:
 
 # sync
 sync:
+  help: |-
+    sytb
+        Forces synchronization of your current Suiyu score data. b50 generation will also try to synchronize it automatically
+
+    获取同步码
+        Gets a lyra-maisync synchronization code for automatic uploads using the lyra-maisync userscript
+        Use /help maisync to get the script link and remote address
+  help_maisync: |-
+    lyra-maisync
+    Script installation link: https://github.com/goldsheep3/lyra-bot/raw/refs/heads/maib/plugins/maib/sync/lyra-maisync.user.js
+    Remote address to configure in the script: https://lyra-ciane.icu
   sy:
     syncing: "Xiao Li is trying to fetch your latest score data from the Suiyu score tracker!"
     no_update: "Checked! The score data recorded by Xiao Li is already up to date."
 
 # maime
 maime:
+  help: |-
+    绑定aime <full ACCESS card number>
+        Binds an Aime ACCESS card number to your account
+
+    解绑aime <full ACCESS card number>
+        Unbinds an Aime ACCESS card number from your account
+
+    查询aime <last four digits of ACCESS|full ACCESS card number>
+        Looks up binding information for the ACCESS card number to find the card owner
   link:
     success: "This card has been bound to your account~"
     error:

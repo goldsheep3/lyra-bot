@@ -1,4 +1,8 @@
-# link 查询与绑定
+# プラグイン名
+plugin_name: "maib / 小梨音ゲーコア"
+help: "ヘルプ"
+
+# link の検索とバインド
 link:
   query_disabled: "クエリ機能は開発中です。もうしばらくお待ちください！"
   only_qq: "この操作は QQ でのみサポートされています"
@@ -15,7 +19,7 @@ link:
 # ra_calc
 rc:
   help: |-
-    ra_calc: ra <定数> [達成率]
+    ra <定数> [達成率]
         DXRating を計算できます
         定数: 直接入力するか、id11951紫 の形式で譜面定数を取得できます
         達成率: 直接入力するか、「鳥加」「sss+」などの表現を使うか、省略して s～sss+ の段階別 ra を計算できます
@@ -31,6 +35,11 @@ rc:
 
 # adx_download (ad)
 ad:
+  help: |-
+    download [id] [ADX|ZIP]
+        現在のデータベースにある Simai 譜面ファイルをダウンロードできます
+        譜面 ID の数字を含む任意の bot メッセージに返信すると、自動的に ID を取得できます
+        [ADX|ZIP] で譜面ファイル形式を選択します。デフォルトは AstroDX で直接読み込める .adx です
   no_maidata: "id{short_id}の譜面データが見つかりませんでした！まだ収録されていない可能性があります。保護者に確認してくださいねqwq"
   bad_id: "正しい楽曲 ID を入力してくださいねqwq"
   no_chart_file: "譜面ファイルが存在しません！まだ収録されていない可能性があります。保護者に確認してくださいねqwq"
@@ -43,6 +52,12 @@ ad:
 
 # mai_info
 info:
+  help: |-
+    id<id> または info<id>
+        ID で楽曲情報を検索します
+
+    <楽曲名/別名>是什么歌
+        楽曲名または別名で楽曲情報を検索します。あいまい検索にも対応しています
   invalid_id: "正しい楽曲 ID を入力してくださいねqwq"
   maidata_not_found: "id{short_id} の楽曲データが見つかりませんでしたqwq"
   # what_song
@@ -54,6 +69,9 @@ info:
 
 # mai_alias (alias)
 alias:
+  help: |-
+    添加别名 id<id> <別名>
+        楽曲に別名を追加します。通常譜面と DX 譜面の別名は共有されないのでご注意ください
   add:
     success: "{shortid} に別名【{alias}】を追加しました！"
     already_exists: "この別名はすでに存在するようです～"
@@ -62,6 +80,11 @@ alias:
 
 # b50
 b50:
+  help: |-
+    b50 [CN|JP] または kkb [CN|JP]
+        b50 の成績画像を生成できます
+        [CN|JP] は中国版または日本版の成績画像を生成する指定です
+        日本版の成績画像を生成するには、先に lyra-sync で日本版の成績データをアップロードしてください
   all_not_supported: "混合成績画像は開発中です。現在ご利用いただけませんqwq"
   qq_parsing_failed: "小梨が適切なクエリ対象を見つけられませんでした……？保護者に確認してください"
   drawing: "小梨が b50 画像を描画中です。少々お待ちください……"
@@ -71,12 +94,32 @@ b50:
 
 # sync
 sync:
+  help: |-
+    sytb
+        現在のユーザーの水魚データを強制的に同期します。b50 の画像生成時にも水魚データの同期を自動的に試みます
+
+    获取同步码
+        lyra-maisync の同期コードを取得します。lyra-maisync のユーザースクリプトによる自動アップロードに使用します
+        /help maisync でスクリプトのリンクとリモートアドレスを確認できます
+  help_maisync: |-
+    lyra-maisync
+    スクリプトのインストールリンク：https://github.com/goldsheep3/lyra-bot/raw/refs/heads/maib/plugins/maib/sync/lyra-maisync.user.js
+    スクリプトで設定するリモートアドレス：https://lyra-ciane.icu
   sy:
     syncing: "小梨が水魚查分器から最新の成績データを取得しようとしています！"
     no_update: "確認しました！小梨が記録している成績データはすでに最新です。"
 
 # maime
 maime:
+  help: |-
+    绑定aime <ACCESS カード番号全桁>
+        Aime の ACCESS カード番号をあなたのアカウントにバインドします
+
+    解绑aime <ACCESS カード番号全桁>
+        あなたのアカウントから Aime の ACCESS カード番号のバインドを解除します
+
+    查询aime <ACCESS の下4桁|ACCESS カード番号全桁>
+        ACCESS カード番号のバインド情報を検索し、カードの所有者を探します
   link:
     success: "このカードをあなたのアカウントにバインドしました～"
     error:
