@@ -8,11 +8,12 @@ from . import Reply, reply
 from .message import build_msg
 
 
-plugin_help = on_regex(r"^(帮助|help)\s*(maib|舞萌|mai|maimai)$", priority=10, block=True)
+help = on_regex(r"^[ /](帮助|help)\s*(maib|舞萌|mai|maimai)$", priority=10, block=True)
+help_maisync = on_regex(r"^[ /](帮助|help)\s*maisync$", priority=10, block=True)
 
-@plugin_help.handle()
+@help.handle()
 async def _(event: Event, matcher: Matcher, reply: Reply = reply):
-    text = '\n'.join([
+    text = '\n\n'.join([
         await reply("help") + ": " + await reply("plugin_name"),  # 帮助标题
         "",
         await reply("ad.help"),
@@ -27,3 +28,7 @@ async def _(event: Event, matcher: Matcher, reply: Reply = reply):
     img = simple_img(text, ms=1)
     
     await build_msg(matcher, event, [("image", get_image_bytes(img))], tag="finish")
+
+@help_maisync.handle()
+async def _(event: Event, matcher: Matcher, reply: Reply = reply):
+    await build_msg(matcher, event, [("text", await reply("help_maisync"))], tag="finish")

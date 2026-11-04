@@ -98,8 +98,11 @@ sync:
       强制同步你当前用户的水鱼数据。b50 绘图时会自动尝试同步水鱼数据
     获取同步码
       获取一个 lyra-maisync 同步码，用于 lyra-maisync 篡改猴脚本的自动上传
-      脚本安装链接：https://github.com/goldsheep3/lyra-bot/raw/refs/heads/maib/plugins/maib/sync/lyra-maisync.user.js
-      脚本中需要设置的远程地址：https://lyra-ciane.icu
+      通过 /help maisync 获取脚本链接和远程地址
+  help_maisync: |-
+    lyra-maisync
+    脚本安装链接：https://github.com/goldsheep3/lyra-bot/raw/refs/heads/maib/plugins/maib/sync/lyra-maisync.user.js
+    脚本中需要设置的远程地址：https://lyra-ciane.icu
   sy:
     syncing: "小梨正在尝试从水鱼查分器获取你的最新成绩数据！"
     no_update: "检查过啦！小梨记录的成绩数据已经是最新的啦。"
