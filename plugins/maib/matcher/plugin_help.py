@@ -8,14 +8,13 @@ from . import Reply, reply
 from .message import build_msg
 
 
-help = on_regex(r"^[ /](帮助|help)\s*(maib|舞萌|mai|maimai)$", priority=10, block=True)
-help_maisync = on_regex(r"^[ /](帮助|help)\s*maisync$", priority=10, block=True)
+help = on_regex(r"^[ /]?(帮助|help)\s*(maib|舞萌|mai|maimai)$", priority=10, block=True)
+help_maisync = on_regex(r"^[ /]?(帮助|help)\s*maisync$", priority=10, block=True)
 
 @help.handle()
 async def _(event: Event, matcher: Matcher, reply: Reply = reply):
     text = '\n\n'.join([
         await reply("help") + ": " + await reply("plugin_name"),  # 帮助标题
-        "",
         await reply("ad.help"),
         await reply("b50.help"),
         await reply("rc.help"),
@@ -31,4 +30,4 @@ async def _(event: Event, matcher: Matcher, reply: Reply = reply):
 
 @help_maisync.handle()
 async def _(event: Event, matcher: Matcher, reply: Reply = reply):
-    await build_msg(matcher, event, [("text", await reply("help_maisync"))], tag="finish")
+    await build_msg(matcher, event, [("text", await reply("sync.help_maisync"))], tag="finish")
