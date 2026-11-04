@@ -12,7 +12,9 @@ class SimpleListBoard:
     """文本列表看板"""
     
     @classmethod
-    def list(cls, text: str, font: Optional[ImageFont.FreeTypeFont] = None, ms: MS = MS()) -> Image.Image:
+    def list(cls, text: str, font: Optional[ImageFont.FreeTypeFont] = None, ms: MS | int = MS()) -> Image.Image:
+        if isinstance(ms, int):
+            ms = MS(ms)
         # font 必须是 px 尺寸（用 ms.x(mpx) 生成）；否则底图按 mpx 放大后文字会小 multiple 倍
         font = font or FontManager.font(FontCode.MiSans_Demibold, size=ms.x(16))
         lines = text.splitlines() or [""]
