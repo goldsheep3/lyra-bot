@@ -12,7 +12,11 @@ from pydantic import BaseModel
 from nonebot import get_app, logger
 
 from . import config, services
-from .mcp import create_mcp_app
+
+try:
+    from .mcp import create_mcp_app
+except ImportError:  # 未安装 mcp 依赖时不影响 maib 其余 Web API
+    create_mcp_app = None  # type: ignore[assignment]
 from .utils.sync import build_lyra_records_v3, parse_lyra_maisync_data
 
 
@@ -159,7 +163,7 @@ if not any(getattr(route, "path", None) == "/api/pair" for route in _app.router.
     _app.include_router(router)
     logger.info("maib 在线同步 Web API 已挂载: /api/pair, /api/upload")
 
-if config.MAIB_MCP_API_TOKEN:
+if create_mcp_app is not None and config.MAIB_MCP_API_TOKEN:
     if not any(getattr(route, "path", None) == "/maib" for route in _app.router.routes):
         _mcp_app = create_mcp_app(config.MAIB_MCP_API_TOKEN)
         _parent_lifespan = _app.router.lifespan_context

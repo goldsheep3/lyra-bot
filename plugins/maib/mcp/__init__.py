@@ -5,6 +5,7 @@ from hmac import compare_digest
 from typing import Any, Literal
 
 from mcp.server.mcpserver import MCPServer
+from mcp.server.transport_security import TransportSecuritySettings
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -111,6 +112,11 @@ def create_mcp_app(api_token: str) -> Any:
         streamable_http_path="/mcp",
         json_response=True,
         stateless_http=True,
+        # 默认 host=127.0.0.1 会自动开启 DNS rebinding 保护，只放行 localhost，
+        # 跨机访问会被 421 Invalid Host header 挡掉；此处关闭，鉴权交给 Bearer Token。
+        transport_security=TransportSecuritySettings(
+            enable_dns_rebinding_protection=False,
+        ),
     )
     app.add_middleware(_BearerTokenMiddleware, api_token=api_token)
     return app
