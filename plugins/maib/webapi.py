@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import time
 from collections import defaultdict, deque
+from contextlib import asynccontextmanager
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request, status
@@ -10,7 +11,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from nonebot import get_app, logger
 
-from . import services
+from . import config, services
+from .mcp import create_mcp_app
 from .utils.sync import build_lyra_records_v3, parse_lyra_maisync_data
 
 
@@ -156,3 +158,23 @@ if not any(m.cls is CORSMiddleware for m in _app.user_middleware):
 if not any(getattr(route, "path", None) == "/api/pair" for route in _app.router.routes):
     _app.include_router(router)
     logger.info("maib 在线同步 Web API 已挂载: /api/pair, /api/upload")
+
+if config.MAIB_MCP_API_TOKEN:
+    if not any(getattr(route, "path", None) == "/maib" for route in _app.router.routes):
+        _mcp_app = create_mcp_app(config.MAIB_MCP_API_TOKEN)
+        _parent_lifespan = _app.router.lifespan_context
+        _mcp_lifespan = _mcp_app.router.lifespan_context
+
+        @asynccontextmanager
+        async def _combined_lifespan(app):
+            # Starlette 不会自动运行 mount 的子应用 lifespan；MCP 的 HTTP 会话管理器
+            # 必须在其中创建 task group，故将它显式合并到 NoneBot/FastAPI 的生命周期。
+            async with _parent_lifespan(app) as state:
+                async with _mcp_lifespan(_mcp_app):
+                    yield state
+
+        _app.router.lifespan_context = _combined_lifespan
+        _app.mount("/maib", _mcp_app)
+        logger.info("maib MCP 已挂载: /maib/mcp")
+else:
+    logger.info("maib MCP 未挂载：未设置 MAIB_MCP_API_TOKEN")

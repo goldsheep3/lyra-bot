@@ -13,6 +13,7 @@ dependencies = [
     "atomicwrites>=1.4.1",
     "fastapi>=0.133.1",
     "httpx[socks]>=0.28.1",
+    "mcp>=2.3.0",
     "mcrcon>=0.7.0",
     "nb-cli>=1.7.3",
     "nonebot-adapter-onebot>=2.4.6",
@@ -29,6 +30,7 @@ dependencies = [
     "py-aio-mcrcon>=1.0.1",
     "pyyaml>=6.0.3",
     "sqlalchemy>=2.0.47",
+    "sqlglot>=30.29.0",
     "thefuzz>=0.22.1",
 ]
 

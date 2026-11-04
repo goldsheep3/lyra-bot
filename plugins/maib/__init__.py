@@ -20,6 +20,8 @@ class Config(BaseModel):
     # Max Blur Search Results: 模糊搜索最大允许结果数，超过会提示缩小搜索范围
     # 有效范围: >= 5，不在范围内会被设定为默认值（40）
     MAX_BLUR_SEARCH_RESULTS: int = 40
+    # MCP Bearer Token: 独立于在线同步 token；为空时不挂载 MCP 服务
+    MAIB_MCP_API_TOKEN: str | None = None
 
 
 try:
