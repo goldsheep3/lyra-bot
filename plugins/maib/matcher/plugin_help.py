@@ -3,7 +3,7 @@ from nonebot import on_regex
 from nonebot.adapters import Event
 from nonebot.internal.matcher import Matcher
 
-from ..image_gen import draw_simple_board as simple_img
+from ..image_gen import draw_simple_board as simple_img, get_image_bytes
 from . import Reply, reply
 from .message import build_msg
 
@@ -25,6 +25,5 @@ async def _(event: Event, matcher: Matcher, reply: Reply = reply):
     ])
     
     img = simple_img(text, ms=1)
-
     
-    await build_msg(matcher, event, [("image", img)], tag="finish")
+    await build_msg(matcher, event, [("image", get_image_bytes(img))], tag="finish")

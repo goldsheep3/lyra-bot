@@ -18,6 +18,7 @@ from nonebot.adapters.telegram.message import (
 )
 
 
+# TODO 考虑改为有明确规则的 dict 而非 list[tuple]，以便 IDE 提示检查
 MessagePayload = list[tuple[str, Any]]
 MessageAction = Literal["send", "finish"]
 
