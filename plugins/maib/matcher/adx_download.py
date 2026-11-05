@@ -34,8 +34,8 @@ def rule_is_group_upload_notice(event: Event) -> bool:
 
 
 # 下载谱面
-adx_download = on_regex(r"^下载[铺谱]面\s*(?:[iI][dD])?\s*(\d+)\s*(.*)$", priority=10, block=True)
-adx_download_en = on_regex(r"^download\s*(?:[iI][dD])?\s*(\d+)\s*(.*)$", priority=10, block=True)
+adx_download = on_regex(r"^下载[铺谱]面\s*(?:[iI][dD])?\s*(\d*)\s*(.*)$", priority=10, block=True)
+adx_download_en = on_regex(r"^download\s*(?:[iI][dD])?\s*(\d*)\s*(.*)$", priority=10, block=True)
 # 群文件上传 notice，用于处理 upload_group_file 超时但实际成功的场景
 group_upload_notice = on_notice(priority=1, block=False, rule=(rule_is_group and rule_is_self and rule_is_group_upload_notice))
 
@@ -199,7 +199,7 @@ async def adx_download_handled(
 
     raw_short_id, archive_type = groups
     archive_type = archive_type.strip().lower()
-    target_short_id: Optional[int] = int(raw_short_id)
+    target_short_id: Optional[int] = int(raw_short_id) if raw_short_id.isdigit() else None
 
     if target_short_id is None:
         # 未显式指定 ID，尝试从回复消息中提取
