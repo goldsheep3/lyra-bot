@@ -45,6 +45,10 @@ ad:
   no_chart_file: "谱面文件不存在！可能还没被收录，请联系监护人确认喔qwq"
   prepare: "请稍候——小梨开始准备 id{target_short_id} 的谱面文件啦！"
   error: "小梨在处理谱面文件时遇到了问题，请联系监护人确认喔qwq"
+  warn:
+    no_folder: |-
+      小梨没找到{folder_name}文件夹，所以把 {song_name} 传到了根目录ww
+      根目录不能自动清理，最好找管理员手动创建一个哦
   success:
     qq_private: "登登~请查收谱面 {song_name}！"
     qq_group: "小梨已经将 {song_name} 的adx谱面传到群里啦！"

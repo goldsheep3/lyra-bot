@@ -24,11 +24,11 @@ rc:
         Constant: Can be entered directly, or use the form id11951紫 to get the chart constant
         Achievement: Can be entered directly, or use expressions like "鳥加" "sss+", or leave blank to calculate tiered ra for s~sss+
   achievement_invalid: "Please provide a valid score qwq"
-  maidata_invalid: "Xiao Li couldn't parse the song information you provided TT"
+  maidata_invalid: "Lyra couldn't parse the song information you provided TT"
   level_invalid: "Please provide a valid constant qwq"
-  level_failed: "Xiao Li couldn't parse the constant information you provided TT"
+  level_failed: "Lyra couldn't parse the constant information you provided TT"
   success:
-    tip: "Xiao Li has calculated it!"
+    tip: "Lyra has calculated it!"
     common: "Constant {level}*{achievement}% -> Rating: {ra}"
     blur: "Constant {level} {rate} -> Rating: {ra}"
   excluding_ap_bouns: "This ra does not include the AP bonus score!"
@@ -43,12 +43,16 @@ ad:
   no_maidata: "No chart data found for id {short_id}! It may not have been indexed yet. Please contact the guardian to confirm qwq"
   bad_id: "Please provide a valid song ID qwq"
   no_chart_file: "Chart file does not exist! It may not have been indexed yet. Please contact the guardian to confirm qwq"
-  prepare: "Please wait——Xiao Li is preparing the chart file for id {target_short_id}!"
-  error: "Xiao Li encountered a problem while processing the chart file. Please contact the guardian to confirm qwq"
+  prepare: "Please wait——Lyra is preparing the chart file for id {target_short_id}!"
+  error: "Lyra encountered a problem while processing the chart file. Please contact the guardian to confirm qwq"
+  warn:
+    no_folder: |-
+      Lyra couldn't find the {folder_name} folder, so {song_name} was uploaded to the root directory.
+      The root directory can't be auto-cleaned, so it's best to ask an admin to manually create one.
   success:
     qq_private: "Ta-da~ Please check the chart {song_name}!"
-    qq_group: "Xiao Li has sent the adx chart for {song_name} to the group!"
-    tg: "wu~ Xiao Li has sent the chart for {song_name}!"
+    qq_group: "Lyra has sent the adx chart for {song_name} to the group!"
+    tg: "wu~ Lyra has sent the chart for {song_name}!"
 
 # mai_info
 info:
@@ -63,8 +67,8 @@ info:
   # what_song
   found_none: "No song data containing \"{keyword}\" was found qwq"
   found_single: "You might be looking for: {shortid}. {title}"
-  found_multiple: "Xiao Li found {count} songs. Please check if any match your expectations w"
-  found_many: "Xiao Li found so many songs... wow, {count} songs ()"
+  found_multiple: "Lyra found {count} songs. Please check if any match your expectations w"
+  found_many: "Lyra found so many songs... wow, {count} songs ()"
   found_too_many_abort: "Too many! Please narrow down your search qwq"
 
 # mai_alias (alias)
@@ -86,9 +90,9 @@ b50:
         [CN|JP] specifies whether to generate an image for the Chinese or Japanese server
         To generate a Japanese-server score image, first upload your Japanese-server score data via lyra-sync
   all_not_supported: "Mixed score images are still under development and cannot be used yet qwq"
-  qq_parsing_failed: "Xiao Li couldn't find a suitable query target...? Please contact the guardian to confirm"
-  drawing: "Xiao Li is drawing the b50 image, please wait..."
-  other_updated: "Xiao Li noticed that the queried target's Suiyu data has been updated and has updated it to the latest!"
+  qq_parsing_failed: "Lyra couldn't find a suitable query target...? Please contact the guardian to confirm"
+  drawing: "Lyra is drawing the b50 image, please wait..."
+  other_updated: "Lyra noticed that the queried target's Suiyu data has been updated and has updated it to the latest!"
   no_jp_data: "You don't have JP server data yet! Please upload your scores via lyra-sync and try again!"
   no_cn_data: "You don't have CN server data yet! Please upload your Suiyu scores and try again!"
 
@@ -106,8 +110,8 @@ sync:
     Script installation link: https://github.com/goldsheep3/lyra-bot/raw/refs/heads/maib/plugins/maib/sync/lyra-maisync.user.js
     Remote address to configure in the script: https://lyra-ciane.icu
   sy:
-    syncing: "Xiao Li is trying to fetch your latest score data from the Suiyu score tracker!"
-    no_update: "Checked! The score data recorded by Xiao Li is already up to date."
+    syncing: "Lyra is trying to fetch your latest score data from the Suiyu score tracker!"
+    no_update: "Checked! The score data recorded by Lyra is already up to date."
 
 # maime
 maime:
@@ -149,5 +153,5 @@ error:
   invalid_user_id: "Unable to parse str-format user_id: {raw_uid}"
   user_not_found: "No bound QQ account found. Please use the link feature to bind your QQ number first"
   unexpected: "Unsupported platform type"
-  common: "Xiao Li encountered an unexpected error. Please contact the guardian to confirm qwq"
+  common: "Lyra encountered an unexpected error. Please contact the guardian to confirm qwq"
   platform_not_supported: "Unexpected error (Platform Not Supported). Please contact the guardian to confirm qwq"

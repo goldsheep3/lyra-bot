@@ -34,8 +34,8 @@ def rule_is_group_upload_notice(event: Event) -> bool:
 
 
 # 下载谱面
-adx_download = on_regex(r"^下载[铺谱]面\s*(?:[iI][dD])?\s*(\d*)\s*(.*)$", priority=10, block=True)
-adx_download_en = on_regex(r"^download\s*(?:[iI][dD])?\s*(\d*)\s*(.*)$", priority=10, block=True)
+adx_download = on_regex(r"^下载[铺谱]面\s*(?:[iI][dD])?\s*(\d+)\s*(.*)$", priority=10, block=True)
+adx_download_en = on_regex(r"^download\s*(?:[iI][dD])?\s*(\d+)\s*(.*)$", priority=10, block=True)
 # 群文件上传 notice，用于处理 upload_group_file 超时但实际成功的场景
 group_upload_notice = on_notice(priority=1, block=False, rule=(rule_is_group and rule_is_self and rule_is_group_upload_notice))
 
@@ -91,31 +91,33 @@ async def _cleanup_expired_group_files(bot: OneBotV11Bot, qq_group: int, folder:
             break
 
 
+async def _get_or_create_adx_folder(bot: OneBotV11Bot, qq_group: int) -> Optional[str]:
+    """获取或创建 ADX_FOLDER_NAME 文件夹"""
+    try:
+        root_folder = await file_api.OneBotV11FileAPI.get_group_root_files(bot, qq_group)
+        for fd in root_folder.get("folders", []):
+            if fd.get("folder_name") == ADX_FOLDER_NAME:
+                return fd["folder_id"]
+
+        # 未找到文件夹，尝试创建
+        created = await file_api.OneBotV11FileAPI.create_group_file_folder(bot, qq_group, ADX_FOLDER_NAME)
+        return created.get("groupItem", {}).get("folderInfo", {}).get("folderId")
+
+    except Exception as e:
+        logger.error(f"群文件夹获取失败: {type(e).__module__}.{type(e).__qualname__}: {e}")
+        return None
+
+
 async def onebot_v11_group_upload(
     bot: OneBotV11Bot,
     qq_group: int,
     file_name: str,
     file_path: Path,
     file_size: int,
+    folder: Optional[str] = None
 ) -> Optional[Exception]:
     """处理 OneBotV11 群文件上传请求"""
-    # 尝试查找或创建 ADX_FOLDER_NAME 文件夹
-    folder = None
-    try:
-        root_folder = await file_api.OneBotV11FileAPI.get_group_root_files(bot, qq_group)
-        for fd in root_folder.get("folders", []):
-            if fd.get("folder_name") == ADX_FOLDER_NAME:
-                folder = fd["folder_id"]
-                break
-
-        if not folder:
-            # 未找到文件夹，尝试创建
-            created = await file_api.OneBotV11FileAPI.create_group_file_folder(bot, qq_group, ADX_FOLDER_NAME)
-            folder = created.get("groupItem", {}).get("folderInfo", {}).get("folderId")
-
-    except Exception as e:
-        logger.error(f"群文件夹获取失败: {type(e).__module__}.{type(e).__qualname__}: {e}")
-    
+    # 尝试查找或创建 ADX_FOLDER_NAME 文件夹    
     # 锁定等待
     lock_key = (qq_group, file_name, file_size)
     lock_future: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
@@ -244,18 +246,23 @@ async def adx_download_handled(
         # OneBotV11
         if isinstance(event, OneBotV11GroupMessageEvent):
             # 群消息
+            folder = await _get_or_create_adx_folder(bot, event.group_id)
             e = await onebot_v11_group_upload(
                 bot=bot,
                 qq_group=event.group_id,
                 file_name=file_name,
                 file_path=chart_file_path,
-                file_size=chart_file_path.stat().st_size
+                file_size=chart_file_path.stat().st_size,
+                folder=folder,
             )
             if e is not None:
                 logger.error(f"OneBotV11 群聊上传失败: [{type(e).__module__}.{type(e).__qualname__}] {e}")
                 await matcher.finish(await reply("ad.error"))
                 return
-            await matcher.finish(await reply("ad.success.qq_group", song_name=title))
+            if not folder:
+                await matcher.finish(await reply("ad.warn.no_folder", folder_name=ADX_FOLDER_NAME, song_name=title))
+            else:
+                await matcher.finish(await reply("ad.success.qq_group", song_name=title))
             
         elif isinstance(event, OneBotV11PrivateMessageEvent):
             # 私聊消息

@@ -45,6 +45,10 @@ ad:
   no_chart_file: "채보 파일이 없습니다! 아직 수록되지 않았을 수 있으니 관리자에게 확인해 주세요 qwq"
   prepare: "잠시만 기다려 주세요——샤오리가 id {target_short_id}의 채보 파일을 준비하고 있어요!"
   error: "샤오리가 채보 파일을 처리하는 중 문제가 발생했습니다. 관리자에게 확인해 주세요 qwq"
+  warn:
+    no_folder: |-
+      샤오리가 {folder_name} 폴더를 찾지 못해서 {song_name}을(를) 루트 디렉터리에 업로드했어요.
+      루트 디렉터리는 자동 정리가 안 되니까, 관리자에게 수동으로 만들어 달라고 하는 게 좋아요
   success:
     qq_private: "짜잔~ 채보 {song_name}을 받아 주세요!"
     qq_group: "샤오리가 {song_name}의 adx 채보를 그룹에 올렸어요!"
