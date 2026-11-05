@@ -42,6 +42,7 @@ def rule_is_private(event: Event) -> bool:
 def rule_is_self(event: OneBotV11MessageEvent) -> bool:
     return event.get_user_id() == str(event.self_id)
 
+# ======================================================
 
 
 # 导入各模块以注册对应处理器
