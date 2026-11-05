@@ -52,4 +52,4 @@ nonebot-adapter-onebot = [{name = "OneBot V11", module_name = "nonebot.adapters.
 nonebot-adapter-telegram = [{name = "Telegram", module_name = "nonebot.adapters.telegram"}]
 
 [tool.uv.sources]
-nonebot-plugin-locales = { git = "https://github.com/goldsheep3/nonebot-plugin-locales.git", rev = "cfd8da8758621d33c6e24b3ef764129bcf1bcd17" }
+nonebot-plugin-locales = { git = "https://github.com/goldsheep3/nonebot-plugin-locales.git", rev = "v0.2.0" }
