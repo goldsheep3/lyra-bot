@@ -40,7 +40,7 @@ adx_download_en = on_regex(r"^download\s*(?:[iI][dD])?\s*(\d*)\s*(.*)$", priorit
 group_upload_notice = on_notice(priority=1, block=False, rule=(rule_is_group and rule_is_self and rule_is_group_upload_notice))
 
 
-GROUP_UPLOAD_NOTICE_TIMEOUT: float = 90.0
+GROUP_UPLOAD_NOTICE_TIMEOUT: float = 120.0
 _GROUP_UPLOAD_WAITERS: dict[tuple[int, str, int], list[asyncio.Future[dict[str, Any]]]] = {}
 FILE_EXPIRE_SECONDS = 72 * 3600  # 72 小时
 ADX_FOLDER_NAME = "maib-adx"
@@ -55,10 +55,12 @@ async def group_upload_notice_handled(event: OneBotV11GroupUploadNoticeEvent):
     qq_group: int = event.group_id
 
     if not file_name or file_size is None:
+        logger.debug(f"群文件上传 notice 字段缺失，忽略: name={file_name} size={file_size}")
         return
 
     key = (qq_group, file_name, file_size)
     waiters = _GROUP_UPLOAD_WAITERS.pop(key, [])
+    logger.info(f"群文件上传 notice: {file_name} ({file_size}B) group={qq_group}，唤醒等待者 {len(waiters)}")
     
     for future in waiters:
         if not future.done():
@@ -108,6 +110,38 @@ async def _get_or_create_adx_folder(bot: OneBotV11Bot, qq_group: int) -> Optiona
         return None
 
 
+async def _confirm_group_file_uploaded(
+    bot: OneBotV11Bot,
+    qq_group: int,
+    file_name: str,
+    file_size: int,
+    folder: Optional[str] = None,
+) -> Optional[dict[str, Any]]:
+    """notice 超时后回查群文件，确认文件是否实际上传成功"""
+    try:
+        if folder:
+            files_info = await file_api.OneBotV11FileAPI.get_group_files_by_folder(bot, qq_group, folder)
+        else:
+            files_info = await file_api.OneBotV11FileAPI.get_group_root_files(bot, qq_group)
+    except Exception as e:
+        logger.error(f"回查群文件失败: [{type(e).__module__}.{type(e).__qualname__}] {e}")
+        return None
+
+    if isinstance(files_info, Exception):
+        logger.error(f"回查群文件失败: {files_info}")
+        return None
+
+    files = (files_info or {}).get("files") or []
+    for file in files:
+        if file.get("file_name") != file_name:
+            continue
+        remote_size = file.get("file_size")
+        if remote_size is None or int(remote_size) == int(file_size):
+            return file
+        logger.warning(f"回查到同名文件但大小不符: {file_name} 本地={file_size} 远端={remote_size}")
+    return None
+
+
 async def onebot_v11_group_upload(
     bot: OneBotV11Bot,
     qq_group: int,
@@ -135,8 +169,13 @@ async def onebot_v11_group_upload(
             notice_file = await asyncio.wait_for(asyncio.shield(lock_future), timeout=GROUP_UPLOAD_NOTICE_TIMEOUT)
             result = {"file_id": notice_file.get("id") or notice_file.get("file_id"), "file": notice_file}
         except asyncio.TimeoutError:
-            # 确认超时
-            return e
+            # notice 未按时到达，回查群文件确认是否实际上传成功
+            logger.warning(f"等待群文件上传 notice 超时（{GROUP_UPLOAD_NOTICE_TIMEOUT}s），回查群文件确认结果")
+            confirmed = await _confirm_group_file_uploaded(bot, qq_group, file_name, file_size, folder)
+            if confirmed is None:
+                return e
+            logger.info(f"回查确认文件已上传: {file_name} file_id={confirmed.get('file_id')}")
+            result = {"file_id": confirmed.get("file_id"), "file": confirmed}
 
     except Exception as e:
         return e
