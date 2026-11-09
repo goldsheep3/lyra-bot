@@ -79,7 +79,7 @@ async def link_handled(event: Event, matcher: Matcher, groups: tuple = RegexGrou
             telegram_id = int(event.get_user_id())
             mu = await services.get_mu_from_tgid(telegram_id)
             if mu:
-                await services.del_mu_tgid(mu.user_id)
+                await services.del_mu_tgid(mu.qq)
             await matcher.finish(await reply("link.unlink_success"))
             return
         await matcher.finish(await reply("link.not_platform"))

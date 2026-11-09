@@ -34,7 +34,7 @@ class get_mdt_list:
                 select(MaiData)
                 .options(
                     selectinload(MaiData.charts)
-                        .selectinload(MaiChart.achs.and_(MaiChartAch.user_id == achs_user_id)),
+                        .selectinload(MaiChart.achs.and_(MaiChartAch.qq == achs_user_id)),
                     selectinload(MaiData.aliases),
                 )
                 .where(MaiData.genre == genre)
@@ -56,14 +56,14 @@ class get_mdt_list:
                 select(MaiData)
                 .options(
                     selectinload(MaiData.charts)
-                        .selectinload(MaiChart.achs.and_(MaiChartAch.user_id == achs_user_id)),
+                        .selectinload(MaiChart.achs.and_(MaiChartAch.qq == achs_user_id)),
                     selectinload(MaiData.aliases),
                 )
                 .where(
-                    MaiData.version >= min_ver,
-                    MaiData.version <= max_ver
+                    MaiData.version_jp >= min_ver,
+                    MaiData.version_jp <= max_ver
                 )
-                .order_by(MaiData.version.desc(), MaiData.shortid.asc())
+                .order_by(MaiData.version_jp.desc(), MaiData.shortid.asc())
             )
             if not allow_utage:
                 stmt = stmt.where(MaiData.is_utage == False)
@@ -83,12 +83,12 @@ class get_mct_list:
                 min_lv, max_lv = min(lv), max(lv)
             else:
                 min_lv, max_lv = lv, lv
-            level_field = getattr(MaiChart, SLevelSource.server(server).lv_field, MaiChart.lv)
+            level_field = getattr(MaiChart, SLevelSource.server(server).lv_field, MaiChart.lv_jp)
 
             stmt = (
                 select(MaiChart)
                 .options(
-                    selectinload(MaiChart.achs.and_(MaiChartAch.user_id == achs_user_id)),
+                    selectinload(MaiChart.achs.and_(MaiChartAch.qq == achs_user_id)),
                     selectinload(MaiChart.maidata).selectinload(MaiData.aliases),
                 )
                 .where(level_field >= min_lv, level_field <= max_lv)
@@ -110,7 +110,7 @@ class get_mca_list:
         async def _query(session: AsyncSession):
             stmt = (
                 select(MaiChartAch)
-                .where(MaiChartAch.user_id == user_id, MaiChartAch.server == server)
+                .where(MaiChartAch.qq == user_id, MaiChartAch.server == server)
             )
             if not allow_utage:
                 stmt = stmt.join(MaiChartAch.chart).join(MaiChart.maidata).where(MaiData.is_utage == False)
@@ -138,14 +138,14 @@ class get_mca_list:
                     .selectinload(MaiData.charts),
                 )
                 .where(
-                    MaiChartAch.user_id == user_id,
+                    MaiChartAch.qq == user_id,
                     MaiChartAch.server == server,
                     MaiData.is_utage == False
                 )
-                .order_by(MaiChartAch.dxrating.desc(), MaiChartAch.achievement.desc())
+                .order_by(MaiChartAch.dxrating_cache.desc(), MaiChartAch.achievement.desc())
             )
 
-            version_field = getattr(MaiData, server.version_field, MaiData.version)
+            version_field = getattr(MaiData, server.version_field, MaiData.version_jp)
             if target == "b35":
                 statement = statement.where(version_field < cut_version).limit(35)
             elif target == "b15":
@@ -177,12 +177,12 @@ class get_mca_list:
                         .selectinload(MaiChart.maidata)
                         .selectinload(MaiData.aliases),
                 )
-                .where(MaiChartAch.user_id == achs_user_id)
+                .where(MaiChartAch.qq == achs_user_id)
                 .where(MaiChartAch.server == server)
                 .where(MaiChartAch.achievement >= min_ach, MaiChartAch.achievement <= max_ach)
                 .order_by(
                     MaiChartAch.achievement.desc(),
-                    MaiChartAch.dxrating.desc(),
+                    MaiChartAch.dxrating_cache.desc(),
                     MaiChartAch.shortid.asc(),
                     MaiChartAch.difficulty.asc(),
                 )
@@ -211,14 +211,14 @@ class get_mca_list:
                         .selectinload(MaiData.aliases),
                 )
                 .where(
-                    MaiChartAch.user_id == achs_user_id,
+                    MaiChartAch.qq == achs_user_id,
                     MaiChartAch.server == server,
-                    MaiChartAch.dxrating >= min_dxra,
-                    MaiChartAch.dxrating <= max_dxra,
+                    MaiChartAch.dxrating_cache >= min_dxra,
+                    MaiChartAch.dxrating_cache <= max_dxra,
                     MaiData.is_utage == False
                 )
                 .order_by(
-                    MaiChartAch.dxrating.desc(),
+                    MaiChartAch.dxrating_cache.desc(),
                     MaiChartAch.achievement.desc(),
                     MaiChartAch.shortid.asc(),
                     MaiChartAch.difficulty.asc(),

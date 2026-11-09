@@ -170,7 +170,7 @@ class MaiChartInfoBoard:
         # 谱面列表
         if version is None:
             # 未上线谱面，绘制一个 UNKNOWN 谱面
-            charts = [MaiChart(shortid=0, difficulty=0, lv=0, lv_cn=0)]
+            charts = [MaiChart(shortid=0, difficulty=0, lv_jp=0, lv_cn=0)]
 
         if maiuser:
             dxrating_data = maiuser.get_dxrating_data(server)
@@ -179,7 +179,7 @@ class MaiChartInfoBoard:
             floor_rating = None
         def generate():
             for chart in charts:
-                plus = chart.lv * 10 % 10 >= get_level_plus_line(version=version) if version else False
+                plus = chart.lv_jp * 10 % 10 >= get_level_plus_line(version=version) if version else False
                 yield ChartBoxBadge.box(
                     chart=chart, cabinet=cabinet, server=server, plus=plus, floor_rating=floor_rating,
                     ms=ms, ui_code=ui_code

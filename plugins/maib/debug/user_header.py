@@ -18,7 +18,7 @@ if __name__ == "__main__":
     from plugins.maib.utils.models import MaiChart, MaiChartAch
     from plugins.maib.utils.enums import Server
     
-    chart = MaiChart(shortid=11451, difficulty=7, lv=13.6, lv_synh=13.9, _achs={
+    chart = MaiChart(shortid=11451, difficulty=7, lv_jp=13.6, lv_fit=13.9, _achs={
         Server.JP: MaiChartAch(shortid=11451, difficulty=7, server=Server.JP, achievement=99.5, combo=3, sync=2, dxscore=799, dxscore_max=810)
     })
     avatar_path = os.path.join(project_root, "temp", "debug_cover.png")

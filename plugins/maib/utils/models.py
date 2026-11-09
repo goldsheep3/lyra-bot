@@ -29,15 +29,13 @@ __all__ = [
 ]
 
 
-
 @dataclass
 class MaiAlias:
     """maimai 歌曲别名信息"""
     shortid: int
     alias: str
-    create_time: datetime
+    create_at: datetime
     create_qq: int
-    create_qq_group: Optional[int] = None
 
 
 @dataclass
@@ -46,12 +44,12 @@ class MaiChartAch:
     shortid: int
     difficulty: DifficultyID
     server: Server
-    achievement: float
+    achievement: float  # TODO
     dxscore: int = 0
     dxscore_max: int = 0
     combo: ComboID = 0
     sync: SyncID = 0
-    update_time: datetime = DEFAULT_DATETIME
+    update_at: datetime = DEFAULT_DATETIME
     user_id: int = -1
 
     @property
@@ -91,7 +89,7 @@ class MaiChartAch:
         self.dxscore = max(self.dxscore, other.dxscore)
         self.combo = max(self.combo, other.combo)
         self.sync = max(self.sync, other.sync)
-        self.update_time = datetime.now()
+        self.update_at = datetime.now()
 
     def __add__(self, other: MaiChartAch) -> MaiChartAch:
         """合并两个 MaiChartAch 对象，返回新的对象"""
@@ -105,7 +103,7 @@ class MaiChartAch:
             dxscore_max=max(self.dxscore_max, other.dxscore_max),
             combo=max(self.combo, other.combo),
             sync=max(self.sync, other.sync),
-            update_time=datetime.now(),
+            update_at=datetime.now(),
             user_id=self.user_id,
         )
 
@@ -124,9 +122,9 @@ class MaiChart:
     """maimai 谱面信息"""
     shortid: int
     difficulty: DifficultyID
-    lv: float
+    lv_jp: float
     lv_cn: Optional[float] = None
-    lv_synh: Optional[float] = None
+    lv_fit: Optional[float] = None
     des: str = ""
     inote: str = ""
     notes: dict[str, int] = field(
@@ -188,7 +186,7 @@ class MaiChart:
             combo = combo if combo is not None else 0
         level: float = getattr(self, SLevelSource.server(server).lv_field, -1)
         if level < 0:
-            level = self.lv  # fallback
+            level = self.lv_jp  # fallback
         return get_dxrating(achievement=achievement, level=level, ap_bonus=ap_bonus, combo=combo)
 
     def set_notes(self, tap: int, hold: int, slide: int, touch: int, break_note: int):

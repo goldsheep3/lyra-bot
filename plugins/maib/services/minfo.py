@@ -34,7 +34,7 @@ class get_mdt:
                 select(MaiData)
                 .options(
                     selectinload(MaiData.charts)
-                        .selectinload(MaiChart.achs.and_(MaiChartAch.user_id == achs_user_id)),
+                        .selectinload(MaiChart.achs.and_(MaiChartAch.qq == achs_user_id)),
                     selectinload(MaiData.aliases),
                 )
                 .where(MaiData.shortid == shortid)
@@ -86,7 +86,7 @@ class get_mdt:
                 select(MaiData)
                 .options(
                     selectinload(MaiData.charts)
-                        .selectinload(MaiChart.achs.and_(MaiChartAch.user_id == achs_user_id)),
+                        .selectinload(MaiChart.achs.and_(MaiChartAch.qq == achs_user_id)),
                     selectinload(MaiData.aliases),
                 )
                 .outerjoin(MaiAlias)
@@ -106,7 +106,7 @@ class get_mdt:
                 select(MaiData)
                 .options(
                     selectinload(MaiData.charts)
-                        .selectinload(MaiChart.achs.and_(MaiChartAch.user_id == achs_user_id)),
+                        .selectinload(MaiChart.achs.and_(MaiChartAch.qq == achs_user_id)),
                     selectinload(MaiData.aliases),
                 )
                 .outerjoin(MaiAlias)
@@ -134,7 +134,7 @@ class get_mdt:
                 select(MaiData)
                 .options(
                     selectinload(MaiData.charts)
-                        .selectinload(MaiChart.achs.and_(MaiChartAch.user_id == achs_user_id)),
+                        .selectinload(MaiChart.achs.and_(MaiChartAch.qq == achs_user_id)),
                     selectinload(MaiData.aliases),
                 )
                 .outerjoin(MaiAlias)
@@ -177,7 +177,7 @@ async def get_mca(user_id: int, server: Server, shortid: int, difficulty: int,
         statement = (
             select(MaiChartAch)
             .where(
-                MaiChartAch.user_id == user_id,
+                MaiChartAch.qq == user_id,
                 MaiChartAch.server == server,
                 MaiChartAch.shortid == shortid,
                 MaiChartAch.difficulty == difficulty

@@ -32,7 +32,7 @@ async def get_ma(alias_text: str, shortid: int,
     return await execute_func.select(_query, session=session)
 
 
-async def add_ma(shortid: int, alias_text: str, create_qq: int, create_qq_group: Optional[int] = None,
+async def add_ma(shortid: int, alias_text: str, create_qq: int,
                  *, session: Optional[AsyncSession] = None) -> bool:
     """通过 `shortid` 添加别名，返回 False 表示已存在"""
     async def _action(session: AsyncSession):
@@ -42,8 +42,7 @@ async def add_ma(shortid: int, alias_text: str, create_qq: int, create_qq_group:
         if existing.scalar_one_or_none():
             return False
         session.add(MaiAlias(
-            shortid=shortid, alias=alias_text, create_qq=create_qq,
-            create_qq_group=create_qq_group, create_time=datetime.now()
+            shortid=shortid, alias=alias_text, create_qq=create_qq, create_at=datetime.now()
         ))
         return True
 
@@ -75,7 +74,7 @@ async def add_ma_batch(data: list[tuple[int, str]], create_qq: int,
 
             full_data = [
                 {"shortid": sid, "alias": alias, "create_qq": create_qq,
-                 "create_qq_group": None, "create_time": create_time}
+                 "create_at": create_time}
                 for sid, alias in chunk if sid in existing_ids
             ]
             if not full_data:

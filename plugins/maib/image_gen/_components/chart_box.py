@@ -72,7 +72,7 @@ class ChartBoxBadge:
         i = 0
         
         # 位置1 拟合定数
-        if chart.lv_synh is None:
+        if chart.lv_fit is None:
             if chart.lv_cn is None:
                 # 没有拟合数据，且国服没上线，无法统计，不显示拟合定数
                 content = ''
@@ -81,12 +81,12 @@ class ChartBoxBadge:
                 content = "Unknown"
         else:
             # 存在拟合数据，显示拟合数据
-            delta_lv = chart.lv_synh - level
+            delta_lv = chart.lv_fit - level
             if abs(delta_lv) < 0.1:
                 delta_level = "≈"
             else:
                 delta_level = "↑" if delta_lv > 0 else "↓"
-            content = f"{round(chart.lv_synh, 4):<8} {delta_level}"
+            content = f"{round(chart.lv_fit, 4):<8} {delta_level}"
 
         content = content.rjust(14)
         if content.strip():
@@ -168,7 +168,7 @@ class ChartBoxBadge:
             level = chart.lv_cn
         else:
             ach_server = Server.JP
-            level = chart.lv
+            level = chart.lv_jp
         
         img = cls._base(difficulty=chart.difficulty, cabinet=cabinet,
                         is_cn=ach_server == Server.CN, is_cn_all=ui_code.is_cn_all, ms=ms).copy()

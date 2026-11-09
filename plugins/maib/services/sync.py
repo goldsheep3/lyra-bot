@@ -39,7 +39,7 @@ def _normalize_ach(ach: utils.MaiChartAch, user_id: int) -> utils.MaiChartAch:
         dxscore_max=ach.dxscore_max,
         combo=ach.combo,
         sync=ach.sync,
-        update_time=ach.update_time,
+        update_at=ach.update_at,
         user_id=user_id,
     )
 
@@ -79,11 +79,11 @@ def _build_diff(
 
 
 def _apply_merged_ach(mca: MaiChartAch, merged: utils.MaiChartAch) -> None:
-    mca.achievement = merged.achievement
+    mca.achievement = int(merged.achievement * 10000)
     mca.dxscore = merged.dxscore
     mca.combo = merged.combo
     mca.sync = merged.sync
-    mca.update_time = merged.update_time
+    mca.update_at = merged.update_at
 
 
 async def _load_chart_map(
@@ -108,7 +108,7 @@ async def _load_existing_ach_map(
         select(MaiChartAch)
         .options(selectinload(MaiChartAch.chart))
         .where(
-            MaiChartAch.user_id == user_id,
+            MaiChartAch.qq == user_id,
             MaiChartAch.shortid.in_(shortids),
         )
     )
@@ -166,7 +166,7 @@ async def upd_ach_batch(
 
             existing_mca = existing_map.get((shortid, difficulty, target_server))
             if existing_mca is None:
-                incoming.update_time = datetime.now()
+                incoming.update_at = datetime.now()
                 session.add(MaiChartAch.from_utils(incoming, chart_id=chart.id))
                 report.new_song.append(_build_diff(chart, incoming, None))
                 affected_chart_keys[target_server].add((shortid, difficulty))
@@ -202,7 +202,7 @@ async def get_last_sy_hash(user_id: int,
                            *, session: Optional[AsyncSession] = None) -> Optional[str]:
     """获取用户上次水鱼 records 的哈希值。"""
     async def _select(session: AsyncSession):
-        stmt = select(MaiUser.last_sy_hash).where(MaiUser.user_id == user_id)
+        stmt = select(MaiUser._diving_fish_records_hash_cache).where(MaiUser.qq == user_id)
         result = await session.execute(stmt)
         return result.scalar_one_or_none()
     
@@ -213,13 +213,13 @@ async def set_last_sy_hash(user_id: int, sy_hash: str,
                            *, session: Optional[AsyncSession] = None):
     """写入用户最新的水鱼 records 哈希值。"""
     async def _action(session: AsyncSession):
-        stmt = select(MaiUser).where(MaiUser.user_id == user_id)
+        stmt = select(MaiUser).where(MaiUser.qq == user_id)
         result = await session.execute(stmt)
         user = result.scalar_one_or_none()
         if not user:
-            user = MaiUser(user_id=user_id)
+            user = MaiUser(qq=user_id)
             session.add(user)
             await session.flush()
-        user.last_sy_hash = sy_hash
+        user._diving_fish_records_hash_cache = sy_hash
     
     await execute_func.action(_action, session=session)    

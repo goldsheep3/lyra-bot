@@ -221,9 +221,10 @@ async def telegram_upload(
 
     # 回写缓存
     file_id = None
-    if tg_msg_obj.document and file_name.endswith(".adx"):
+    if tg_msg_obj.document:
         file_id = tg_msg_obj.document.file_id
-        await services.upd_mdt_tg_fileid(shortid, file_id)
+        endname = "adx" if file_name.endswith(".adx") else "zip"
+        await services.upd_mdt_tg_fileid(shortid, file_id, endname=endname)
     return None
 
 @adx_download.handle()
@@ -268,6 +269,9 @@ async def adx_download_handled(
     mdt: Optional[services.MaiData] = await services.get_mdt.id(target_short_id)
     if not mdt:
         await matcher.finish(await reply("ad.no_maidata", short_id=target_short_id))
+        return
+    if not mdt.zip_path:
+        await matcher.finish(await reply("ad.no_chart_file", short_id=target_short_id))
         return
     chart_file_path = get_plugin_data_dir() / mdt.zip_path
     if not chart_file_path.exists():
@@ -323,16 +327,15 @@ async def adx_download_handled(
         session_id = event.get_session_id()
         chat_id = int(session_id.split("_")[-1])
 
-        if mdt.tg_file_id_cache and file_ext == "adx":
-            # tg 缓存只考虑 .adx 文件，zip 不常用因此不缓存
-            # 未来可能考虑数据库增加adx和zip的双重缓存
+        document = mdt._tg_adx_id_cache if file_ext == "adx" else mdt._tg_zip_id_cache
+        if document:
             try:
                 # 缓存命中，尝试直接发送文件
                 await bot.send_document(
                     chat_id=chat_id,
-                    document=mdt.tg_file_id_cache
+                    document=document
                 )
-                logger.info(f"Telegram file_id 缓存命中，已触发秒传: {mdt.tg_file_id_cache}")
+                logger.info(f"Telegram file_id 缓存命中，已触发秒传: {document}")
                 await matcher.finish(await reply("ad.success.tg", song_name=title))
                 return
             except Exception as e:

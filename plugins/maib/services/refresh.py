@@ -37,20 +37,20 @@ def _calc_mca_dxrating(mca: MaiChartAch, current_version: Optional[int] = None) 
     ap_bonus = utils.get_ap_bonus_value(version)
 
     if mca.server == "JP":
-        level = chart.lv
+        level = chart.lv_jp
     else:
         level = chart.lv_cn
         if level is None:
             return 0
 
-    return utils.get_dxrating(int(mca.achievement*10000), level, ap_bonus, combo=mca.combo)
+    return utils.get_dxrating(mca.achievement, level, ap_bonus, combo=mca.combo)
 
 
 def _dxrating_stats(achs: Sequence[MaiChartAch]) -> tuple[int, int, int]:
     """返回 total, max, min；调用方保证 achs 已按 DXRating 降序排列。"""
-    total = sum(ach.dxrating for ach in achs)
-    max_dxrating = achs[0].dxrating if achs else 0
-    min_dxrating = achs[-1].dxrating if achs else 0
+    total = sum(ach.dxrating_cache for ach in achs)
+    max_dxrating = achs[0].dxrating_cache if achs else 0
+    min_dxrating = achs[-1].dxrating_cache if achs else 0
     return total, max_dxrating, min_dxrating
 
 
@@ -77,9 +77,9 @@ async def _refresh_single_user_dxrating_cache(
     b15_total, b15_max, b15_min = _dxrating_stats(b15)
 
     latest_update_stmt = (
-        select(func.max(MaiChartAch.update_time))
+        select(func.max(MaiChartAch.update_at))
         .where(
-            MaiChartAch.user_id == user_id,
+            MaiChartAch.qq == user_id,
             MaiChartAch.server == server,
         )
     )
@@ -88,15 +88,15 @@ async def _refresh_single_user_dxrating_cache(
         or DEFAULT_DATETIME
     )
 
-    user_stmt = select(MaiUser).where(MaiUser.user_id == user_id)
+    user_stmt = select(MaiUser).where(MaiUser.qq == user_id)
     user = (await session.execute(user_stmt)).scalar_one_or_none()
     if user is None:
-        user = MaiUser(user_id=user_id)
+        user = MaiUser(qq=user_id)
         session.add(user)
 
     if server == "CN":
         user.cn_current_version = current_version
-        user.cn_update_time = latest_update_time
+        user.cn_update_at = latest_update_time
         user.cn_dxra_total = b35_total + b15_total
         user.cn_dxra_b35_total = b35_total
         user.cn_dxra_b35_max = b35_max
@@ -106,7 +106,7 @@ async def _refresh_single_user_dxrating_cache(
         user.cn_dxra_b15_min = b15_min
     else:
         user.jp_current_version = current_version
-        user.jp_update_time = latest_update_time
+        user.jp_update_at = latest_update_time
         user.jp_dxra_total = b35_total + b15_total
         user.jp_dxra_b35_total = b35_total
         user.jp_dxra_b35_max = b35_max
@@ -204,9 +204,9 @@ async def rfs_dxra_batch(
         affected_user_ids: set[int] = set()
 
         for mca in mca_list:
-            mca.dxrating = _calc_mca_dxrating(mca, current_version)
-            if mca.user_id is not None:
-                affected_user_ids.add(mca.user_id)
+            mca.dxrating_cache = _calc_mca_dxrating(mca, current_version)
+            if mca.qq is not None:
+                affected_user_ids.add(mca.qq)
 
         if mca_list:
             await session.flush()
@@ -262,7 +262,7 @@ async def rfs_mu_dxra_with_mct_batch(
                 MaiChartAch.shortid.in_(shortids),
                 MaiChartAch.difficulty.in_(difficulties),
                 MaiChartAch.server == server,
-                MaiChartAch.user_id == user_id,
+                MaiChartAch.qq == user_id,
             )
         )
         mca_list = [
@@ -272,7 +272,7 @@ async def rfs_mu_dxra_with_mct_batch(
         ]
 
         for mca in mca_list:
-            mca.dxrating = _calc_mca_dxrating(mca, current_version)
+            mca.dxrating_cache = _calc_mca_dxrating(mca, current_version)
 
         if mca_list:
             await session.flush()

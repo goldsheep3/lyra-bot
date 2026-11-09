@@ -180,7 +180,7 @@ async def get_chart(raw_mdt: Mapping[str, str], short_id: int, chart_num: int) -
     chart = utils.MaiChart(
         shortid=short_id,
         difficulty=chart_num,
-        lv=lv,
+        lv_jp=lv,
         des=str(raw_mdt.get(des_key, "")),
         inote=str(raw_mdt.get(inote_key, "")),
     )
@@ -449,7 +449,7 @@ async def _sync_synh_levels() -> None:
         return
 
     try:
-        await services.set_mct_level_batch(synh_list, source=SLevelSource.SYNH)
+        await services.set_mct_level_batch(synh_list, source=SLevelSource.FIT)
         logger.info(f"maib-fetch Step 5/6: 已同步 {len(synh_list)} 条水鱼拟合定数")
     except Exception as e:
         logger.error(f"maib-fetch Step 5/6: 更新水鱼拟合定数数据失败，原因: {e}")

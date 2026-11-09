@@ -33,7 +33,7 @@ def _merge_ach(target: utils.MaiChartAch, source: MaiRecord) -> utils.MaiChartAc
         dxscore=source.dxscore,
         combo=source.combo,
         sync=source.sync,
-        update_time=source.play_time,
+        update_at=source.play_time,
         user_id=source.user_id,
     )
     if candidate > target:
@@ -178,7 +178,7 @@ async def get_record_achs(
                     dxscore=row.dxscore,
                     combo=row.combo,
                     sync=row.sync,
-                    update_time=row.play_time,
+                    update_at=row.play_time,
                     user_id=user_id,
                 )
                 continue

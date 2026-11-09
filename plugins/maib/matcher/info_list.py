@@ -167,7 +167,7 @@ async def b50_handled(event: Event, matcher: Matcher, groups: dict = RegexDict()
             if tg_uid is None:
                 return None
             mu = await services.get_mu_from_tgid(tg_uid)
-            return int(mu.user_id) if mu else None
+            return int(mu.qq) if mu else None
         
         # parsed_qq = await get_qq_from_tg_uid(parsed_uid) if parsed_uid else None
         parsed_qq = None  # Telegram 目前不支持文本参数解析 QQ，预留接口但暂不启用
@@ -235,7 +235,7 @@ async def b50_handled(event: Event, matcher: Matcher, groups: dict = RegexDict()
     cut_version = Versions.b50_cut_version(current_version)
     
     b35_achs, b15_achs = await services.get_b50(target_qq, scope.to_server(), cut_version)
-    dxrating = sum([mca.dxrating for mca in (list(b35_achs) + list(b15_achs))])
+    dxrating = sum([mca.dxrating_cache for mca in (list(b35_achs) + list(b15_achs))])
 
     # 清洗谱面数据，构建绘图数据结构
     def _build_entries(achs: list[services.MaiChartAch]) -> list[tuple[utils.MaiData, int]]:

@@ -68,7 +68,7 @@ async def ra_calc_handled(event: Event, matcher: Matcher, groups: dict[str, Opti
         if chart is None:
             await matcher.finish(await reply("rc.maidata_invalid"))
             return
-        level = chart.lv
+        level = chart.lv_jp
 
     else:
         # 解析失败

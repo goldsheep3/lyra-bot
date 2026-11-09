@@ -139,21 +139,21 @@ async def check_sync_cn(qq_user: int | MaiUser, ignore_cache_expire: bool = Fals
     # 2. 缓存有效性检查
     if not ignore_cache_expire:
         cache_ttl = timedelta(hours=config.DATA_PROVIDER_CACHE_EXPIRATION)
-        # 兼容 naive/aware 时间戳：cn_update_time 在 PostgreSQL(timestamptz) 下是 aware、
+        # 兼容 naive/aware 时间戳：cn_update_at 在 PostgreSQL(timestamptz) 下是 aware、
         # 在 SQLite 下是 naive，直接与 datetime.now() 相减会因类型不一致抛 TypeError，
         # 故按 last_update 是否带时区选取同类型的 now。
-        last_update = maiuser.cn_update_time
+        last_update = maiuser.cn_update_at
         now = datetime.now(last_update.tzinfo) if last_update.tzinfo is not None else datetime.now()
         if now - last_update < cache_ttl:
             # 缓存未过期，直接返回
             return maiuser, None
     
     # 3. 执行同步并获取差异报告
-    report = await get_sy_and_upload(maiuser.user_id)
+    report = await get_sy_and_upload(maiuser.qq)
     
     # 4. 若有变更，重新拉取最新的用户信息
     if report.has_changes:
-        maiuser = await services.check_mu(maiuser.user_id)
+        maiuser = await services.check_mu(maiuser.qq)
     
     return maiuser, report
 

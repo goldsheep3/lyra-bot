@@ -147,7 +147,7 @@ async def sync_mdt_list(mdt_list: list[MaiData],
                 for new_mct in new_mdt.charts:
                     ec = existing_charts.get(new_mct.difficulty)
                     if ec:
-                        for f in ['lv', 'lv_cn', 'lv_synh', 'des', 'inote']:
+                        for f in ['lv_jp', 'lv_cn', 'lv_fit', 'des', 'inote']:
                             setattr(ec, f, getattr(new_mct, f))
                         ec.notes = new_mct.notes
                     else:

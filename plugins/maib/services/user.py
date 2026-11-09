@@ -29,7 +29,7 @@ async def get_mu(user_id: int,
     async def _get_user_by_id(session: AsyncSession):
         statement = (
             select(MaiUser)
-            .where(MaiUser.user_id == user_id)
+            .where(MaiUser.qq == user_id)
         )
         result = await session.execute(statement)
         return result.scalar_one_or_none()
@@ -45,7 +45,7 @@ async def check_mu(user_id: int,
         if user:
             return user
 
-        new_user = MaiUser(user_id=user_id)
+        new_user = MaiUser(qq=user_id)
         session.add(new_user)
         return new_user
     
@@ -58,7 +58,7 @@ async def set_mu_username(user_id: int, new_username: str,
     async def _set_username(session: AsyncSession):
         statement = (
             select(MaiUser)
-            .where(MaiUser.user_id == user_id)
+            .where(MaiUser.qq == user_id)
         )
         result = await session.execute(statement)
         user = result.scalar_one_or_none()
@@ -77,7 +77,7 @@ async def get_mu_from_tgid(telegram_id: int,
     async def _get_user_by_telegram_id(session: AsyncSession):
         statement = (
             select(MaiUser)
-            .where(MaiUser.user_telegram_id == telegram_id)
+            .where(MaiUser.tg == telegram_id)
         )
         result = await session.execute(statement)
         return result.scalar_one_or_none()
@@ -91,13 +91,13 @@ async def set_mu_tgid(user_id: int, telegram_id: int,
     async def _set_telegram_id(session: AsyncSession):
         statement = (
             select(MaiUser)
-            .where(MaiUser.user_id == user_id)
+            .where(MaiUser.qq == user_id)
         )
         result = await session.execute(statement)
         user = result.scalar_one_or_none()
         
         if user:
-            user.user_telegram_id = telegram_id
+            user.tg = telegram_id
     
     await execute_func.action(_set_telegram_id, session=session)
 
@@ -108,12 +108,12 @@ async def del_mu_tgid(user_id: int,
     async def _remove_telegram_id(session: AsyncSession):
         statement = (
             select(MaiUser)
-            .where(MaiUser.user_id == user_id)
+            .where(MaiUser.qq == user_id)
         )
         result = await session.execute(statement)
         user = result.scalar_one_or_none()
         
         if user:
-            user.user_telegram_id = None
+            user.tg = None
     
     await execute_func.action(_remove_telegram_id, session=session)

@@ -62,21 +62,21 @@ async def resolve_id_mapping(original_id: int, mapped_id: int, *, session: Optio
             target_ach.dxscore = max(target_ach.dxscore, source_ach.dxscore)
             target_ach.combo = max(target_ach.combo, source_ach.combo)
             target_ach.sync = max(target_ach.sync, source_ach.sync)
-            target_ach.dxrating = max(target_ach.dxrating, source_ach.dxrating)
+            target_ach.dxrating_cache = max(target_ach.dxrating_cache, source_ach.dxrating_cache)
             try:
-                if source_ach.update_time > target_ach.update_time:
-                    target_ach.update_time = source_ach.update_time
+                if source_ach.update_at > target_ach.update_at:
+                    target_ach.update_at = source_ach.update_at
             except TypeError:
-                if source_ach.update_time.timestamp() > target_ach.update_time.timestamp():
-                    target_ach.update_time = source_ach.update_time
+                if source_ach.update_at.timestamp() > target_ach.update_at.timestamp():
+                    target_ach.update_at = source_ach.update_at
 
         if not target:
             # CASE A: 目标不存在 → 复制
             new_mdt = MaiData(
                 shortid=mapped_id, title=source.title, bpm=source.bpm,
                 artist=source.artist, genre=source.genre, cabinet=source.cabinet,
-                version=source.version, version_cn=source.version_cn,
-                converter=source.converter, zip_path=source.zip_path,
+                version_jp=source.version_jp, version_cn=source.version_cn,
+                provider=source.provider, img_path=source.img_path, zip_path=source.zip_path,
                 jp_is_plate_required=source.jp_is_plate_required,
                 cn_is_plate_required=source.cn_is_plate_required,
                 is_utage=source.is_utage, utage_tag=source.utage_tag, buddy=source.buddy,
@@ -84,8 +84,8 @@ async def resolve_id_mapping(original_id: int, mapped_id: int, *, session: Optio
             session.add(new_mdt)
             for sc in source.charts:
                 new_chart = MaiChart(
-                    shortid=mapped_id, difficulty=sc.difficulty, lv=sc.lv,
-                    lv_cn=sc.lv_cn, lv_synh=sc.lv_synh, des=sc.des, inote=sc.inote,
+                    shortid=mapped_id, difficulty=sc.difficulty, lv_jp=sc.lv_jp,
+                    lv_cn=sc.lv_cn, lv_fit=sc.lv_fit, designer=sc.designer, inote=sc.inote,
                     notes=sc.notes,
                 )
                 new_mdt.charts.append(new_chart)
@@ -93,13 +93,13 @@ async def resolve_id_mapping(original_id: int, mapped_id: int, *, session: Optio
                     session.add(MaiChartAch(
                         shortid=mapped_id, chart=new_chart, difficulty=ach.difficulty,
                         server=ach.server, achievement=ach.achievement, dxscore=ach.dxscore,
-                        combo=ach.combo, sync=ach.sync, update_time=ach.update_time,
-                        user_id=ach.user_id, dxrating=ach.dxrating,
+                        combo=ach.combo, sync=ach.sync, update_at=ach.update_at,
+                        qq=ach.qq, dxrating_cache=ach.dxrating_cache,
                     ))
             for sa in source.aliases:
                 new_mdt.aliases.append(MaiAlias(
                     shortid=mapped_id, alias=sa.alias, create_qq=sa.create_qq,
-                    create_qq_group=sa.create_qq_group, create_time=sa.create_time,
+                    create_at=sa.create_at,
                 ))
             for sc in list(source.charts):
                 for ach in list(sc.achs):
@@ -117,7 +117,7 @@ async def resolve_id_mapping(original_id: int, mapped_id: int, *, session: Optio
                     for ach in list(sc.achs):
                         existing_ach = (await session.execute(
                             select(MaiChartAch).where(
-                                MaiChartAch.user_id == ach.user_id, MaiChartAch.server == ach.server,
+                                MaiChartAch.qq == ach.qq, MaiChartAch.server == ach.server,
                                 MaiChartAch.shortid == mapped_id, MaiChartAch.difficulty == ach.difficulty,
                             )
                         )).scalar_one_or_none()

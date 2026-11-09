@@ -27,7 +27,7 @@ class Server(StrEnum):
     @property
     def version_field(self) -> str:
         field_map = {
-            Server.JP: "version",
+            Server.JP: "version_jp",
             Server.CN: "version_cn",
         }
         return field_map[self]
@@ -59,19 +59,19 @@ class ServerScope(StrEnum):
 class SLevelSource(StrEnum):
     JP = "JP"
     CN = "CN"
-    SYNH = "SYNH"
+    FIT = "FIT"
 
     @property
     def lv_field(self) -> str:
         field_map = {
-            SLevelSource.JP: "lv",
+            SLevelSource.JP: "lv_jp",
             SLevelSource.CN: "lv_cn",
-            SLevelSource.SYNH: "lv_synh",
+            SLevelSource.FIT: "lv_fit",
         }
         return field_map[self]
 
     def to_server(self) -> Server | None:
-        if self is SLevelSource.SYNH:
+        if self is SLevelSource.FIT:
             return None
         return Server(self.value)
 

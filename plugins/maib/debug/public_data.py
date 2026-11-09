@@ -24,9 +24,9 @@ def maidata(version: int = 18):
     maidata = MaiData(shortid=11451, title="LyraTest", bpm=70, artist="GoldSheeeeeep3",
                       genre=1, cabinet="DX", version=version, version_cn=None, converter="Debug",
                       img_path=Path(project_root) / "temp" / "debug_cover.png", zip_path=None,
-                      aliases=[MaiAlias(shortid=11451, alias=a, create_time=datetime_now, create_qq=-1, create_qq_group=None) for a in aliases])
+                      aliases=[MaiAlias(shortid=11451, alias=a, create_at=datetime_now, create_qq=-1) for a in aliases])
     for i in range(2, 7):
-        chart = MaiChart(shortid=11451, difficulty=i, lv=1 + i * 3)
+        chart = MaiChart(shortid=11451, difficulty=i, lv_jp=1 + i * 3)
         chart.set_ach(MaiChartAch(shortid=11451, difficulty=i, server=Server.JP, achievement=97.6 + i * 0.5,
                                   combo=random.randint(0, 4), sync=random.randint(0, 5)))
         maidata.set_chart(chart)

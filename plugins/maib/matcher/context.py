@@ -62,7 +62,7 @@ async def get_maiuser(event: Event, user_id: int | None = None, reply: Reply = r
         raise ValueError(await reply("error.unexpected"))
 
     if not mu.username:
-        qq = mu.user_id
+        qq = mu.qq
         data = await network.DivingFish.dev_player_records(qq=qq)
         username = data.get("nickname", "maimai") if isinstance(data, dict) else "maimai"
         await services.set_mu_username(qq, username)

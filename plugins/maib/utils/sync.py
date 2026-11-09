@@ -332,7 +332,7 @@ def _parse_single_sy_record(record: dict, server: Server = Server.CN) -> Optiona
         dxscore=record.get("dxScore", 0),
         combo=Combos.find_id(record.get("fc", "").lower()) or 0,
         sync=Syncs.find_id(record.get("fs", "").lower()) or 0,
-        update_time=datetime.now()
+        update_at=datetime.now()
     )
 
 def parse_sy_player_record(maidata: MaiData, records: list, server: Server = Server.CN) -> MaiData:

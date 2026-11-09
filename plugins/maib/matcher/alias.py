@@ -63,16 +63,9 @@ async def mai_alias_handled(event: Event, matcher: Matcher, groups: tuple = Rege
         return
 
     qq = maiuser.user_id
-    if isinstance(event, OneBotV11GroupMessageEvent):
-        group_id = event.group_id
-    elif isinstance(event, TGEvent):
-        group_id = -3  # 标记：来自于 Telegram
-    else:
-        group_id = None
-
     if action == "添加":
         # 添加别名
-        new_alias = await services.add_ma(short_id, alias, qq, group_id)
+        new_alias = await services.add_ma(short_id, alias, qq)
         if new_alias:
             await matcher.finish(await reply("alias.add.success", shortid=str(short_id), alias=alias))
         else:

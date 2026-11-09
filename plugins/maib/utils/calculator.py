@@ -49,7 +49,7 @@ def get_ap_bonus_value(version: int) -> int:
     raise ValueError(f"Invalid version: {version}")
 
 
-def get_dxrating(achievement: Achievement, level: float, ap_bonus: int = 0, combo: int = 0) -> int:
+def get_dxrating(achievement: int, level: float, ap_bonus: int = 0, combo: int = 0) -> int:
     """根据成就率和定数计算 DX Rating"""
     factor = next((f for t, f in _RATE_FACTOR_TABLE if achievement >= t), 0)
     achievement = 1005000 if achievement >= 1005000 else achievement
