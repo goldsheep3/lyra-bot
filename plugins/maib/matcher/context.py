@@ -63,10 +63,7 @@ async def get_maiuser(event: Event, user_id: int | None = None, reply: Reply = r
 
     if not mu.username:
         qq = mu.user_id
-        data = await network.DivingFish.dev_player_records(
-            qq=qq,
-            developer_token=config.DIVING_FISH_DEVELOPER_TOKEN,
-        )
+        data = await network.DivingFish.dev_player_records(qq=qq)
         username = data.get("nickname", "maimai") if isinstance(data, dict) else "maimai"
         await services.set_mu_username(qq, username)
         mu.username = username

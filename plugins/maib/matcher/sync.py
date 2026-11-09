@@ -79,7 +79,7 @@ async def tg_read_file(bot: TGBot, file_id: str) -> Optional[bytes]:
         if tg_file_info.file_path:
             token = bot.bot_config.token
             file_url = f"https://api.telegram.org/file/bot{token}/{tg_file_info.file_path}"
-            return await network.request_image(file_url)
+            return await network.request_bytes(file_url)
     except Exception as e:
         logger.error(f"Telegram 远程文件解析失败: {e}")
     return None
@@ -109,7 +109,7 @@ async def _build_sy_records_hash(records: list[dict[str, Any]]) -> str:
 
 async def get_sy_and_upload(user_id: int) -> MaiChartAchDiffReport:
     # 获取水鱼数据
-    data = await network.DivingFish.dev_player_records(qq=user_id, developer_token=config.DIVING_FISH_DEVELOPER_TOKEN)
+    data = await network.DivingFish.dev_player_records(qq=user_id)
     records = data.pop('records', []) if data else []
 
     # records 稳定哈希一致时，直接短路跳过上传流程
