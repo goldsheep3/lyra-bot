@@ -18,20 +18,34 @@ depends_on = None
 
 def upgrade() -> None:
     op.execute("UPDATE maib_maidatas SET artist = '' WHERE artist IS NULL")
-    op.execute("UPDATE maib_maichartachs SET achievement = achievement * 10000")
+    # Keep retries safe after a failed SQLite batch migration: pre-migration
+    # achievement values are percentages (at most 100.5), while scaled values
+    # are already stored in ten-thousandths.
+    op.execute("""
+        UPDATE maib_maichartachs
+        SET achievement = CASE
+            WHEN achievement <= 100.5 THEN achievement * 10000
+            ELSE achievement
+        END
+    """)
 
-    with op.batch_alter_table('maib_maialiases', schema=None) as batch_op:
-        batch_op.add_column(sa.Column('create_by', sa.Integer(), nullable=True))
-        batch_op.alter_column(
-            'create_time',
-            new_column_name='create_at',
-            existing_type=sa.DateTime(timezone=True),
-            existing_nullable=False,
-        )
-        batch_op.drop_column('create_qq_group')
+    alias_columns = {column["name"] for column in sa.inspect(op.get_bind()).get_columns("maib_maialiases")}
+    if "create_at" not in alias_columns:
+        with op.batch_alter_table('maib_maialiases', schema=None) as batch_op:
+            batch_op.add_column(sa.Column('create_by', sa.Integer(), nullable=True))
+            batch_op.alter_column(
+                'create_time',
+                new_column_name='create_at',
+                existing_type=sa.DateTime(timezone=True),
+                existing_nullable=False,
+            )
+            batch_op.drop_column('create_qq_group')
 
+    # SQLite batch mode can leave this table behind if an earlier upgrade attempt
+    # fails while copying rows into the replacement table.
+    op.execute("DROP TABLE IF EXISTS _alembic_tmp_maichartachs")
     with op.batch_alter_table('maib_maichartachs', schema=None) as batch_op:
-        batch_op.add_column(sa.Column('provider', sa.String(length=16), nullable=False, server_default='unknown'))
+        batch_op.add_column(sa.Column('provider', sa.String(length=16), nullable=True))
         batch_op.alter_column('user_id', new_column_name='qq', existing_type=sa.BigInteger(), existing_nullable=True)
         batch_op.alter_column(
             'update_time',
@@ -46,14 +60,6 @@ def upgrade() -> None:
                existing_nullable=False,
                postgresql_using='achievement::integer')
         batch_op.drop_constraint(batch_op.f('uq_maib_maichartachs_user_id'), type_='unique')
-        batch_op.alter_column('provider', server_default=None)
-
-    with op.batch_alter_table('maib_maichartachs', schema=None) as batch_op:
-        batch_op.create_unique_constraint(
-            'uq_maib_maichartachs_qq_shortid_difficulty_provider_server',
-            ['qq', 'shortid', 'difficulty', 'provider', 'server'],
-        )
-
     op.execute("""
         UPDATE maib_maichartachs
         SET provider = CASE server
@@ -62,6 +68,13 @@ def upgrade() -> None:
             ELSE 'unknown'
         END
     """)
+
+    with op.batch_alter_table('maib_maichartachs', schema=None) as batch_op:
+        batch_op.alter_column('provider', existing_type=sa.String(length=16), nullable=False)
+        batch_op.create_unique_constraint(
+            'uq_maib_maichartachs_qq_shortid_difficulty_provider_server',
+            ['qq', 'shortid', 'difficulty', 'provider', 'server'],
+        )
 
     with op.batch_alter_table('maib_maicharts', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_maib_maicharts_lv'))
