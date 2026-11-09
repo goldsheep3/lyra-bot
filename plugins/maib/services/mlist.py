@@ -24,7 +24,7 @@ __all__ = [
 
 
 class get_mdt_list:
-    
+
     @staticmethod
     async def genre(genre: int, achs_user_id: Optional[int] = None,
                     *, session: Optional[AsyncSession] = None) -> Sequence[MaiData]:
@@ -73,7 +73,7 @@ class get_mdt_list:
 
 
 class get_mct_list:
-    
+
     @staticmethod
     async def level(lv: float | tuple[float, float], server: Server, achs_user_id: Optional[int] = None, allow_utage: bool = False,
                     *, session: Optional[AsyncSession] = None) -> Sequence[MaiChart]:

@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import execute_func
-from .models import MaiSyncPairingCode, MaiSyncToken
+from .models import MaiSync
 from .user import check_mu
 
 
@@ -86,10 +86,16 @@ def _normalize_device_name(device_name: Optional[str]) -> str:
 
 
 async def _revoke_user_token(user_id: int, *, now: datetime, session: AsyncSession) -> None:
-    stmt = select(MaiSyncToken).where(MaiSyncToken.user_id == user_id)
-    token = (await session.execute(stmt)).scalar_one_or_none()
-    if token is not None:
-        token.revoked_at = now
+    rows = (
+        await session.execute(
+            select(MaiSync).where(
+                MaiSync.qq == user_id,
+                MaiSync.token_revoked.is_(False),
+            )
+        )
+    ).scalars().all()
+    for row in rows:
+        row.token_revoked = True
 
 
 async def create_pairing_code(
@@ -108,16 +114,14 @@ async def create_pairing_code(
 
         existing_codes = (
             await session.execute(
-                select(MaiSyncPairingCode).where(
-                    MaiSyncPairingCode.user_id == user_id,
-                    MaiSyncPairingCode.used_at.is_(None),
-                    MaiSyncPairingCode.revoked.is_(False),
+                select(MaiSync).where(
+                    MaiSync.qq == user_id,
+                    MaiSync.pairing_used_at.is_(None),
                 )
             )
         ).scalars().all()
         for row in existing_codes:
-            row.revoked = True
-            row.used_at = now
+            row.pairing_used_at = now
 
         await _revoke_user_token(user_id, now=now, session=session)
 
@@ -126,17 +130,21 @@ async def create_pairing_code(
             code_hash = _hash_text(secret)
             exists = (
                 await session.execute(
-                    select(MaiSyncPairingCode.id).where(MaiSyncPairingCode.code_hash == code_hash)
+                    select(MaiSync.id).where(MaiSync.pairing_code == code_hash)
                 )
             ).scalar_one_or_none()
             if exists is None:
                 break
 
-        session.add(MaiSyncPairingCode(
-            user_id=user_id,
-            code_hash=code_hash,
-            expires_at=expires_at,
-            create_time=now,
+        session.add(MaiSync(
+            qq=user_id,
+            pairing_code=code_hash,
+            pairing_created_at=now,
+            pairing_expires_at=expires_at,
+            token=_hash_text(f"pending:{secret}"),
+            token_created_at=now,
+            token_last_used_at=now,
+            token_revoked=True,
         ))
         return PairingCodeIssueResult(
             code=f"{PAIRING_CODE_PREFIX}{secret}",
@@ -162,61 +170,44 @@ async def exchange_pairing_code(
         now = datetime.now(timezone.utc)
         pairing = (
             await session.execute(
-                select(MaiSyncPairingCode).where(MaiSyncPairingCode.code_hash == code_hash)
+                select(MaiSync).where(MaiSync.pairing_code == code_hash)
             )
         ).scalar_one_or_none()
 
         if pairing is None:
             raise PairingCodeError("invalid_code")
-        if pairing.revoked:
-            raise PairingCodeError("revoked_code")
-        if pairing.used_at is not None:
+        if pairing.pairing_used_at is not None:
             raise PairingCodeError("used_code")
-        if pairing.expires_at <= now:
+        if pairing.pairing_expires_at <= now:
             raise PairingCodeError("expired_code")
 
-        pairing.used_at = now
+        pairing.pairing_used_at = now
 
         sibling_codes = (
             await session.execute(
-                select(MaiSyncPairingCode).where(
-                    MaiSyncPairingCode.user_id == pairing.user_id,
-                    MaiSyncPairingCode.used_at.is_(None),
-                    MaiSyncPairingCode.id != pairing.id,
+                select(MaiSync).where(
+                    MaiSync.qq == pairing.qq,
+                    MaiSync.pairing_used_at.is_(None),
+                    MaiSync.id != pairing.id,
                 )
             )
         ).scalars().all()
         for row in sibling_codes:
-            row.revoked = True
-            row.used_at = now
+            row.pairing_used_at = now
+
+        await _revoke_user_token(pairing.qq, now=now, session=session)
 
         plain_token = _generate_access_token()
         token_hash = _hash_text(plain_token)
 
-        token = (
-            await session.execute(
-                select(MaiSyncToken).where(MaiSyncToken.user_id == pairing.user_id)
-            )
-        ).scalar_one_or_none()
-        if token is None:
-            session.add(MaiSyncToken(
-                user_id=pairing.user_id,
-                token_hash=token_hash,
-                device_id=normalized_device_id,
-                device_name=normalized_device_name,
-                create_time=now,
-                last_used_at=now,
-                revoked_at=None,
-            ))
-        else:
-            token.token_hash = token_hash
-            token.device_id = normalized_device_id
-            token.device_name = normalized_device_name
-            token.create_time = now
-            token.last_used_at = now
-            token.revoked_at = None
+        pairing.token = token_hash
+        pairing.device_id = normalized_device_id
+        pairing.device_name = normalized_device_name
+        pairing.token_created_at = now
+        pairing.token_last_used_at = now
+        pairing.token_revoked = False
 
-        return pairing.user_id, plain_token
+        return pairing.qq, plain_token
 
     return await execute_func.action(_action, session=session)
 
@@ -234,13 +225,13 @@ async def authenticate_access_token(
     async def _action(session: AsyncSession) -> int:
         token = (
             await session.execute(
-                select(MaiSyncToken).where(MaiSyncToken.token_hash == token_hash)
+                select(MaiSync).where(MaiSync.token == token_hash)
             )
         ).scalar_one_or_none()
-        if token is None or token.revoked_at is not None:
+        if token is None or token.token_revoked:
             raise AccessTokenError("invalid_token")
 
-        token.last_used_at = datetime.now(timezone.utc)
-        return token.user_id
+        token.token_last_used_at = datetime.now(timezone.utc)
+        return token.qq
 
     return await execute_func.action(_action, session=session)

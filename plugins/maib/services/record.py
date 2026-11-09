@@ -33,7 +33,7 @@ def _merge_ach(target: utils.MaiChartAch, source: MaiRecord) -> utils.MaiChartAc
         dxscore=source.dxscore,
         combo=source.combo,
         sync=source.sync,
-        update_at=source.play_time,
+        update_at=source.play_at,
         user_id=source.user_id,
     )
     if candidate > target:
@@ -95,7 +95,7 @@ async def add_record_batch(
                 "dxscore": record.dxscore,
                 "combo": record.combo,
                 "sync": record.sync,
-                "play_time": record.play_time,
+                "play_at": record.play_time,
             })
             if shortid is not None:
                 backfill_rows.append({
@@ -178,7 +178,7 @@ async def get_record_achs(
                     dxscore=row.dxscore,
                     combo=row.combo,
                     sync=row.sync,
-                    update_at=row.play_time,
+                    update_at=row.play_at,
                     user_id=user_id,
                 )
                 continue

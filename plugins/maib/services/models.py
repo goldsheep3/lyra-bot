@@ -20,15 +20,16 @@ D_T = datetime | int | float | None
 
 
 __all__ = [
-    "MaiAlias",
-    "MaiChartAch",
-    "MaiChart",
-    "MaiData",
-    "MaiUser",
-    "MaiRecord",
-    "MaiIDMap",
-    "MaiSyncPairingCode",
-    "MaiSyncToken",
+    "MaiAlias",     # 乐曲别名信息模型
+    "MaiChartAch",  # 谱面游玩成绩信息模型
+    "MaiChart",     # 谱面信息模型
+    "MaiData",      # 乐曲信息模型
+    "MaiUser",      # 用户信息模型
+    "MaiSync",      # maisync 模型
+    "MaiLxns",      # 落雪授权信息模型
+    "MaiRecord",    # 谱面游玩成绩历史记录模型
+    "Maime",        # Aime 绑定模型
+    "MaiIDMap",     # ShortID 重映射模型
 ]
 
 Model = get_plugin_data().Model
@@ -75,7 +76,7 @@ class MaiAlias(Model):
     maidata: M["MaiData"] = relationship(back_populates="aliases", lazy="selectin")
 
     @validates("create_at")
-    def _validate_time(self, _key: str, value: D_T) -> datetime: return _as_datetime(value)
+    def _validate(self, _key: str, value: D_T) -> datetime: return _as_datetime(value)
 
     @classmethod
     def from_utils(cls, alias: utils.MaiAlias | Mapping[str, Any] | None = None, **kwargs: Any) -> "MaiAlias":
@@ -133,7 +134,7 @@ class MaiChartAch(Model):
     chart: M["MaiChart"] = relationship(back_populates="achs", lazy="selectin")
 
     @validates("update_at")
-    def _validate_time(self, _key: str, value: D_T) -> datetime: return _as_datetime(value)
+    def _validate(self, _key: str, value: D_T) -> datetime: return _as_datetime(value)
 
     @classmethod
     def from_utils(
@@ -453,8 +454,10 @@ class MaiUser(Model):
     cn_dxra_b15_max: M[int] = col(default=0)
     cn_dxra_b15_min: M[int] = col(default=0)
 
-    # Diving-Fish 字段: 通过水鱼获取到的数据的 hash 确认是否为最新数据，已经最新就直接跳过更新.
-    _diving_fish_records_hash_cache: M[Optional[str]] = col(default=None, nullable=True)
+    # 水鱼 sub ID
+    diving_fish_sub: M[Optional[int]] = col(Integer, default=None, nullable=True)
+    # [Cache] 水鱼查分器游玩成绩数据 hash 缓存值
+    _diving_fish_records_hash_cache: M[Optional[str]] = col(String, default=None, nullable=True)
 
     @validates("jp_update_at", "cn_update_at")
     def _validate(self, _key: str, value: D_T) -> datetime: return _as_datetime(value, default=DEFAULT_DATETIME)
@@ -546,15 +549,69 @@ class MaiUser(Model):
         )
 
 
-class Maime(Model):
-    """maimai aime 绑定数据"""
+class MaiSync(Model):
+    """maisync 模型"""
 
-    __tablename__ = "maib_maimes"
+    __tablename__ = "maib_maisync"
 
-    access: M[str] = col(String(20), primary_key=True, comment="Aime卡号")
-    user_id: M[Optional[int]] = col(BigInteger, index=True, comment="用户id")
-    access4: M[str] = col(String(4), index=True, comment="Aime卡号后四位缓存")
-    create_at: M[datetime] = col(DateTime(timezone=True), default=datetime.now)
+    # 配对 ID
+    id: M[int] = col(Integer, primary_key=True, autoincrement=True)
+
+    qq: M[int] = col(BigInteger, index=True)
+
+    # 临时校验码
+    pairing_code: M[str] = col(String(64), index=True, unique=True)
+    # 临时校验码创建时间
+    pairing_created_at: M[datetime] = col(DateTime(timezone=True), default=datetime.now)
+    # 临时校验码过期时间
+    pairing_expires_at: M[datetime] = col(DateTime(timezone=True))
+    # 临时校验码使用时间
+    pairing_used_at: M[Optional[datetime]] = col(DateTime(timezone=True), default=None, nullable=True)
+
+    # 长时配对码
+    token: M[str] = col(String(64), index=True, unique=True)
+    # 长时配对码创建时间
+    token_created_at: M[datetime] = col(DateTime(timezone=True), default=datetime.now)
+    # 长时配对码设备 ID
+    device_id: M[str] = col(String(64), default="")
+    # 长时配对码设备名称
+    device_name: M[str] = col(String(128), default="")
+    # 长时配对码上次使用时间
+    token_last_used_at: M[datetime] = col(DateTime(timezone=True), default=datetime.now)
+    # 长时配对码有效性
+    token_revoked: M[bool] = col(Boolean, default=False)
+
+    # 属性赋值验证
+    @validates("pairing_created_at", "pairing_expires_at", "pairing_used_at",
+               "token_created_at", "token_last_used_at")
+    def _validate(self, _key: str, value: D_T) -> Optional[datetime]:
+        if value is None:
+            return None
+        return _as_datetime(value)
+
+
+class MaiLxns(Model):
+    """落雪授权信息模型"""
+
+    __tablename__ = "maib_mailxns"
+
+    qq: M[int] = col(BigInteger, primary_key=True)
+
+    # 落雪 refresh_token (hashed)
+    refresh_token: M[str] = col(String(512), nullable=False)
+    # 过期时间（30 天滚动，每次刷新更新）
+    refresh_expires_at: M[datetime] = col(DateTime(timezone=True), nullable=False)
+    # 授权范围（如 "read_user_profile read_player"）
+    refresh_scope: M[str] = col(String(255), nullable=False, default="")
+    # 授权有效性
+    refresh_is_active: M[bool] = col(Boolean, nullable=False, default=True)
+    # 创建时间
+    refresh_created_at: M[datetime] = col(DateTime(timezone=True), nullable=False, default=datetime.now)
+    # 更新时间
+    refresh_updated_at: M[datetime] = col(DateTime(timezone=False), nullable=False, default=datetime.now)
+
+    @validates("refresh_expires_at", "refresh_created_at", "refresh_updated_at")
+    def _validate(self, _key: str, value: D_T) -> datetime: return _as_datetime(value, default=DEFAULT_DATETIME)
 
 
 class MaiRecord(Model):
@@ -576,57 +633,22 @@ class MaiRecord(Model):
     dxscore: M[int] = col(Integer, default=0)
     combo: M[int] = col(Integer, default=0)
     sync: M[int] = col(Integer, default=0)
-    play_time: M[datetime] = col(DateTime(timezone=True), default=datetime.now)
-    update_time: M[datetime] = col(DateTime(timezone=True), default=datetime.now, onupdate=datetime.now)
+    play_at: M[datetime] = col(DateTime(timezone=True), default=datetime.now)
+    update_at: M[datetime] = col(DateTime(timezone=True), default=datetime.now, onupdate=datetime.now)
 
-    @validates("play_time", "update_time")
-    def _validate_datetimes(self, _key: str, value: D_T) -> datetime:
-        return _as_datetime(value)
-
-
-class MaiSyncPairingCode(Model):
-    """maimai 在线同步一次性配对码"""
-
-    __tablename__ = "maib_maisync_pairing_codes"
-
-    id: M[int] = col(primary_key=True, autoincrement=True)
-    user_id: M[int] = col(BigInteger, index=True)
-    code_hash: M[str] = col(String(64), index=True, unique=True)
-    expires_at: M[datetime] = col(DateTime(timezone=True), index=True)
-    used_at: M[Optional[datetime]] = col(DateTime(timezone=True), default=None, nullable=True)
-    revoked: M[bool] = col(Boolean, default=False)
-    create_time: M[datetime] = col(DateTime(timezone=True), default=datetime.now)
-
-    @validates("expires_at", "used_at", "create_time")
-    def _validate_datetimes(self, _key: str, value: D_T) -> Optional[datetime]:
-        if value is None:
-            return None
-        return _as_datetime(value)
+    @validates("play_at", "update_at")
+    def _validate(self, _key: str, value: D_T) -> datetime: return _as_datetime(value)
 
 
-class MaiSyncToken(Model):
-    """maimai 在线同步访问令牌（每用户单设备）"""
+class Maime(Model):
+    """maimai aime 绑定数据"""
 
-    __tablename__ = "maib_maisync_tokens"
-    __table_args__ = (
-        UniqueConstraint("user_id"),
-        UniqueConstraint("token_hash"),
-    )
+    __tablename__ = "maib_maimes"
 
-    id: M[int] = col(primary_key=True, autoincrement=True)
-    user_id: M[int] = col(BigInteger, index=True)
-    token_hash: M[str] = col(String(64), index=True)
-    device_id: M[str] = col(String(64), default="")
-    device_name: M[str] = col(String(128), default="")
-    create_time: M[datetime] = col(DateTime(timezone=True), default=datetime.now)
-    last_used_at: M[datetime] = col(DateTime(timezone=True), default=datetime.now)
-    revoked_at: M[Optional[datetime]] = col(DateTime(timezone=True), default=None, nullable=True)
-
-    @validates("create_time", "last_used_at", "revoked_at")
-    def _validate_datetimes(self, _key: str, value: D_T) -> Optional[datetime]:
-        if value is None:
-            return None
-        return _as_datetime(value)
+    access: M[str] = col(String(20), primary_key=True, comment="Aime卡号")
+    user_id: M[Optional[int]] = col(BigInteger, index=True, comment="用户id")
+    access4: M[str] = col(String(4), index=True, comment="Aime卡号后四位缓存")
+    create_at: M[datetime] = col(DateTime(timezone=True), default=datetime.now)
 
 
 class MaiIDMap(Model):

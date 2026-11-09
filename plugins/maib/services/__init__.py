@@ -68,7 +68,7 @@ class execute_func:
             return result
 
 
-from .models import MaiData, MaiChart, MaiChartAch, MaiAlias, MaiRecord, MaiIDMap, MaiSyncPairingCode, MaiSyncToken
+from .models import MaiData, MaiChart, MaiChartAch, MaiAlias, MaiRecord, MaiIDMap, MaiSync, MaiLxns
 
 from .alias import get_ma, add_ma, add_ma_batch, del_ma
 from .fetch import set_mct_level, set_mct_level_batch, set_mct_version, set_mdt_version_batch, sync_mdt_list
@@ -97,7 +97,7 @@ __all__ = [
     # __init__
     "get_session",
     # models
-    "MaiData", "MaiChart", "MaiChartAch", "MaiAlias", "MaiRecord", "MaiIDMap", "MaiSyncPairingCode", "MaiSyncToken",
+    "MaiData", "MaiChart", "MaiChartAch", "MaiAlias", "MaiRecord", "MaiIDMap", "MaiSync", "MaiLxns",
     # alias
     "get_ma", "add_ma", "add_ma_batch", "del_ma",
     # fetch
