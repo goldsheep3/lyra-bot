@@ -557,7 +557,7 @@ class MaiSync(Model):
     # 配对 ID
     id: M[int] = col(Integer, primary_key=True, autoincrement=True)
 
-    qq: M[int] = col(BigInteger, index=True)
+    qq: M[int] = col(BigInteger, index=True, unique=True)
 
     # 临时校验码
     pairing_code: M[str] = col(String(64), index=True, unique=True)
@@ -608,7 +608,7 @@ class MaiLxns(Model):
     # 创建时间
     refresh_created_at: M[datetime] = col(DateTime(timezone=True), nullable=False, default=datetime.now)
     # 更新时间
-    refresh_updated_at: M[datetime] = col(DateTime(timezone=False), nullable=False, default=datetime.now)
+    refresh_updated_at: M[datetime] = col(DateTime(timezone=True), nullable=False, default=datetime.now)
 
     @validates("refresh_expires_at", "refresh_created_at", "refresh_updated_at")
     def _validate(self, _key: str, value: D_T) -> datetime: return _as_datetime(value, default=DEFAULT_DATETIME)

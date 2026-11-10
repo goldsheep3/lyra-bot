@@ -19,12 +19,12 @@ depends_on = None
 def upgrade() -> None:
     op.execute("UPDATE maib_maidatas SET artist = '' WHERE artist IS NULL")
     # Keep retries safe after a failed SQLite batch migration: pre-migration
-    # achievement values are percentages (at most 100.5), while scaled values
+    # achievement values are percentages (at most 101.0), while scaled values
     # are already stored in ten-thousandths.
     op.execute("""
         UPDATE maib_maichartachs
         SET achievement = CASE
-            WHEN achievement <= 100.5 THEN achievement * 10000
+            WHEN achievement <= 101.0 THEN achievement * 10000
             ELSE achievement
         END
     """)

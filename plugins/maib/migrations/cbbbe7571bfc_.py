@@ -24,7 +24,7 @@ def upgrade() -> None:
     sa.Column('refresh_scope', sa.String(length=255), nullable=False),
     sa.Column('refresh_is_active', sa.Boolean(), nullable=False),
     sa.Column('refresh_created_at', sa.DateTime(timezone=True), nullable=False),
-    sa.Column('refresh_updated_at', sa.DateTime(), nullable=False),
+    sa.Column('refresh_updated_at', sa.DateTime(timezone=True), nullable=False),
     sa.PrimaryKeyConstraint('qq', name=op.f('pk_maib_mailxns'))
     )
     op.create_table('maib_maisync',

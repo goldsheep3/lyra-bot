@@ -169,6 +169,8 @@ class get_mca_list:
                 min_ach, max_ach = min(ach), max(ach)
             else:
                 min_ach, max_ach = ach, ach
+            # 入参为百分比（如 100.5），列中以万分之一为单位存整数
+            min_ach, max_ach = int(min_ach * 10000), int(max_ach * 10000)
 
             stmt = (
                 select(MaiChartAch)

@@ -112,19 +112,6 @@ async def create_pairing_code(
         now = datetime.now(timezone.utc)
         expires_at = now + timedelta(seconds=ttl_seconds)
 
-        existing_codes = (
-            await session.execute(
-                select(MaiSync).where(
-                    MaiSync.qq == user_id,
-                    MaiSync.pairing_used_at.is_(None),
-                )
-            )
-        ).scalars().all()
-        for row in existing_codes:
-            row.pairing_used_at = now
-
-        await _revoke_user_token(user_id, now=now, session=session)
-
         while True:
             secret = _generate_pairing_secret()
             code_hash = _hash_text(secret)
@@ -136,16 +123,25 @@ async def create_pairing_code(
             if exists is None:
                 break
 
-        session.add(MaiSync(
-            qq=user_id,
-            pairing_code=code_hash,
-            pairing_created_at=now,
-            pairing_expires_at=expires_at,
-            token=_hash_text(f"pending:{secret}"),
-            token_created_at=now,
-            token_last_used_at=now,
-            token_revoked=True,
-        ))
+        # 每用户只保留一条记录：重新申请配对码时直接覆盖旧记录，
+        # 旧配对码与旧 token 一并作废。
+        row = (
+            await session.execute(select(MaiSync).where(MaiSync.qq == user_id))
+        ).scalar_one_or_none()
+        if row is None:
+            row = MaiSync(qq=user_id)
+            session.add(row)
+        row.pairing_code = code_hash
+        row.pairing_created_at = now
+        row.pairing_expires_at = expires_at
+        row.pairing_used_at = None
+        row.token = _hash_text(f"pending:{secret}")
+        row.token_created_at = now
+        row.token_last_used_at = now
+        row.token_revoked = True
+        row.device_id = ""
+        row.device_name = ""
+
         return PairingCodeIssueResult(
             code=f"{PAIRING_CODE_PREFIX}{secret}",
             expires_at=expires_at,
@@ -182,18 +178,6 @@ async def exchange_pairing_code(
             raise PairingCodeError("expired_code")
 
         pairing.pairing_used_at = now
-
-        sibling_codes = (
-            await session.execute(
-                select(MaiSync).where(
-                    MaiSync.qq == pairing.qq,
-                    MaiSync.pairing_used_at.is_(None),
-                    MaiSync.id != pairing.id,
-                )
-            )
-        ).scalars().all()
-        for row in sibling_codes:
-            row.pairing_used_at = now
 
         await _revoke_user_token(pairing.qq, now=now, session=session)
 
