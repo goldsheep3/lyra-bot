@@ -58,7 +58,7 @@ def upgrade() -> None:
         )
         SELECT
             user_id, code_hash, create_time, expires_at,
-            used_at, code_hash, create_time, '', '', create_time, 1
+            used_at, code_hash, create_time, '', '', create_time, TRUE
         FROM maib_maisync_pairing_codes
     """)
     op.execute("""
@@ -71,7 +71,7 @@ def upgrade() -> None:
             user_id, token_hash, create_time, create_time,
             create_time, token_hash, create_time, device_id,
             device_name, last_used_at,
-            CASE WHEN revoked_at IS NULL THEN 0 ELSE 1 END
+            CASE WHEN revoked_at IS NULL THEN FALSE ELSE TRUE END
         FROM maib_maisync_tokens
     """)
     op.drop_table('maib_maisync_pairing_codes')
@@ -131,7 +131,7 @@ def downgrade() -> None:
         )
         SELECT
             qq, pairing_code, pairing_expires_at, pairing_used_at,
-            CASE WHEN pairing_used_at IS NULL THEN 0 ELSE 1 END,
+            CASE WHEN pairing_used_at IS NULL THEN FALSE ELSE TRUE END,
             pairing_created_at
         FROM maib_maisync
     """)
