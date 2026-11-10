@@ -19,12 +19,14 @@ depends_on = None
 def upgrade() -> None:
     op.execute("UPDATE maib_maidatas SET artist = '' WHERE artist IS NULL")
     # Keep retries safe after a failed SQLite batch migration: pre-migration
-    # achievement values are percentages (at most 101.0), while scaled values
-    # are already stored in ten-thousandths.
+    # achievement values are percentages, while scaled values are already
+    # stored in ten-thousandths.
+    # NOTE: 普通谱面满分 101.0000%，而 UTAGE BUDDY 谱面满分是 202.0000%，
+    # 因此这里的阈值必须取 202.0，否则 BUDDY 成绩会被误判为已缩放值。
     op.execute("""
         UPDATE maib_maichartachs
         SET achievement = CASE
-            WHEN achievement <= 101.0 THEN achievement * 10000
+            WHEN achievement <= 202.0 THEN achievement * 10000
             ELSE achievement
         END
     """)
