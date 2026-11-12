@@ -79,7 +79,7 @@ def _build_diff(
 
 
 def _apply_merged_ach(mca: MaiChartAch, merged: utils.MaiChartAch) -> None:
-    mca.achievement = int(merged.achievement * 10000)
+    mca.achievement = round(merged.achievement * 10000)
     mca.dxscore = merged.dxscore
     mca.combo = merged.combo
     mca.sync = merged.sync

@@ -180,7 +180,7 @@ class MaiChart:
         """根据成就率和定数计算 DX Rating"""
         if achievement is None:
             ach_obj = self.get_ach(server)
-            achievement = int(ach_obj.achievement * 10000)
+            achievement = round(ach_obj.achievement * 10000)
             combo = ach_obj.combo
         else:
             combo = combo if combo is not None else 0

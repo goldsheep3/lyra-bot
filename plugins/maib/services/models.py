@@ -149,7 +149,7 @@ class MaiChartAch(Model):
             chart_id=chart_id,
             difficulty=_get(ach, "difficulty"),
             server=_get(ach, "server"),
-            achievement=int(_get(ach, "achievement", 0) * 10000),
+            achievement=round(_get(ach, "achievement", 0) * 10000),
             dxscore=_get(ach, "dxscore", 0),
             combo=_get(ach, "combo", 0),
             sync=_get(ach, "sync", 0),
@@ -175,8 +175,7 @@ class MaiChartAch(Model):
         )
 
     def update(self, ach: utils.MaiChartAch) -> None:
-        # TODO float -> int
-        self.achievement = max(self.achievement, int(ach.achievement*10000))
+        self.achievement = max(self.achievement, round(ach.achievement * 10000))
         self.dxscore = max(self.dxscore, ach.dxscore)
         self.combo = max(self.combo, ach.combo)
         self.sync = max(self.sync, ach.sync)

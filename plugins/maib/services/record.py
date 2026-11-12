@@ -93,7 +93,7 @@ async def add_record_batch(
                 "server": record.server,
                 # 持久化层统一使用百分比的万分之一，避免浮点精度问题，
                 # 并与 MaiChartAch.achievement 保持同一单位。
-                "achievement": int(record.achievement * 10000),
+                "achievement": round(record.achievement * 10000),
                 "dxscore": record.dxscore,
                 "combo": record.combo,
                 "sync": record.sync,

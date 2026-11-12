@@ -31,7 +31,6 @@ async def ra_calc_handled(event: Event, matcher: Matcher, groups: dict[str, Opti
     elif raw_achievement.replace('.', '', 1).isdigit():
         # 可解析为浮点数
         achievement = float(raw_achievement)
-        # achievement = int(achievement * 10000)  -> 后续重构为 INT 1,010,000 存储格式
     else:
         # 按照别名解析
         achievement = AchievementMap.find_achievement(raw_achievement)
@@ -87,13 +86,13 @@ async def ra_calc_handled(event: Event, matcher: Matcher, groups: dict[str, Opti
             ("S+", 98.0),
             ("S", 97.0),
         ):
-            ra = get_dxrating(int(_achievement*10000), level, 0)
+            ra = get_dxrating(round(_achievement * 10000), level, 0)
             lines.append(await reply("rc.success.blur", level=level, rate=rate, ra=ra))
         lines.append(await reply("rc.excluding_ap_bouns"))
         await matcher.finish("\n".join(lines))
         return
     else:
-        ra = get_dxrating(int(achievement*10000), level, 0)
+        ra = get_dxrating(round(achievement * 10000), level, 0)
         lines = [
             await reply("rc.success.tip"),
             await reply("rc.success.common", level=level, achievement=f"{achievement:.4f}", ra=ra),

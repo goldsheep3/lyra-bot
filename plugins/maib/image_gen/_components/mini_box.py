@@ -108,7 +108,7 @@ class MiniBoxBadge:
         img = cls.base(maidata=maidata, difficulty=difficulty, ms=ms, ui_code=ui_code)
         
         # Achievement
-        achievement = int(ach.achievement*10000)
+        achievement = round(ach.achievement * 10000)
         # rate_style = get_rate_style(achievement, buddy=False)
         # drawer.text(
         #     cls.cover_size + 1, cls.linebar_y + cls.linebar_height + 0.5,
