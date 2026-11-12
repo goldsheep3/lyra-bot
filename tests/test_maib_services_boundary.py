@@ -36,6 +36,11 @@ PURE_SERVICE_APIS = {
     "unlink_aime",
     "upd_ach_batch",
     "upd_mdt_tg_fileid",
+    "refactoring.aime.find_aime",
+    "refactoring.aime.find_aime_by_access4",
+    "refactoring.aime.get_aimes",
+    "refactoring.aime.link",
+    "refactoring.aime.unlink",
 }
 
 
@@ -81,7 +86,17 @@ PUBLIC_SERVICE_TYPES = {
     "AccessTokenError",
     "PairingCodeError",
     "PairingCodeIssueResult",
+    "refactoring.aime.AimeAlreadyLinkedError",
+    "refactoring.aime.AimeAlreadyLinkedSelfError",
+    "refactoring.aime.AimeMultipleFoundError",
+    "refactoring.aime.AimeNotFoundError",
+    "refactoring.aime.AimeNotLinkedError",
+    "refactoring.aime.AimeNotOwnerError",
 }
+
+
+def _is_classified(symbol: str, classified: set[str]) -> bool:
+    return symbol in classified or symbol.split(".", 1)[0] in classified
 
 
 @dataclass(frozen=True, slots=True)
@@ -242,7 +257,7 @@ def scan_external_services_usage() -> tuple[list[ServiceCall], list[BoundaryViol
             )
 
     for call in calls:
-        if call.root in ORM_SERVICE_APIS:
+        if _is_classified(call.symbol, ORM_SERVICE_APIS):
             violations.append(
                 BoundaryViolation(
                     path=call.path,
@@ -251,7 +266,7 @@ def scan_external_services_usage() -> tuple[list[ServiceCall], list[BoundaryViol
                     reason="calls_orm_service_api",
                 )
             )
-        elif call.root in INTERNAL_SERVICE_APIS:
+        elif _is_classified(call.symbol, INTERNAL_SERVICE_APIS):
             violations.append(
                 BoundaryViolation(
                     path=call.path,
@@ -264,7 +279,7 @@ def scan_external_services_usage() -> tuple[list[ServiceCall], list[BoundaryViol
             # The attribute visitor already records the ORM reference.  Keep
             # calls classified here without duplicating the violation.
             continue
-        elif call.root in PURE_SERVICE_APIS:
+        elif _is_classified(call.symbol, PURE_SERVICE_APIS):
             if call.passes_session:
                 violations.append(
                     BoundaryViolation(
@@ -274,7 +289,7 @@ def scan_external_services_usage() -> tuple[list[ServiceCall], list[BoundaryViol
                         reason="passes_session_across_boundary",
                     )
                 )
-        elif call.root not in PUBLIC_SERVICE_TYPES:
+        elif not _is_classified(call.symbol, PUBLIC_SERVICE_TYPES):
             violations.append(
                 BoundaryViolation(
                     path=call.path,
@@ -316,9 +331,6 @@ KNOWN_IMPURE_USAGE_MAXIMUMS: Counter[tuple[str, str, str]] = Counter(
         ("plugins/maib/matcher/info_list.py", "get_b50", "calls_orm_service_api"): 1,
         ("plugins/maib/matcher/info_list.py", "get_mct_list.level", "calls_orm_service_api"): 2,
         ("plugins/maib/matcher/info_list.py", "get_mu_from_tgid", "calls_orm_service_api"): 1,
-        ("plugins/maib/matcher/maime.py", "get_aime", "calls_orm_service_api"): 3,
-        ("plugins/maib/matcher/maime.py", "get_aime_with_access4", "calls_orm_service_api"): 1,
-        ("plugins/maib/matcher/maime.py", "get_user_aimes", "calls_orm_service_api"): 1,
         ("plugins/maib/matcher/sync.py", "MaiUser", "imports_services_orm"): 1,
         ("plugins/maib/matcher/sync.py", "check_mu", "calls_orm_service_api"): 2,
         ("plugins/maib/matcher/sync.py", "get_mdt.title", "calls_orm_service_api"): 1,
@@ -338,13 +350,15 @@ class MaibServicesBoundaryTest(unittest.TestCase):
         unclassified = [
             call
             for call in calls
-            if call.root
-            not in (
-                PURE_SERVICE_APIS
-                | ORM_SERVICE_APIS
-                | ORM_SERVICE_SYMBOLS
-                | INTERNAL_SERVICE_APIS
-                | PUBLIC_SERVICE_TYPES
+            if not any(
+                _is_classified(call.symbol, classified)
+                for classified in (
+                    PURE_SERVICE_APIS,
+                    ORM_SERVICE_APIS,
+                    ORM_SERVICE_SYMBOLS,
+                    INTERNAL_SERVICE_APIS,
+                    PUBLIC_SERVICE_TYPES,
+                )
             )
         ]
         self.assertEqual(

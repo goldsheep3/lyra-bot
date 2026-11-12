@@ -129,6 +129,7 @@ maime:
     error:
       unknown: "绑定该卡片时遇到了意外的错误，请联系监护人确认喔qwq"
       linked: "该卡片已经被绑定到其他账户了~"
+      linked_self: "该卡片已经绑定到你的账户了~"
   unlink:
     success: "已经将该卡片从你的账户解绑~"
     error:
@@ -136,16 +137,18 @@ maime:
       not_found: "未找到该卡片的绑定信息~"
       not_owner: "该卡片不属于你的账户~"
   lost:
-    success: "卡号 {card} 属于 {qq}，你可以尝试联系该音游痴喵（"
+    find: "卡号 {card} 有相应记录！\n这位音游痴留下了信息：{hint}"
     error:
-      not_found: "这张卡片还没在这里绑定过，或者是被解绑的状态喵（"
+      unknown: "查询卡片时遇到了意外的错误，请联系监护人确认喔qwq"
+      self: "这张卡明明就是你的嘛——"
+      not_link: "这张卡片之前被解绑过，现在还没人绑定喔（"
+      not_found: "这张卡片还没被绑定喔（"
       multiple_found: "这张卡片被绑定到了多个账户，只能麻烦你用完整 access 重试一次了qwq"
 
   list:
     empty: "你还没有绑定任何卡片哦~"
     header: "你绑定了以下卡片："
-    item: "{masked} ({create_at})"
-    item_full: "{access} ({create_at})"
+    item: "{access} ({create_at})"
 
 # Exception Tip
 error:

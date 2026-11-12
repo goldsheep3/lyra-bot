@@ -91,6 +91,7 @@ from .websync import (
     exchange_pairing_code,
     authenticate_access_token,
 )
+from . import refactoring
 
 
 __all__ = [
@@ -125,4 +126,6 @@ __all__ = [
     # websync
     "PAIRING_CODE_PREFIX", "PairingCodeError", "AccessTokenError", "PairingCodeIssueResult",
     "create_pairing_code", "exchange_pairing_code", "authenticate_access_token",
+    # temporary refactoring namespace
+    "refactoring",
 ]

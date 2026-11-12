@@ -2,7 +2,7 @@
 
 > 生成日期：2026-11-12  
 > 审计来源：`tests/test_maib_services_boundary.py`  
-> 当前结果：64 处外部 services 调用，42 个不纯事项（其中 34 个不纯调用、8 个 ORM 结构泄漏）。
+> 当前结果：62 处外部 services 调用，37 个未解决不纯事项；Aime 闭包已解决原清单中的 5 项。
 
 ## 边界判定标准
 
@@ -35,12 +35,13 @@ services 外部不应：
 
 | 类别 | 数量 |
 |---|---:|
-| ORM API | 28 |
+| ORM API | 23 |
 | ORM 引用 | 7 |
 | ORM 导入 | 1 |
 | 内部 API | 3 |
 | Session 越界 | 3 |
-| **合计** | **42** |
+| **未解决合计** | **37** |
+| 已解决（Aime） | 5 |
 
 ## 逐项审查表
 
@@ -75,11 +76,11 @@ services 外部不应：
 | 25 | [ ] | [`matcher/info_list.py:193`](../matcher/info_list.py#L193) | `check_mu` | ORM API | 列表 matcher 获取 ORM 用户。 | 改为 utils 用户 API。 |
 | 26 | [ ] | [`matcher/info_list.py:237`](../matcher/info_list.py#L237) | `get_b50` | ORM API | B50 返回 ORM 成绩列表，外部组装绘图数据。 | 引入 `B50Data`，services 内部完成 provider 选择和所需数据加载。 |
 | 27 | [ ] | [`matcher/info_list.py:241`](../matcher/info_list.py#L241) | `MaiChartAch` | ORM 引用 | `_build_entries` 显式标注 ORM，并读取 `ach.chart.maidata`。 | 删除该 ORM 组装层，直接消费 `B50Data`。 |
-| 28 | [ ] | [`matcher/maime.py:32`](../matcher/maime.py#L32) | `get_aime` | ORM API | 绑卡前查询返回 `Maime` ORM。 | 增加 `utils.AimeBinding`，或提供 `aime_exists()` 布尔查询。 |
-| 29 | [ ] | [`matcher/maime.py:59`](../matcher/maime.py#L59) | `get_aime` | ORM API | 解绑前查询返回 ORM。 | 可由 `unlink_aime()` 直接返回明确结果，避免预查询。 |
-| 30 | [ ] | [`matcher/maime.py:89`](../matcher/maime.py#L89) | `get_aime_with_access4` | ORM API | 后四位查找返回 ORM 列表。 | 返回 `Sequence[utils.AimeBinding]`。 |
-| 31 | [ ] | [`matcher/maime.py:99`](../matcher/maime.py#L99) | `get_aime` | ORM API | 完整卡号查找返回 ORM。 | 返回 `utils.AimeBinding | None`。 |
-| 32 | [ ] | [`matcher/maime.py:128`](../matcher/maime.py#L128) | `get_user_aimes` | ORM API | 用户卡列表返回 ORM。 | 返回 `Sequence[utils.AimeBinding]`。 |
+| 28 | [x] | [`matcher/maime.py`](../matcher/maime.py) | `refactoring.aime.link` | ORM API | 已收回绑卡预查询与事务。 | 纯 services 用例；仅接收标量并抛出公开领域异常。 |
+| 29 | [x] | [`matcher/maime.py`](../matcher/maime.py) | `refactoring.aime.unlink` | ORM API | 已收回解绑预查询与所有权判断。 | 纯 services 用例；解绑保留历史记录。 |
+| 30 | [x] | [`matcher/maime.py`](../matcher/maime.py) | `refactoring.aime.find_aime_by_access4` | ORM API | 已收回后四位历史查找与歧义判断。 | 返回轻量 `TypedDict`，不泄漏 ORM。 |
+| 31 | [x] | [`matcher/maime.py`](../matcher/maime.py) | `refactoring.aime.find_aime` | ORM API | 已收回完整卡号查询。 | 只返回当前绑定记录及公开字段。 |
+| 32 | [x] | [`matcher/maime.py`](../matcher/maime.py) | `refactoring.aime.get_aimes` | ORM API | 已收回用户卡片列表查询。 | 返回轻量 `TypedDict` 列表，不泄漏 ORM。 |
 | 33 | [ ] | [`matcher/sync.py:21`](../matcher/sync.py#L21) | `MaiUser` | ORM 导入 | matcher 直接从 `services.models` 导入 ORM。 | 改用 `utils.MaiUser`，并删除所有 ORM 判断。 |
 | 34 | [ ] | [`matcher/sync.py:135`](../matcher/sync.py#L135) | `check_mu` | ORM API | 同步入口获取 ORM 用户。 | 返回 `utils.MaiUser`；AID 后参数改为 AID。 |
 | 35 | [ ] | [`matcher/sync.py:156`](../matcher/sync.py#L156) | `check_mu` | ORM API | 同步完成后重新拉取 ORM 用户。 | 返回刷新后的 `utils.MaiUser`，或让同步用例同时返回用户数据。 |
@@ -97,8 +98,8 @@ services 外部不应：
    先收回 ORM 构造、事务和曲库同步编排，可一次消除 8 项。
 2. **09–23、39–41：曲目及谱面查询**  
    使曲目查询统一返回 utils 对象，并使用 `_matched_alias` / `_maidata` 等查询附加字段。
-3. **28–32：Aime**  
-   增加独立 `utils.AimeBinding`，避免返回 `Maime` ORM。
+3. **28–32：Aime（已完成）**
+   采用 refactoring 闭包和轻量 `TypedDict`，未引入不必要的 DTO。
 4. **13–18、24–25、33–38：用户与账号绑定**  
    与 locales/AID 迁移一起处理，避免重复改造。
 5. **26–27：B50**  
