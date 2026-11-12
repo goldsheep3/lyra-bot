@@ -9,22 +9,22 @@ from .context import get_maiuser
 
 
 maime_link = on_regex(
-    r"^绑定(?:aime|卡号|卡片)\s*(?P<access>\d{4}(?:[\s-]?\d{4}){4})$",
+    r"^绑定(?:aime|卡号|卡片)\s*(?P<access>\d{4}(?:[\s-]?\d{4}){4})\s*$",
     priority=5,
     block=True,
 )
 maime_unlink = on_regex(
-    r"^解绑(?:aime|卡号|卡片)\s*(?P<access>\d{4}(?:[\s-]?\d{4}){4})$",
+    r"^解绑(?:aime|卡号|卡片)\s*(?P<access>\d{4}(?:[\s-]?\d{4}){4})\s*$",
     priority=5,
     block=True,
 )
 maime_lost = on_regex(
     r"^(?:挂失|捡到|拾获|查询)(?:aime|卡号|卡片)\s*"
-    r"(?P<access>\d{4}|\d{4}(?:[\s-]?\d{4}){4})$",
+    r"(?P<access>\d{4}(?:[\s-]?\d{4}){4}|\d{4})\s*$",
     priority=5,
     block=True,
 )
-maime_list = on_regex(r"^(查看卡片|查看完整卡片)$", priority=5, block=True)
+maime_list = on_regex(r"^(查看卡片|查看完整卡片)\s*$", priority=5, block=True)
 
 
 async def _resolve_qq(event: Event, matcher: Matcher) -> int:
