@@ -46,7 +46,7 @@ def _serialize_song(song: services.MaiData) -> dict[str, Any]:
         "is_utage": song.is_utage,
         "utage_tag": song.utage_tag,
         "buddy": song.buddy,
-        "aliases": [alias.alias for alias in song.aliases],
+        "aliases": [alias.name for alias in song.aliases],
         "charts": [
             {
                 "id": chart.id,

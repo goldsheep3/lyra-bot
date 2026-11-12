@@ -98,7 +98,7 @@ async def resolve_id_mapping(original_id: int, mapped_id: int, *, session: Optio
                     ))
             for sa in source.aliases:
                 new_mdt.aliases.append(MaiAlias(
-                    shortid=mapped_id, alias=sa.alias, create_qq=sa.create_qq,
+                    shortid=mapped_id, name=sa.name, create_qq=sa.create_qq,
                     create_at=sa.create_at,
                 ))
             for sc in list(source.charts):
@@ -135,7 +135,7 @@ async def resolve_id_mapping(original_id: int, mapped_id: int, *, session: Optio
                         ach.shortid = mapped_id
             for sa in list(source.aliases):
                 dup = (await session.execute(
-                    select(MaiAlias).where(MaiAlias.shortid == mapped_id, MaiAlias.alias == sa.alias)
+                    select(MaiAlias).where(MaiAlias.shortid == mapped_id, MaiAlias.name == sa.name)
                 )).scalar_one_or_none()
                 if dup:
                     await _del(dup)

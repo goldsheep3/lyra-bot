@@ -25,7 +25,7 @@ async def get_ma(alias_text: str, shortid: int,
                  *, session: Optional[AsyncSession] = None) -> Optional[MaiAlias]:
     """通过 别名, `shortid` 获取 `MaiAlias`（唯一）"""
     async def _query(session: AsyncSession):
-        stmt = select(MaiAlias).where(MaiAlias.alias == alias_text, MaiAlias.shortid == shortid)
+        stmt = select(MaiAlias).where(MaiAlias.name == alias_text, MaiAlias.shortid == shortid)
         result = await session.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -37,7 +37,7 @@ async def add_ma(shortid: int, alias_text: str, create_qq: int,
     """通过 `shortid` 添加别名，返回 False 表示已存在"""
     async def _action(session: AsyncSession):
         existing = await session.execute(
-            select(MaiAlias).where(MaiAlias.shortid == shortid, MaiAlias.alias == alias_text)
+            select(MaiAlias).where(MaiAlias.shortid == shortid, MaiAlias.name == alias_text)
         )
         if existing.scalar_one_or_none():
             return False

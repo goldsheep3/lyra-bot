@@ -63,15 +63,15 @@ class MaiAlias(Model):
     """MaiData 曲目别名数据"""
 
     __tablename__ = "maib_maialiases"
-    __table_args__ = (UniqueConstraint("shortid", "alias"),)
+    __table_args__ = (UniqueConstraint("shortid", "name"),)
 
     id: M[int] = col(primary_key=True, autoincrement=True)
     shortid: M[int] = col(ForeignKey("maib_maidatas.shortid", ondelete="RESTRICT"), index=True)
-    alias: M[str] = col(index=True)
+    name: M[str] = col(index=True)
 
     create_by: M[Optional[int]] = col(Integer, nullable=True)
     create_at: M[datetime] = col(DateTime(timezone=True), default=datetime.now)
-    create_qq: M[int] = col(BigInteger)
+    create_qq: M[Optional[int]] = col(BigInteger, nullable=True)
 
     maidata: M["MaiData"] = relationship(back_populates="aliases", lazy="selectin")
 
@@ -83,7 +83,7 @@ class MaiAlias(Model):
         source: object | Mapping[str, Any] = kwargs or alias or {}
         return cls(
             shortid=_get(source, "shortid"),
-            alias=_get(source, "alias"),
+            name=_get(source, "alias"),
             create_by=_get(source, "create_by"),
             create_at=_as_datetime(_get(source, "create_at"), default=datetime.now()),
             create_qq=_get(source, "create_qq"),
@@ -92,9 +92,9 @@ class MaiAlias(Model):
     def to_utils(self) -> utils.MaiAlias:
         return utils.MaiAlias(
             shortid=self.shortid,
-            alias=self.alias,
+            alias=self.name,
             create_at=self.create_at,
-            create_qq=self.create_qq,
+            create_qq=self.create_qq if self.create_qq is not None else -1,
         )
 
 
@@ -102,11 +102,12 @@ class MaiChartAch(Model):
     """MaiChartAch 成绩数据"""
 
     __tablename__ = "maib_maichartachs"
-    __table_args__ = (UniqueConstraint("qq", "shortid", "difficulty", "provider", "server"),)
+    __table_args__ = (UniqueConstraint("qq", "chart_id", "provider", "server"),)
 
     id: M[int] = col(primary_key=True, autoincrement=True)
-    shortid: M[int] = col(ForeignKey("maib_maidatas.shortid", ondelete="RESTRICT"))
     chart_id: M[int] = col(ForeignKey("maib_maicharts.id", ondelete="CASCADE"))
+    # [Deprecated] shortid/difficulty 组合唯一索引已被 chart_id 替代
+    shortid: M[int] = col(ForeignKey("maib_maidatas.shortid", ondelete="RESTRICT"))
     difficulty: M[int]
 
     # 成绩所属服务器
@@ -461,17 +462,68 @@ class MaiUser(Model):
     @validates("jp_update_at", "cn_update_at")
     def _validate(self, _key: str, value: D_T) -> datetime: return _as_datetime(value, default=DEFAULT_DATETIME)
 
+    # 牌子佩戴情况，使用 plate_version 和 plate_code 组合进行往返
     @property
     def plate(self) -> tuple[int | None, int | None]:
         return self.plate_version, self.plate_code
 
+    @plate.setter
+    def plate(self, value: tuple[int | None, int | None]) -> None:
+        self.plate_version, self.plate_code = value
+
+    # JP 服务器的 DXRating 统计，使用统计对象进行往返
+    @property
+    def jp_dxra_data(self) -> utils.DXRatingData:
+        return utils.DXRatingData(
+            total=self.jp_dxra_total,
+            b35_total=self.jp_dxra_b35_total,
+            b35_max=self.jp_dxra_b35_max,
+            b35_min=self.jp_dxra_b35_min,
+            b15_total=self.jp_dxra_b15_total,
+            b15_max=self.jp_dxra_b15_max,
+            b15_min=self.jp_dxra_b15_min,
+        )
+
+    @jp_dxra_data.setter
+    def jp_dxra_data(self, value: utils.DXRatingData) -> None:
+        self.jp_dxra_total = value.total
+        self.jp_dxra_b35_total = value.b35.total
+        self.jp_dxra_b35_max = value.b35.max
+        self.jp_dxra_b35_min = value.b35.min
+        self.jp_dxra_b15_total = value.b15.total
+        self.jp_dxra_b15_max = value.b15.max
+        self.jp_dxra_b15_min = value.b15.min
+
+    # CN 服务器的 DXRating 统计，使用统计对象进行往返
+    @property
+    def cn_dxra_data(self) -> utils.DXRatingData:
+        return utils.DXRatingData(
+            total=self.cn_dxra_total,
+            b35_total=self.cn_dxra_b35_total,
+            b35_max=self.cn_dxra_b35_max,
+            b35_min=self.cn_dxra_b35_min,
+            b15_total=self.cn_dxra_b15_total,
+            b15_max=self.cn_dxra_b15_max,
+            b15_min=self.cn_dxra_b15_min,
+        )
+
+    @cn_dxra_data.setter
+    def cn_dxra_data(self, value: utils.DXRatingData) -> None:
+        self.cn_dxra_total = value.total
+        self.cn_dxra_b35_total = value.b35.total
+        self.cn_dxra_b35_max = value.b35.max
+        self.cn_dxra_b35_min = value.b35.min
+        self.cn_dxra_b15_total = value.b15.total
+        self.cn_dxra_b15_max = value.b15.max
+        self.cn_dxra_b15_min = value.b15.min
+
     @classmethod
     def from_utils(cls, user: utils.MaiUser | Mapping[str, Any] | None = None, **kwargs: Any) -> "MaiUser":
-        def _dxra_from_source(source: object | Mapping[str, Any], prefix: Server) -> utils.DXRatingData:
-            """从 source 中获取 DXRatingData 数据"""
+        source: object | Mapping[str, Any] = kwargs or user or {}
+        
+        def _dxra_from_source(prefix: Server) -> utils.DXRatingData:
             key_prefix = prefix.lower()
-            data = _get(source, f"{key_prefix}_dxra_data")
-            if data is not None:
+            if (data := _get(source, f"{key_prefix}_dxra_data", None)) is not None:
                 return data
             return utils.DXRatingData(
                 total=_get(source, f"{key_prefix}_dxra_total", 0),
@@ -482,37 +534,19 @@ class MaiUser(Model):
                 b15_max=_get(source, f"{key_prefix}_dxra_b15_max", 0),
                 b15_min=_get(source, f"{key_prefix}_dxra_b15_min", 0),
             )
-
-        source: object | Mapping[str, Any] = kwargs or user or {}
-        jp_data = _dxra_from_source(source, Server.JP)
-        cn_data = _dxra_from_source(source, Server.CN)
-        plate = _get(source, "plate", (None, None)) or (None, None)
-
+        
         return cls(
             qq=_get(source, "user_id"),
             tg=_get(source, "user_telegram_id"),
             username=_get(source, "username", ""),
             default_server=_get(source, "default_server", "CN"),
-            plate_version=plate[0],
-            plate_code=plate[1],
+            plate=_get(source, "plate", None) or (None, None),
             jp_current_version=_get(source, "jp_current_version", 0),
             jp_update_at=_as_datetime(_get(source, "jp_update_time"), default=DEFAULT_DATETIME),
-            jp_dxra_total=jp_data.total,
-            jp_dxra_b35_total=jp_data.b35.total,
-            jp_dxra_b35_max=jp_data.b35.max,
-            jp_dxra_b35_min=jp_data.b35.min,
-            jp_dxra_b15_total=jp_data.b15.total,
-            jp_dxra_b15_max=jp_data.b15.max,
-            jp_dxra_b15_min=jp_data.b15.min,
+            jp_dxra_data=_dxra_from_source(Server.JP),
             cn_current_version=_get(source, "cn_current_version", 0),
             cn_update_at=_as_datetime(_get(source, "cn_update_time"), default=DEFAULT_DATETIME),
-            cn_dxra_total=cn_data.total,
-            cn_dxra_b35_total=cn_data.b35.total,
-            cn_dxra_b35_max=cn_data.b35.max,
-            cn_dxra_b35_min=cn_data.b35.min,
-            cn_dxra_b15_total=cn_data.b15.total,
-            cn_dxra_b15_max=cn_data.b15.max,
-            cn_dxra_b15_min=cn_data.b15.min,
+            cn_dxra_data=_dxra_from_source(Server.CN),
             _diving_fish_records_hash_cache=_get(source, "last_sy_hash"),
         )
 
@@ -525,26 +559,10 @@ class MaiUser(Model):
             plate=self.plate,
             jp_current_version=self.jp_current_version,
             jp_update_time=self.jp_update_at,
-            jp_dxra_data=utils.DXRatingData(
-                total=self.jp_dxra_total,
-                b35_total=self.jp_dxra_b35_total,
-                b35_max=self.jp_dxra_b35_max,
-                b35_min=self.jp_dxra_b35_min,
-                b15_total=self.jp_dxra_b15_total,
-                b15_max=self.jp_dxra_b15_max,
-                b15_min=self.jp_dxra_b15_min,
-            ),
+            jp_dxra_data=self.jp_dxra_data,
             cn_current_version=self.cn_current_version,
             cn_update_time=self.cn_update_at,
-            cn_dxra_data=utils.DXRatingData(
-                total=self.cn_dxra_total,
-                b35_total=self.cn_dxra_b35_total,
-                b35_max=self.cn_dxra_b35_max,
-                b35_min=self.cn_dxra_b35_min,
-                b15_total=self.cn_dxra_b15_total,
-                b15_max=self.cn_dxra_b15_max,
-                b15_min=self.cn_dxra_b15_min,
-            ),
+            cn_dxra_data=self.cn_dxra_data,
         )
 
 
