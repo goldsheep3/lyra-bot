@@ -29,7 +29,7 @@ def _merge_ach(target: utils.MaiChartAch, source: MaiRecord) -> utils.MaiChartAc
         shortid=source.shortid if source.shortid is not None else -1,
         difficulty=source.difficulty,
         server=source.server,
-        achievement=source.achievement,
+        achievement=source.achievement / 10000,
         dxscore=source.dxscore,
         combo=source.combo,
         sync=source.sync,
@@ -91,7 +91,9 @@ async def add_record_batch(
                 "type": record.record_type,
                 "difficulty": record.difficulty,
                 "server": record.server,
-                "achievement": record.achievement,
+                # 持久化层统一使用百分比的万分之一，避免浮点精度问题，
+                # 并与 MaiChartAch.achievement 保持同一单位。
+                "achievement": int(record.achievement * 10000),
                 "dxscore": record.dxscore,
                 "combo": record.combo,
                 "sync": record.sync,
@@ -174,7 +176,7 @@ async def get_record_achs(
                     shortid=row.shortid,
                     difficulty=row.difficulty,
                     server=row.server,
-                    achievement=row.achievement,
+                    achievement=row.achievement / 10000,
                     dxscore=row.dxscore,
                     combo=row.combo,
                     sync=row.sync,

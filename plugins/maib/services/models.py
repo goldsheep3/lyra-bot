@@ -629,7 +629,7 @@ class MaiRecord(Model):
     type: M[Literal["history", "best"]] = col(String(16), default="history")
     difficulty: M[int] = col(Integer)
     server: M[Server] = col(String(4))
-    achievement: M[float] = col(Float, default=0.0)
+    achievement: M[int] = col(Integer, default=0)
     dxscore: M[int] = col(Integer, default=0)
     combo: M[int] = col(Integer, default=0)
     sync: M[int] = col(Integer, default=0)
