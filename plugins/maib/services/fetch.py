@@ -139,7 +139,7 @@ async def sync_mdt_list(mdt_list: list[MaiData],
                 session.add(new_mdt)
             else:
                 for f in ['title', 'bpm', 'artist', 'genre', 'cabinet',
-                          'version', 'version_cn', 'converter', 'zip_path',
+                          'version_jp', 'version_cn', 'provider', 'img_path', 'zip_path',
                           'jp_is_plate_required', 'cn_is_plate_required',
                           'is_utage', 'utage_tag', 'buddy']:
                     setattr(existing, f, getattr(new_mdt, f))
@@ -147,7 +147,7 @@ async def sync_mdt_list(mdt_list: list[MaiData],
                 for new_mct in new_mdt.charts:
                     ec = existing_charts.get(new_mct.difficulty)
                     if ec:
-                        for f in ['lv_jp', 'lv_cn', 'lv_fit', 'des', 'inote']:
+                        for f in ['lv_jp', 'lv_cn', 'lv_fit', 'designer', 'inote']:
                             setattr(ec, f, getattr(new_mct, f))
                         ec.notes = new_mct.notes
                     else:

@@ -358,7 +358,7 @@ class MaiData(Model):
             cn_is_plate_required=bool(_get(source, "cn_is_plate_required", True)),
             provider=_get(source, "converter") or "unknown",
             img_path=str(img_path) if img_path else "",
-            zip_path=str(zip_path) if zip_path else "",
+            zip_path=str(zip_path) if zip_path else None,
             _tg_adx_id_cache=_get(source, "tg_file_id_cache"),
             is_utage=_get(source, "is_utage", False),
             utage_tag=_get(source, "utage_tag", ""),
@@ -384,6 +384,10 @@ class MaiData(Model):
         if zip_path is not None and not zip_path.is_absolute():
             zip_path = get_plugin_data_dir() / zip_path
 
+        img_path = Path(self.img_path) if self.img_path else Path("bg.png")
+        if not img_path.is_absolute():
+            img_path = get_plugin_data_dir() / img_path
+
         maidata = utils.MaiData(
             shortid=self.shortid,
             title=self.title,
@@ -396,7 +400,7 @@ class MaiData(Model):
             jp_is_plate_required=self.jp_is_plate_required,
             cn_is_plate_required=self.cn_is_plate_required,
             converter=self.provider or "",
-            img_path=(zip_path / "bg.png") if zip_path else Path("bg.png"),
+            img_path=img_path,
             zip_path=zip_path,
             tg_file_id_cache=self._tg_adx_id_cache,
             is_utage=self.is_utage,

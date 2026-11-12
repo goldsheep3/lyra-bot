@@ -42,7 +42,7 @@ async def add_ma(shortid: int, alias_text: str, create_qq: int,
         if existing.scalar_one_or_none():
             return False
         session.add(MaiAlias(
-            shortid=shortid, alias=alias_text, create_qq=create_qq, create_at=datetime.now()
+            shortid=shortid, name=alias_text, create_qq=create_qq, create_at=datetime.now()
         ))
         return True
 
@@ -73,7 +73,7 @@ async def add_ma_batch(data: list[tuple[int, str]], create_qq: int,
                 continue
 
             full_data = [
-                {"shortid": sid, "alias": alias, "create_qq": create_qq,
+                {"shortid": sid, "name": alias, "create_qq": create_qq,
                  "create_at": create_time}
                 for sid, alias in chunk if sid in existing_ids
             ]
@@ -81,7 +81,7 @@ async def add_ma_batch(data: list[tuple[int, str]], create_qq: int,
                 continue
 
             stmt = native_insert(MaiAlias).values(full_data)
-            stmt = stmt.on_conflict_do_nothing(index_elements=["shortid", "alias"])
+            stmt = stmt.on_conflict_do_nothing(index_elements=["shortid", "name"])
             
             await session.execute(stmt)
 

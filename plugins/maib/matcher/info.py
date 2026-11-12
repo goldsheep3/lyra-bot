@@ -164,8 +164,8 @@ async def mai_what_song_handled(event: Event, matcher: Matcher, groups: tuple = 
         if kw_lower == mdt.title.lower():
             return None  # 标题本身匹配，不是别名匹配
         for alias in mdt.aliases:
-            if kw_lower in alias.alias.lower() or alias.alias.lower() == kw_lower:
-                return alias.alias
+            if kw_lower in alias.name.lower() or alias.name.lower() == kw_lower:
+                return alias.name
         return None
 
     def generate_single_info_box(mdt, matched_alias: str | None = None) -> bytes:
