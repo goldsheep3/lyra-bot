@@ -1,8 +1,8 @@
 # maib services 边界审计
 
-> 生成日期：2026-11-12  
+> 生成日期：2026-11-13
 > 审计来源：`tests/test_maib_services_boundary.py`  
-> 当前结果：62 处外部 services 调用，37 个未解决不纯事项；Aime 闭包已解决原清单中的 5 项。
+> 当前结果：58 处外部 services 调用，29 个未解决不纯事项；fetch 曲库维护闭包与 Aime 闭包已解决原清单中的 13 项。
 
 ## 边界判定标准
 
@@ -35,13 +35,13 @@ services 外部不应：
 
 | 类别 | 数量 |
 |---|---:|
-| ORM API | 23 |
-| ORM 引用 | 7 |
+| ORM API | 22 |
+| ORM 引用 | 5 |
 | ORM 导入 | 1 |
-| 内部 API | 3 |
-| Session 越界 | 3 |
-| **未解决合计** | **37** |
-| 已解决（Aime） | 5 |
+| 内部 API | 1 |
+| Session 越界 | 0 |
+| **未解决合计** | **29** |
+| 已解决（fetch + Aime） | 13 |
 
 ## 逐项审查表
 
@@ -49,14 +49,14 @@ services 外部不应：
 
 | ID | 状态 | 位置 | 符号 | 类别 | 当前问题 | 建议方向 |
 |---:|:---:|---|---|---|---|---|
-| 01 | [ ] | [`fetch.py:320`](../fetch.py#L320) | `sync_mdt_list` | ORM API | 曲库解析层向 services 传入 ORM 列表。 | 使 `sync_song_library` / `sync_mdt_list` 直接接收 `Sequence[utils.MaiData]`。 |
-| 02 | [ ] | [`fetch.py:321`](../fetch.py#L321) | `MaiData` | ORM 引用 | `fetch` 直接构造 `services.MaiData` ORM。 | 删除 `services.MaiData.from_utils()` 外部调用，在 services 内部映射。 |
-| 03 | [ ] | [`fetch.py:403`](../fetch.py#L403) | `get_session` | 内部 API | `fetch` 直接开启数据库 session。 | 提供单一 `sync_cn_metadata` services 用例封装整个事务。 |
-| 04 | [ ] | [`fetch.py:405`](../fetch.py#L405) | `set_mdt_version_batch` | Session 越界 | 外部向 services 传入 session。 | 并入 `sync_cn_metadata`，或由 services 公开函数自行管理事务。 |
-| 05 | [ ] | [`fetch.py:407`](../fetch.py#L407) | `set_mct_level_batch` | Session 越界 | 外部向 services 传入 session。 | 与版本更新、DX Rating 刷新纳入同一 services 用例。 |
-| 06 | [ ] | [`fetch.py:412`](../fetch.py#L412) | `rfs_dxra_batch` | Session 越界 | 外部组织曲库更新后的缓存刷新。 | 由 `sync_cn_metadata` 在事务内自动刷新。 |
-| 07 | [ ] | [`fetch.py:540`](../fetch.py#L540) | `get_session` | 内部 API | 维护任务直接查询数据库。 | 增加 `services.has_song_library() -> bool`。 |
-| 08 | [ ] | [`fetch.py:541`](../fetch.py#L541) | `MaiData` | ORM 引用 | 维护任务直接构建 `select(services.MaiData.shortid)`。 | 由 `has_song_library()` 内部查询。 |
+| 01 | [x] | [`fetch.py`](../fetch.py) | `refactoring.catalog.sync_song_library` | ORM API | 已改为传入 `Sequence[utils.MaiData]`。 | ORM 构造、upsert 与事务均已收回 services。 |
+| 02 | [x] | [`fetch.py`](../fetch.py) | `refactoring.catalog.sync_song_library` | ORM 引用 | `fetch` 已不再构造或引用 `services.MaiData`。 | utils → ORM 映射位于 services 内部。 |
+| 03 | [x] | [`fetch.py`](../fetch.py) | `refactoring.catalog.apply_cn_metadata` | 内部 API | `fetch` 已不再开启数据库 session。 | CN 元数据更新由单一 services 用例管理事务。 |
+| 04 | [x] | [`fetch.py`](../fetch.py) | `refactoring.catalog.apply_cn_metadata` | Session 越界 | 版本批量更新已收回 services。 | 公开 API 仅接收标量容器。 |
+| 05 | [x] | [`fetch.py`](../fetch.py) | `refactoring.catalog.apply_cn_metadata` | Session 越界 | 定数批量更新已收回 services。 | 与版本更新处于同一事务。 |
+| 06 | [x] | [`fetch.py`](../fetch.py) | `refactoring.catalog.apply_cn_metadata` | Session 越界 | DX Rating 刷新已收回 services。 | 更新或刷新失败时整体回滚。 |
+| 07 | [x] | [`fetch.py`](../fetch.py) | `refactoring.catalog.has_song_library` | 内部 API | 维护任务已不再直接查询数据库。 | 公开 API 返回 `bool`。 |
+| 08 | [x] | [`fetch.py`](../fetch.py) | `refactoring.catalog.has_song_library` | ORM 引用 | `select(MaiData)` 已收回 services。 | `fetch` 仅根据布尔结果决定是否重建。 |
 | 09 | [ ] | [`matcher/adx_download.py:269`](../matcher/adx_download.py#L269) | `get_mdt.id` | ORM API | 下载 matcher 获取 ORM 曲目。 | 改用返回 `utils.MaiData` 的 `get_song()`；缓存 ID 更新仍走 services。 |
 | 10 | [ ] | [`matcher/adx_download.py:269`](../matcher/adx_download.py#L269) | `MaiData` | ORM 引用 | matcher 类型标注依赖 services ORM。 | 改为 `utils.MaiData | None`。 |
 | 11 | [ ] | [`matcher/alias.py:52`](../matcher/alias.py#L52) | `get_mdt.id` | ORM API | 别名 matcher 为判断曲目存在而获取 ORM。 | 使用 `get_song()` 或轻量 `song_exists(shortid)`。 |
@@ -94,8 +94,8 @@ services 外部不应：
 
 ## 建议审查顺序
 
-1. **01–08：`fetch.py`**  
-   先收回 ORM 构造、事务和曲库同步编排，可一次消除 8 项。
+1. **01–08：`fetch.py`（已完成）**
+   已收回 ORM 构造、事务和曲库同步数据库操作，共消除 8 项。
 2. **09–23、39–41：曲目及谱面查询**  
    使曲目查询统一返回 utils 对象，并使用 `_matched_alias` / `_maidata` 等查询附加字段。
 3. **28–32：Aime（已完成）**

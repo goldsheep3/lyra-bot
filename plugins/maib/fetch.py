@@ -10,8 +10,6 @@ from typing import Any, TypeVar, overload, Literal, TypedDict, cast
 from nonebot import logger
 from nonebot_plugin_localstore import get_plugin_data_dir, get_plugin_cache_dir
 from nonebot_plugin_datastore.db import post_db_init
-from sqlalchemy import select
-
 from . import config, utils, services, network
 from .utils.enums import Server, SLevelSource
 from .utils.map import VersionID, Versions, Genres
@@ -312,10 +310,9 @@ async def _sync_changed_charts(
         return False
 
     try:
-        await services.sync_mdt_list([
-            services.MaiData.from_utils(maidata)
-            for maidata in maidata_dict.values()
-        ])
+        await services.refactoring.catalog.sync_song_library(
+            list(maidata_dict.values())
+        )
     except Exception:
         logger.exception(f"[fetch 3/7] 数据库同步失败")
         return False
@@ -388,17 +385,10 @@ async def _sync_cn_metadata(data_dir: Path, *, force: bool) -> None:
         return
 
     try:
-        async with services.get_session() as session:
-            if version_update_list:
-                await services.set_mdt_version_batch(version_update_list, Server.CN, session=session)
-            if level_update_list:
-                await services.set_mct_level_batch(level_update_list, SLevelSource.CN, session=session)
-                refresh_chart_keys = list(dict.fromkeys(
-                    (int(item["shortid"]), int(item["difficulty"]))
-                    for item in level_update_list
-                ))
-                await services.rfs_dxra_batch(refresh_chart_keys, Server.CN, session=session)
-            await session.commit()
+        await services.refactoring.catalog.apply_cn_metadata(
+            version_update_list,
+            level_update_list,
+        )
         logger.success(f"[fetch 5/7] 国服数据同步完成 (曲目:{len(version_update_list)}, 谱面:{len(level_update_list)})")
     except Exception:
         logger.exception(f"[fetch 5/7] 数据库同步失败")
@@ -535,12 +525,8 @@ async def maintenance_task():
     change_files = results["Updated"].copy()
     change_files.update(results["New"])
     if not change_files:
-        # ------ refactoring ------        
         # 数据库被清空或首次迁移后，不能把旧 stat 缓存误当成曲库已入库。
-        async with services.get_session() as session:
-            has_maidata = (await session.execute(select(services.MaiData.shortid).limit(1))).scalar_one_or_none() is not None
-        is_empty_library = not has_maidata
-        # -------------------------
+        is_empty_library = not await services.refactoring.catalog.has_song_library()
         if is_empty_library:
             logger.warning("[fetch 2/7] 谱面库为空，强制重建谱面库")
             change_files = {str(path.relative_to(data_dir)): get_file_stat_identity(path) for path in files}
