@@ -9,23 +9,23 @@ from .context import get_maiuser
 
 
 maime_link = on_regex(
-    r"^/?(?:绑定|link|bind)(?:aime|卡号|卡片)\s*(?P<access>\d{4}(?:[\s-]?\d{4}){4})\s*$",
+    r"^/?(?:绑定|link|bind)\s*(?:aime|卡号|卡片)\s*(?P<access>\d{4}(?:[\s-]?\d{4}){4})\s*$",
     priority=5,
     block=True,
 )
 maime_unlink = on_regex(
-    r"^/?(?:解绑|unlink|unbind)(?:aime|卡号|卡片)\s*(?P<access>\d{4}(?:[\s-]?\d{4}){4})\s*$",
+    r"^/?(?:解绑|unlink|unbind)\s*(?:aime|卡号|卡片)\s*(?P<access>\d{4}(?:[\s-]?\d{4}){4})\s*$",
     priority=5,
     block=True,
 )
 maime_lost = on_regex(
-    r"^/?(?:挂失|捡到|拾获|查询|find)(?:aime|卡号|卡片)\s*"
+    r"^/?(?:挂失|捡到|拾获|查询|find)\s*(?:aime|卡号|卡片)\s*"
     r"(?P<access>\d{4}(?:[\s-]?\d{4}){4}|\d{4})\s*$",
     priority=5,
     block=True,
 )
 maime_list = on_regex(
-    r"^/?(?:查看|list)(?:aime|卡号|卡片)\s*(?P<full>完整|full)?\s*$",
+    r"^/?(?:查看|list)\s*(?:aime|卡号|卡片)\s*(?P<full>完整|full)?\s*$",
     priority=5,
     block=True
 )
@@ -120,8 +120,9 @@ async def aime_lost(
     if aime["qq"] == qq:
         await matcher.finish(await reply("maime.lost.error.self"))
 
+    access = aime["access"] if len(normalized) == 20 else aime["access"][:4] + "*" * 12 + aime["access"][-4:]
     await matcher.finish(
-        await reply("maime.lost.find", card=aime["access"], hint=aime["hint"])
+        await reply("maime.lost.find", card=access, hint=aime["hint"])
     )
 
 
