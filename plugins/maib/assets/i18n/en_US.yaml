@@ -98,13 +98,10 @@ b50:
 
 # sync
 sync:
+  # 非中国地区当前版本有意隐藏「获取同步码」
   help: |-
     sytb
         Forces synchronization of your current Suiyu score data. b50 generation will also try to synchronize it automatically
-
-    获取同步码
-        Gets a lyra-maisync synchronization code for automatic uploads using the lyra-maisync userscript
-        Use /help maisync to get the script link and remote address
   help_maisync: |-
     lyra-maisync
     Script installation link: https://github.com/goldsheep3/lyra-bot/raw/refs/heads/maib/plugins/maib/sync/lyra-maisync.user.js
@@ -116,19 +113,23 @@ sync:
 # maime
 maime:
   help: |-
-    绑定aime <full ACCESS card number>
+    link aime <full ACCESS card number>
         Binds an Aime ACCESS card number to your account
 
-    解绑aime <full ACCESS card number>
+    unlink aime <full ACCESS card number>
         Unbinds an Aime ACCESS card number from your account
 
-    查询aime <last four digits of ACCESS|full ACCESS card number>
+    find aime <last four digits of ACCESS|full ACCESS card number>
         Looks up binding information for the ACCESS card number to find the card owner
+
+    list aime [full]
+        Lists all Aime ACCESS card numbers bound to your account; by default, only the first and last four digits are shown
   link:
     success: "This card has been bound to your account~"
     error:
       unknown: "An unexpected error occurred while binding the card. Please contact the guardian to confirm qwq"
       linked: "This card has already been bound to another account~"
+      linked_self: "This card has already been bound to your account~"
   unlink:
     success: "This card has been unbound from your account~"
     error:
@@ -136,16 +137,18 @@ maime:
       not_found: "No binding information found for this card~"
       not_owner: "This card does not belong to your account~"
   lost:
-    success: "Card number {card} belongs to {qq}. You can try contacting this rhythm game addict meow ("
+    find: "Card number {card} has a matching record! This rhythm game addict left this message: {hint}"
     error:
-      not_found: "This card has never been bound here, or is in an unbound state meow ("
+      unknown: "An unexpected error occurred while looking up the card. Please contact the guardian to confirm qwq"
+      self: "This card is yours, though—"
+      not_link: "This card was unbound before and is not currently bound to anyone meow ("
+      not_found: "This card has not been bound yet meow ("
       multiple_found: "This card is bound to multiple accounts. Please retry with the full access qwq"
 
   list:
     empty: "You haven't bound any cards yet~"
     header: "You have bound the following cards:"
-    item: "{masked} ({create_at})"
-    item_full: "{access} ({create_at})"
+    item: "{access} ({create_at})"
 
 # Exception Tip
 error:

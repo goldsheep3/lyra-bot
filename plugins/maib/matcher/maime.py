@@ -9,22 +9,26 @@ from .context import get_maiuser
 
 
 maime_link = on_regex(
-    r"^绑定(?:aime|卡号|卡片)\s*(?P<access>\d{4}(?:[\s-]?\d{4}){4})\s*$",
+    r"^/?(?:绑定|link|bind)(?:aime|卡号|卡片)\s*(?P<access>\d{4}(?:[\s-]?\d{4}){4})\s*$",
     priority=5,
     block=True,
 )
 maime_unlink = on_regex(
-    r"^解绑(?:aime|卡号|卡片)\s*(?P<access>\d{4}(?:[\s-]?\d{4}){4})\s*$",
+    r"^/?(?:解绑|unlink|unbind)(?:aime|卡号|卡片)\s*(?P<access>\d{4}(?:[\s-]?\d{4}){4})\s*$",
     priority=5,
     block=True,
 )
 maime_lost = on_regex(
-    r"^(?:挂失|捡到|拾获|查询)(?:aime|卡号|卡片)\s*"
+    r"^/?(?:挂失|捡到|拾获|查询|find)(?:aime|卡号|卡片)\s*"
     r"(?P<access>\d{4}(?:[\s-]?\d{4}){4}|\d{4})\s*$",
     priority=5,
     block=True,
 )
-maime_list = on_regex(r"^(查看卡片|查看完整卡片)\s*$", priority=5, block=True)
+maime_list = on_regex(
+    r"^/?(?:查看|list)(?:aime|卡号|卡片)\s*(?P<full>完整|full)?\s*$",
+    priority=5,
+    block=True
+)
 
 
 async def _resolve_qq(event: Event, matcher: Matcher) -> int:
@@ -122,9 +126,9 @@ async def aime_lost(
 
 
 @maime_list.handle()
-async def aime_list(event: Event, matcher: Matcher, reply: Reply = reply):
+async def aime_list(event: Event, matcher: Matcher, groups: dict = RegexDict(), reply: Reply = reply):
     """处理命令: 查看卡片。"""
-    full = "完整卡片" in event.get_plaintext()
+    full = groups.get("full") is not None
     qq = await _resolve_qq(event, matcher)
     aime_list = await services.refactoring.aime.get_aimes(qq=qq)
 

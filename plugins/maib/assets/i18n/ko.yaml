@@ -98,13 +98,10 @@ b50:
 
 # sync
 sync:
+  # 非中国地区当前版本有意隐藏「获取同步码」
   help: |-
     sytb
         현재 사용자의 수어 데이터를 강제로 동기화합니다. b50 이미지 생성 시에도 수어 데이터 동기화를 자동으로 시도합니다
-
-    获取同步码
-        lyra-maisync 동기화 코드를 받아 lyra-maisync 유저스크립트를 통한 자동 업로드에 사용합니다
-        /help maisync에서 스크립트 링크와 원격 주소를 확인할 수 있습니다
   help_maisync: |-
     lyra-maisync
     스크립트 설치 링크: https://github.com/goldsheep3/lyra-bot/raw/refs/heads/maib/plugins/maib/sync/lyra-maisync.user.js
@@ -116,19 +113,23 @@ sync:
 # maime
 maime:
   help: |-
-    绑定aime <ACCESS 카드 번호 전체>
+    link aime <ACCESS 카드 번호 전체>
         Aime ACCESS 카드 번호를 계정에 연동합니다
 
-    解绑aime <ACCESS 카드 번호 전체>
+    unlink aime <ACCESS 카드 번호 전체>
         계정에서 Aime ACCESS 카드 번호의 연동을 해제합니다
 
-    查询aime <ACCESS 뒤 4자리|ACCESS 카드 번호 전체>
+    find aime <ACCESS 뒤 4자리|ACCESS 카드 번호 전체>
         ACCESS 카드 번호의 연동 정보를 조회하여 카드 주인을 찾습니다
+
+    list aime [full]
+        계정에 연동된 모든 Aime ACCESS 카드 번호를 보여 줍니다. 기본적으로 앞뒤 네 자리만 표시합니다
   link:
     success: "이 카드를 계정에 연동했어요~"
     error:
       unknown: "카드를 연동하는 중 예상치 못한 오류가 발생했습니다. 관리자에게 확인해 주세요 qwq"
       linked: "이 카드는 이미 다른 계정에 연동되어 있어요~"
+      linked_self: "이 카드는 이미 회원님의 계정에 연동되어 있어요~"
   unlink:
     success: "이 카드를 계정에서 연동 해제했어요~"
     error:
@@ -136,16 +137,18 @@ maime:
       not_found: "이 카드의 연동 정보를 찾을 수 없어요~"
       not_owner: "이 카드는 회원님의 계정에 속하지 않아요~"
   lost:
-    success: "카드 번호 {card}의 주인은 {qq}입니다. 그 리듬 게임 고수에게 연락해 보세요 냥("
+    find: "카드 번호 {card}에 해당하는 기록이 있어요! 이 리듬 게임 고수가 남긴 메시지: {hint}"
     error:
-      not_found: "이 카드는 여기에서 연동된 적이 없거나, 연동이 해제된 상태예요 냥("
+      unknown: "카드를 조회하는 중 예상치 못한 오류가 발생했습니다. 관리자에게 확인해 주세요 qwq"
+      self: "이 카드는 회원님의 카드잖아요——"
+      not_link: "이 카드는 이전에 연동 해제되어 현재 아무에게도 연동되어 있지 않아요 냥("
+      not_found: "이 카드는 아직 연동되지 않았어요 냥("
       multiple_found: "이 카드는 여러 계정에 연동되어 있습니다. 전체 access 번호로 다시 시도해 주세요 qwq"
 
   list:
     empty: "아직 연동한 카드가 없어요~"
     header: "다음 카드를 연동했습니다:"
-    item: "{masked} ({create_at})"
-    item_full: "{access} ({create_at})"
+    item: "{access} ({create_at})"
 
 # 예외 안내
 error:

@@ -124,6 +124,9 @@ maime:
 
     查询aime <ACCESS后四位|ACCESS完整卡号>
         查询该 ACCESS 卡号的绑定信息以寻找卡片主人
+
+    查看aime [完整|full]
+        查看你绑定的所有 Aime ACCESS 卡号，默认只显示前后四位
   link:
     success: "已经将该卡片绑定到你的账户~"
     error:

@@ -98,13 +98,10 @@ b50:
 
 # sync
 sync:
+  # 非中国地区当前版本有意隐藏「获取同步码」
   help: |-
     sytb
         現在のユーザーの水魚データを強制的に同期します。b50 の画像生成時にも水魚データの同期を自動的に試みます
-
-    获取同步码
-        lyra-maisync の同期コードを取得します。lyra-maisync のユーザースクリプトによる自動アップロードに使用します
-        /help maisync でスクリプトのリンクとリモートアドレスを確認できます
   help_maisync: |-
     lyra-maisync
     スクリプトのインストールリンク：https://github.com/goldsheep3/lyra-bot/raw/refs/heads/maib/plugins/maib/sync/lyra-maisync.user.js
@@ -116,19 +113,23 @@ sync:
 # maime
 maime:
   help: |-
-    绑定aime <ACCESS カード番号全桁>
+    link aime <ACCESS カード番号全桁>
         Aime の ACCESS カード番号をあなたのアカウントにバインドします
 
-    解绑aime <ACCESS カード番号全桁>
+    unlink aime <ACCESS カード番号全桁>
         あなたのアカウントから Aime の ACCESS カード番号のバインドを解除します
 
-    查询aime <ACCESS の下4桁|ACCESS カード番号全桁>
+    find aime <ACCESS の下4桁|ACCESS カード番号全桁>
         ACCESS カード番号のバインド情報を検索し、カードの所有者を探します
+
+    list aime [full]
+        バインド済みの Aime ACCESS カード番号をすべて表示します。デフォルトでは先頭と末尾の4桁のみを表示します
   link:
     success: "このカードをあなたのアカウントにバインドしました～"
     error:
       unknown: "カードのバインド中に予期しないエラーが発生しました。保護者に確認してくださいねqwq"
       linked: "このカードはすでに他のアカウントにバインドされています～"
+      linked_self: "このカードはすでにあなたのアカウントにバインドされています～"
   unlink:
     success: "このカードをあなたのアカウントからバインド解除しました～"
     error:
@@ -136,16 +137,18 @@ maime:
       not_found: "このカードのバインド情報が見つかりませんでした～"
       not_owner: "このカードはあなたのアカウントに属していません～"
   lost:
-    success: "カード番号 {card} は {qq} のものです。その音ゲー中毒者に連絡してみてくださいにゃ（"
+    find: "カード番号 {card} に一致する記録があります！ この音ゲー中毒者は次のメッセージを残しています：{hint}"
     error:
-      not_found: "このカードはまだここでバインドされたことがないか、バインド解除された状態ですにゃ（"
+      unknown: "カードの検索中に予期しないエラーが発生しました。保護者に確認してくださいねqwq"
+      self: "このカード、あなたのものじゃないですか——"
+      not_link: "このカードは以前バインド解除され、現在は誰にもバインドされていませんにゃ（"
+      not_found: "このカードはまだバインドされていませんにゃ（"
       multiple_found: "このカードは複数のアカウントにバインドされています。完全な access で再試行してくださいqwq"
 
   list:
     empty: "まだカードをバインドしていません～"
     header: "以下のカードをバインドしています："
-    item: "{masked} ({create_at})"
-    item_full: "{access} ({create_at})"
+    item: "{access} ({create_at})"
 
 # Exception Tip
 error:
