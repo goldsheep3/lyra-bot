@@ -5,7 +5,7 @@ import orjson
 import zipfile
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from pathlib import Path
-from typing import Any, TypeVar, overload, Literal
+from typing import Any, TypeVar, overload, Literal, TypedDict, cast
 
 from nonebot import logger
 from nonebot_plugin_localstore import get_plugin_data_dir, get_plugin_cache_dir
@@ -18,10 +18,15 @@ from .utils.map import VersionID, Versions, Genres
 from .utils.map.version import mapping_jp_to_cn
 
 
-ChartFileChange = tuple[str, str]
-ChartStat = dict[str, Any]
+class ChartFileChangeBox(TypedDict):
+    Cached: dict[str, str]
+    Updated: dict[str, str]
+    New: dict[str, str]
+
 _T = TypeVar("_T")
 _DefaultT = TypeVar("_DefaultT")
+
+
 
 SUPPORTED_CHART_EXTS = {".zip", ".adx"}
 STAT_CACHE_NAME = "chart_stat.json"
@@ -33,65 +38,54 @@ def get_file_stat_identity(file_path: Path) -> str:
     return f"{stat.st_mtime}_{stat.st_size}"
 
 
-def _new_chart_stat() -> ChartStat:
-    return {"timestamp": -1, "stats": {}}
-
-
-def _load_chart_stat(stat_cache_file: Path) -> ChartStat:
+def _load_chart_stat(stat_cache_file: Path) -> dict[str, str]:
+    """加载谱面 stat 缓存"""
     if not stat_cache_file.exists():
-        return _new_chart_stat()
+        return dict()
 
     try:
         data = orjson.loads(stat_cache_file.read_bytes())
-        stats = data.get("stats", {})
-        if not isinstance(stats, dict):
-            raise ValueError("chart_stat.stats is not a dict")
-        return {
-            "timestamp": float(data.get("timestamp", -1)),
-            "stats": {str(k): str(v) for k, v in stats.items()},
-        }
-    except Exception as e:
-        logger.warning(f"maib-fetch Step 1/6: stat 缓存读取失败，将重新生成: {e}")
-        return _new_chart_stat()
+        if not data:
+            return dict()
+        elif "stats" in data and isinstance(data["stats"], dict):
+            return cast(dict[str, str], data["stats"])
+        else:
+            return data
+    except Exception:
+        return dict()
 
 
-def _save_chart_stat(stat_cache_file: Path, chart_stat: ChartStat) -> None:
+
+def _save_chart_stat(stat_cache_file: Path, chart_stat: dict[str, str]) -> None:
+    """保存谱面 stat 缓存"""
     stat_cache_file.parent.mkdir(parents=True, exist_ok=True)
     stat_cache_file.write_bytes(orjson.dumps(chart_stat))
 
 
 def _iter_chart_files(data_dir: Path) -> list[Path]:
+    """返回 data_dir 根层及 charts*/ 子目录下的谱面文件。"""
+    candidates = list(data_dir.glob("*"))
+    candidates.extend(data_dir.glob("charts*/*"))
     return sorted(
-        p for p in data_dir.glob("charts*/*")
+        p for p in candidates
         if p.is_file() and p.suffix.lower() in SUPPORTED_CHART_EXTS
     )
 
 
-def _classify_chart_files(files: Sequence[Path], data_dir: Path, chart_stat: ChartStat) -> dict[str, list[ChartFileChange]]:
-    stats = chart_stat.setdefault("stats", {})
-    if not isinstance(stats, dict):
-        stats = {}
-        chart_stat["stats"] = stats
 
-    results: dict[str, list[ChartFileChange]] = {"Cached": [], "Updated": [], "New": []}
+def _classify_chart_files(files: Sequence[Path], data_dir: Path, stats: dict[str, str]) -> ChartFileChangeBox:
+    """依据相对目录文件列表进行缓存特征标识"""
+    results = ChartFileChangeBox(Cached={}, Updated={}, New={})
     for file in files:
         file_key = str(file.relative_to(data_dir))
         identity = get_file_stat_identity(file)
         if file_key not in stats:
-            results["New"].append((file_key, identity))
+            results["New"][file_key] = identity
         elif stats[file_key] == identity:
-            results["Cached"].append((file_key, identity))
+            results["Cached"][file_key] = identity
         else:
-            results["Updated"].append((file_key, identity))
+            results["Updated"][file_key] = identity
     return results
-
-
-def _has_fresh_stat_cache(chart_stat: ChartStat, now_time: float) -> bool:
-    try:
-        timestamp = float(chart_stat.get("timestamp", -1))
-    except (TypeError, ValueError):
-        return False
-    return now_time - timestamp < (config.CACHE_EXPIRATION * 3600)
 
 
 def _extract_metadata(content: str) -> dict[str, str]:
@@ -154,7 +148,7 @@ def _raw_get(
 def _parse_genre(genre_str: str) -> int:
     genre_id = Genres.find_id(genre_str, allow_fuzzy=True)
     if genre_id is None:
-        logger.warning(f"maib-fetch: 无法解析流派名: {genre_str}")
+        logger.warning(f"[fetch 3/7] 无法解析流派名: {genre_str}")
         return -1
     return genre_id
 
@@ -174,7 +168,7 @@ async def get_chart(raw_mdt: Mapping[str, str], short_id: int, chart_num: int) -
     try:
         lv = float(lv_str)
     except ValueError:
-        logger.warning(f"maib-fetch: 无法解析 shortid={short_id}, diff={chart_num} 的定数: {lv_str}")
+        logger.warning(f"[fetch 3/7] 无法解析 shortid={short_id}, diff={chart_num} 的定数: {lv_str}")
         return None
 
     chart = utils.MaiChart(
@@ -189,7 +183,7 @@ async def get_chart(raw_mdt: Mapping[str, str], short_id: int, chart_num: int) -
         snc = utils.SimaiNoteCount(raw_mdt.get(inote_key, "")).process()
         chart.set_notes(*snc.to_tuple())
     except Exception as e:
-        logger.warning(f"maib-fetch: shortid={short_id}, diff={chart_num} 的 Note 数解析失败: {e}")
+        logger.warning(f"[fetch 3/7] shortid={short_id}, diff={chart_num} 的 Note 数解析失败: {e}")
     return chart
 
 
@@ -255,65 +249,66 @@ def _read_maidata_text(chart_path: Path) -> str:
             return f.read().decode("utf-8-sig")
 
 
-async def _apply_pending_id_mappings() -> None:
+async def _apply_pending_id_mappings() -> bool:
+    """[fetch 4/7] 应用待处理的 shortid 映射"""
     try:
         id_mappings = await services.get_pending_mappings()
-    except Exception as e:
-        logger.error(f"maib-fetch Step 2/6: 读取 id_check 失败: {e}")
-        return
+    except Exception:
+        logger.exception("[fetch 4/7] id_check 表异常")
+        return False
 
     if not id_mappings:
-        logger.debug("maib-fetch Step 2/6: 无待处理 shortid 映射")
-        return
+        logger.info("[fetch 4/7] 无待处理的 shortid 映射")
+        return False
 
-    logger.info(f"maib-fetch Step 2/6: 处理 {len(id_mappings)} 条 shortid 映射规则")
+    logger.info(f"[fetch 4/7] 处理 {len(id_mappings)} 条 shortid 映射规则")
     for original_id, mapped_id in id_mappings:
         try:
             await services.resolve_id_mapping(original_id, mapped_id)
-            logger.info(f"maib-fetch Step 2/6: 应用映射 {original_id} -> {mapped_id}")
-        except Exception as e:
-            logger.error(f"maib-fetch Step 2/6: 映射 {original_id}->{mapped_id} 失败: {e}")
+            logger.info(f"[fetch 4/7] 应用映射 {original_id} -> {mapped_id}")
+        except Exception:
+            logger.exception(f"[fetch 4/7] 映射 {original_id}->{mapped_id} 失败")
+    return True
 
 
 async def _parse_changed_chart_files(
     data_dir: Path,
-    change_files: Sequence[ChartFileChange],
-) -> tuple[dict[int, utils.MaiData], list[ChartFileChange]]:
+    change_files: dict[str, str],
+) -> tuple[dict[int, utils.MaiData], list[dict[str, str]]]:
+    """解析变更的谱面包，返回 shortid 映射的 MaiData 字典和解析统计"""
+    
     maidata_dict: dict[int, utils.MaiData] = {}
-    parsed_stats: list[ChartFileChange] = []
+    parsed_stats: list[dict[str, str]] = []
 
-    for file_key, identity in change_files:
+    for file_key, identity in change_files.items():
         chart_path = data_dir / file_key
         try:
             content = _read_maidata_text(chart_path)
             raw_mdt = _extract_metadata(content)
             if not raw_mdt:
-                logger.warning(f"maib-fetch Step 3/6: {file_key} 未提取到 maidata 元数据")
+                logger.warning(f"[fetch 3/7] {file_key} 未提取到 maidata 元数据")
                 continue
             maidata = await parse_maidata(raw_mdt, file_key)
         except Exception as e:
-            logger.error(f"maib-fetch Step 3/6: 无法解析 {file_key}，错误: {e}")
+            logger.error(f"[fetch 3/7] 无法解析 {file_key}，错误: {e}")
             continue
 
         maidata_dict[maidata.shortid] = maidata
-        parsed_stats.append((file_key, identity))
+        parsed_stats.append({"file_key": file_key, "identity": identity})
 
     return maidata_dict, parsed_stats
 
 
 async def _sync_changed_charts(
     data_dir: Path,
-    chart_stat: ChartStat,
-    change_files: Sequence[ChartFileChange],
+    chart_stat: dict[str, str],
+    change_files: dict[str, str],
 ) -> bool:
-    if not change_files:
-        logger.info("maib-fetch Step 3/6: 无需拆包解析")
-        return False
-
-    logger.info(f"maib-fetch Step 3/6: 拆包解析和数据库处理 ({len(change_files)} 个文件)")
+    """[fetch 3/7] 同步变更的谱面包"""
+    logger.info(f"[fetch 3/7] 解析处理 ({len(change_files)} 个谱面包)")
     maidata_dict, parsed_stats = await _parse_changed_chart_files(data_dir, change_files)
     if not maidata_dict:
-        logger.warning("maib-fetch Step 3/6: 未成功解析任何曲目，跳过数据库同步")
+        logger.warning("[fetch 3/7] 解析异常，无有效谱面包")
         return False
 
     try:
@@ -321,22 +316,14 @@ async def _sync_changed_charts(
             services.MaiData.from_utils(maidata)
             for maidata in maidata_dict.values()
         ])
-
-        # 曲库补齐后，自动处理此前因找不到曲目而暂存的在线上传记录。
-        affected_by_user = await services.backfill_record_shortids()
-        for user_id, record_keys in affected_by_user.items():
-            ach_list = await services.get_record_achs(user_id, list(record_keys))
-            if ach_list:
-                await services.upd_ach_batch(user_id, ach_list)
-    except Exception as e:
-        logger.error(f"maib-fetch Step 3/6: 数据库同步失败，原因: {e}")
+    except Exception:
+        logger.exception(f"[fetch 3/7] 数据库同步失败")
         return False
 
-    stats = chart_stat.setdefault("stats", {})
-    for file_key, identity in parsed_stats:
-        stats[file_key] = identity
-
-    logger.info(f"maib-fetch Step 3/6: 成功同步 {len(maidata_dict)} 个曲目")
+    for item in parsed_stats:
+        chart_stat[item["file_key"]] = item["identity"]
+    _save_chart_stat(get_plugin_cache_dir() / STAT_CACHE_NAME, chart_stat)
+    logger.info(f"[fetch 3/7] 成功同步 {len(maidata_dict)} 个曲目")
     return True
 
 
@@ -349,6 +336,7 @@ def _safe_int(value: Any, default: int = 0) -> int:
 
 # TODO sy_data 采用带数据规范的 dict 以实现更精确的类型检查
 async def _build_cn_update_lists(sy_data: Sequence[Any]) -> tuple[list[tuple[int, int]], list[dict[str, float]]]:
+    """从水鱼数据中构建国服版本和定数更新列表"""
     version_update_list: list[tuple[int, int]] = []
     level_update_list: list[dict[str, float]] = []
 
@@ -384,19 +372,19 @@ async def _build_cn_update_lists(sy_data: Sequence[Any]) -> tuple[list[tuple[int
 
 
 async def _sync_cn_metadata(data_dir: Path, *, force: bool) -> None:
+    """[fetch 5/7] 同步国服版本和定数数据"""
     music_data = await network.DivingFish.music_data(data_dir)
-    if not music_data.data:
-        logger.warning("maib-fetch Step 4/6: 无法获取水鱼数据，跳过国服版本和定数更新")
+    if not music_data["data"]:
+        logger.warning("[fetch 5/7] 从水鱼更新国服版本和定数数据失败，请检查服务状态")
         return
 
-    if not (music_data.updated or force):
-        logger.info("maib-fetch Step 4/6: 水鱼数据未更新，无需同步调整")
+    if not (music_data["updated"] or force):
+        logger.info("[fetch 5/7] 国服版本和定数数据无变化")
         return
 
-    logger.info("maib-fetch Step 4/6: 准备更新国服版本和定数")
-    version_update_list, level_update_list = await _build_cn_update_lists(music_data.data)
+    version_update_list, level_update_list = await _build_cn_update_lists(music_data["data"])
     if not version_update_list and not level_update_list:
-        logger.info("maib-fetch Step 4/6: 未解析到可同步的国服版本或定数")
+        logger.warning("[fetch 5/7] 解析水鱼数据失败")
         return
 
     try:
@@ -411,20 +399,22 @@ async def _sync_cn_metadata(data_dir: Path, *, force: bool) -> None:
                 ))
                 await services.rfs_dxra_batch(refresh_chart_keys, Server.CN, session=session)
             await session.commit()
-        logger.success(f"maib-fetch Step 4/6: 同步完成 (曲目:{len(version_update_list)}, 谱面:{len(level_update_list)})")
-    except Exception as e:
-        logger.error(f"maib-fetch Step 4/6: 数据库同步失败: {e}")
+        logger.success(f"[fetch 5/7] 国服数据同步完成 (曲目:{len(version_update_list)}, 谱面:{len(level_update_list)})")
+    except Exception:
+        logger.exception(f"[fetch 5/7] 数据库同步失败")
 
 
 async def _sync_synh_levels() -> None:
+    """[fetch 6/7] 同步水鱼拟合定数"""
+
     chart_stats = await network.DivingFish.chart_stats()
     if not chart_stats:
-        logger.info("maib-fetch Step 5/6: 未获取到水鱼拟合定数数据")
+        logger.info("[fetch 6/7] 未获取到水鱼拟合定数数据")
         return
 
     charts = chart_stats.get("charts", {}) if isinstance(chart_stats, Mapping) else {}
     if not isinstance(charts, Mapping):
-        logger.info("maib-fetch Step 5/6: 水鱼拟合定数数据格式异常")
+        logger.info("[fetch 6/7] 水鱼拟合定数数据格式异常")
         return
 
     synh_list: list[dict[str, float]] = []
@@ -445,17 +435,18 @@ async def _sync_synh_levels() -> None:
                 continue
 
     if not synh_list:
-        logger.info("maib-fetch Step 5/6: 未解析到可同步的拟合定数")
+        logger.info("[fetch 6/7] 未解析到可同步的拟合定数")
         return
 
     try:
         await services.set_mct_level_batch(synh_list, source=SLevelSource.FIT)
-        logger.info(f"maib-fetch Step 5/6: 已同步 {len(synh_list)} 条水鱼拟合定数")
-    except Exception as e:
-        logger.error(f"maib-fetch Step 5/6: 更新水鱼拟合定数数据失败，原因: {e}")
+        logger.info(f"[fetch 6/7] 已同步 {len(synh_list)} 条水鱼拟合定数")
+    except Exception:
+        logger.exception(f"[fetch 6/7] 更新水鱼拟合定数数据失败")
 
 
 def _iter_alias_names(value: Any) -> Iterable[str]:
+    """迭代别名名称兼容"""
     if isinstance(value, str):
         values = [value]
     elif isinstance(value, Iterable) and not isinstance(value, (bytes, Mapping)):
@@ -467,6 +458,7 @@ def _iter_alias_names(value: Any) -> Iterable[str]:
 
 
 def _collect_yuzuchan_aliases(data: Mapping[str, Any] | None) -> list[tuple[int, str]]:
+    """从 yuzuchan 别名数据中提取 (song_id, alias) 列表"""
     if not data:
         return []
 
@@ -481,14 +473,14 @@ def _collect_yuzuchan_aliases(data: Mapping[str, Any] | None) -> list[tuple[int,
     return sorted(aliases_set)
 
 
-def _map_lxns_shortid(shortid: int) -> int:
-    """LXNS song_id 与本地 SD/DX shortid 互为 10000 偏移。"""
-    return shortid % 10000 if shortid > 10000 else shortid + 10000
-
-
 def _collect_lxns_aliases(data: Mapping[str, Any] | None) -> list[tuple[int, str]]:
+    """从 lxns 别名数据中提取 (song_id, alias) 列表"""
     if not data:
         return []
+    
+    def _map_lxns_shortid(shortid: int) -> int:
+        """LXNS song_id 与本地 SD/DX shortid 互为 10000 偏移。"""
+        return shortid % 10000 if shortid > 10000 else shortid + 10000
 
     aliases_set: set[tuple[int, str]] = set()
     for entry in data.get("aliases", []):
@@ -504,15 +496,14 @@ def _collect_lxns_aliases(data: Mapping[str, Any] | None) -> list[tuple[int, str
 
 
 async def _sync_aliases() -> None:
-    logger.info("maib-fetch Step 6/6: 同步别名库数据")
-
+    """[fetch 7/7] 同步别名库数据"""
     yuzuchan_aliases = _collect_yuzuchan_aliases(await network.YuzuChaN.yuzuchan_alias_list())
     await services.add_ma_batch(yuzuchan_aliases, -101)
-    logger.info(f"maib-fetch Step 6/6: 同步 yuzuchan 别名数据完成 ({len(yuzuchan_aliases)} 条)")
+    logger.info(f"[fetch 7/7] 同步 yuzuchan 别名数据完成 ({len(yuzuchan_aliases)} 条)")
 
     lxns_aliases = _collect_lxns_aliases(await network.Lxns.lx_alias_list())
     await services.add_ma_batch(lxns_aliases, -102)
-    logger.info(f"maib-fetch Step 6/6: 同步 lxns 别名数据完成 ({len(lxns_aliases)} 条)")
+    logger.info(f"[fetch 7/7] 同步 lxns 别名数据完成 ({len(lxns_aliases)} 条)")
 
 
 @post_db_init
@@ -520,50 +511,72 @@ async def maintenance_task():
     """数据重整主流程"""
     now_time = time.time()
 
-    logger.info("maib-fetch Step 1/6: 获取谱面文件列表并进行 stat 判定")
-    data_dir = get_plugin_data_dir()
-    if not data_dir:
-        logger.error("maib-fetch Step 1/6: 无法获取谱面目录")
-        return
+    # [fetch 1/7] 获取谱面包列表
+    logger.info("[fetch 1/7] 尝试获取谱面包")
+    if config.CHART_DATA_DIR:
+        data_dir = Path(config.CHART_DATA_DIR)
+        if not data_dir.exists() or not data_dir.is_dir():
+            logger.error(f"[fetch 1/7] 配置的谱面数据目录({data_dir})不存在或不是目录，请检查配置")
+            return
+    else:
+        data_dir = get_plugin_data_dir()
 
     files = _iter_chart_files(data_dir)
     if not files:
-        logger.warning("maib-fetch Step 1/6: 未找到任何谱面文件")
+        logger.error(f"[fetch 1/7] 谱面数据目录为空，请检查数据目录({data_dir})")
         return
+    logger.info(f"[fetch 1/7] 成功在谱面数据目录 {data_dir} 获取到 {len(files)} 个谱面包")
 
-    stat_cache_file = get_plugin_cache_dir() / STAT_CACHE_NAME
-    chart_stat = _load_chart_stat(stat_cache_file)
+    # [fetch 2/7] 解析 stat 缓存并分类文件
+    _skip_db_exec: bool = False
+    chart_stat_path = get_plugin_cache_dir() / STAT_CACHE_NAME
+    chart_stat = _load_chart_stat(chart_stat_path)
     results = _classify_chart_files(files, data_dir, chart_stat)
-    change_files = results["Updated"] + results["New"]
+    change_files = results["Updated"].copy()
+    change_files.update(results["New"])
     if not change_files:
+        # ------ refactoring ------        
         # 数据库被清空或首次迁移后，不能把旧 stat 缓存误当成曲库已入库。
         async with services.get_session() as session:
             has_maidata = (await session.execute(select(services.MaiData.shortid).limit(1))).scalar_one_or_none() is not None
-        if not has_maidata:
-            change_files = [(str(path.relative_to(data_dir)), get_file_stat_identity(path)) for path in files]
-            logger.warning("maib-fetch Step 1/6: 曲库为空，忽略 stat 缓存并重新解析现有谱面")
+        is_empty_library = not has_maidata
+        # -------------------------
+        if is_empty_library:
+            logger.warning("[fetch 2/7] 谱面库为空，强制重建谱面库")
+            change_files = {str(path.relative_to(data_dir)): get_file_stat_identity(path) for path in files}
+            logger.info(f"[fetch 2/7] New={len(change_files)}")
+        else:
+            _skip_db_exec = True
+            logger.info(f"[fetch 2/7] 谱面包 {len(results['Cached'])} 均已缓存，数据库无需更新")
+    else:
+        logger.info(f"[fetch 2/7] Cached={len(results['Cached'])}, Updated={len(results['Updated'])}, New={len(results['New'])}")
 
-    logger.debug(f"maib-fetch Step 1/6: 找到 {len(files)} 个谱面文件")
-    logger.info(
-        "maib-fetch Step 1/6: "
-        f"{len(results['Cached'])} 个文件未变更，"
-        f"{len(results['Updated'])} 个文件已更新，"
-        f"{len(results['New'])} 个文件为新增"
-    )
+    # [fetch 3/7] 谱面包拆包解析和数据库同步
+    if not _skip_db_exec:
+        chart_synced = await _sync_changed_charts(data_dir, chart_stat, change_files)
+    else:
+        chart_synced = False
+        logger.info("[fetch 3/7] 数据库无需更新，跳过谱面包拆包同步")
 
-    await _apply_pending_id_mappings()
+    # [fetch 4/7] 应用待处理的 shortid 映射
+    if (await _apply_pending_id_mappings()) or chart_synced:
+        logger.info("[fetch 4/7] 尝试回填成绩记录并刷新缓存")
+        try:
+            # ------ refactoring ------   
+            affected_by_user = await services.backfill_record_shortids()
+            for user_id, record_keys in affected_by_user.items():
+                ach_list = await services.get_record_achs(user_id, list(record_keys))
+                if ach_list:
+                    await services.upd_ach_batch(user_id, ach_list)
+            # -------------------------
+        except Exception:
+            logger.exception("[fetch 4/7] 回填成绩记录失败")
 
-    if not change_files and _has_fresh_stat_cache(chart_stat, now_time):
-        logger.info("maib-fetch Step 1/6: stat 数据较新，且无更新或新增文件，结束 fetch 流程")
-        return
-
-    chart_synced = await _sync_changed_charts(data_dir, chart_stat, change_files)
-    chart_stat["timestamp"] = time.time()
-    _save_chart_stat(stat_cache_file, chart_stat)
-    logger.info("maib-fetch Step 3/6: stat 缓存已更新")
-
-    await _sync_cn_metadata(data_dir, force=chart_synced)
+    # [fetch 5/7] 同步水鱼拟合定数
+    await _sync_cn_metadata(get_plugin_cache_dir(), force=chart_synced)
+    # [fetch 6/7] 同步水鱼拟合定数
     await _sync_synh_levels()
+    # [fetch 7/7] 同步别名库数据
     await _sync_aliases()
 
-    logger.info(f"maib-fetch 同步完成，耗时: {(time.time() - now_time):.2f} 秒")
+    logger.info(f"[fetch 7/7] 流程结束，耗时:{(time.time() - now_time):.2f} 秒")

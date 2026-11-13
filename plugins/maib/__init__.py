@@ -1,6 +1,6 @@
 """LyraBot Plugin: maib - MaimaiDX 相关功能插件"""
-import os
 from pydantic import BaseModel
+from nonebot.plugin import PluginMetadata
 
 
 class Config(BaseModel):
@@ -8,15 +8,17 @@ class Config(BaseModel):
     LOW_MEMORY_MODE: bool = False
     # Low Memory Tip: 低内存模式下的提示信息，设置为 None 显示默认提示，设置为 "" 则不显示提示
     LOW_MEMORY_TIP: str | None = None
-    # Diving-Fish Developer Token: 水鱼开发者 token，若不设置则无法使用水鱼的查分服务
+    # Chart Data Directory: 谱面数据目录，默认使用插件数据目录下的 "data" 子目录
+    CHART_DATA_DIR: str | None = None
+    # Diving-Fish OAuth 凭据
     DIVING_FISH_DEVELOPER_TOKEN: str | None = None
     DIVING_FISH_CLIENT_ID: str | None = None
     DIVING_FISH_CLIENT_SECRET: str | None = None
+    # Lxns OAuth 凭据
+    LXNS_CLIENT_ID: str | None = None
+    LXNS_CLIENT_SECRET: str | None = None
     # Data Provider Cache Expiration: 在线数据源缓存过期时间，单位为小时，默认 24 小时
     DATA_PROVIDER_CACHE_EXPIRATION: float = 24
-    # Cache Expiration: 缓存过期时间，单位为小时，默认 72 小时
-    # 替代 [LYRA_FETCH_SKIP]
-    CACHE_EXPIRATION: int = 72
     # Max Blur Search Results: 模糊搜索最大允许结果数，超过会提示缩小搜索范围
     # 有效范围: >= 5，不在范围内会被设定为默认值（40）
     MAX_BLUR_SEARCH_RESULTS: int = 40
@@ -24,48 +26,42 @@ class Config(BaseModel):
     MAIB_MCP_API_TOKEN: str | None = None
 
 
-try:
-        
-    from nonebot import require, get_driver, get_plugin_config
-    from nonebot.plugin import PluginMetadata
-    
-    try:
-        get_driver()
-    except ValueError:
-        raise RuntimeError
-    else:
-        # 在 __init__.py 中预导入，便于在其他文件直接 import
-        require("nonebot_plugin_localstore")
-        require("nonebot_plugin_datastore")
-        require("nonebot_plugin_locales")
+__plugin_meta__ = PluginMetadata(
+    name="nonebot-plugin-pfmai",
+    description="查询、操作和管理 MaimaiDX 相关数据",
+    usage="使用 /help maib 查看详细帮助",
+    type="application", 
+    homepage="https://github.com/goldsheep3/lyra-bot/tree/main/plugins/maib",
+    config=Config,
+    supported_adapters={
+        "~onebot.v11",
+        "~telegram",
+    },
+)
 
-    __plugin_meta__ = PluginMetadata(
-        name="nonebot-plugin-performai",
-        description="查询、操作和管理 MaimaiDX 相关数据",
-        usage="使用 /help maib 查看详细帮助",
-        type="application", 
-        homepage="https://github.com/goldsheep3/lyra-bot/tree/main/plugins/maib",
-        config=Config,
-        supported_adapters={
-            "~onebot.v11",
-            "~telegram",
-        },
-    )
+
+try:
+    from nonebot import require, get_driver, get_plugin_config
+    get_driver()
+    
+    # 在 __init__.py 中预导入，便于在其他文件直接 import
+    require("nonebot_plugin_localstore")
+    require("nonebot_plugin_datastore")
+    require("nonebot_plugin_locales")
 
     # --- config fix ---
     config = get_plugin_config(Config)
     if config.MAX_BLUR_SEARCH_RESULTS < 5:
         config.MAX_BLUR_SEARCH_RESULTS = 40
-
-
+    
     from . import matcher, services, utils, fetch, napcat_stream, webapi
-
     # 注入 hook 以支持 stream 获取文件
     napcat_stream.install_hook()
 
-except RuntimeError as e:
+except Exception as e:
+    import os
     if os.getenv("MAIB_IMAGE_GEN_DEBUG") == "1":
         from loguru import logger
-        logger.warning("插件 maib 因 RuntimeError 未被加载。根据环境设置，可能是正在调试 image_gen 模块。如果并非调试过程，请关注错误原因。")
+        logger.warning(f"插件 maib 导入失败，可能是正在调试 image_gen 模块。如果并非调试过程，请关注错误原因。错误信息: {e}")
     else:
-        raise e  # 非调试，重新抛出
+        raise  # 非调试，重新抛出

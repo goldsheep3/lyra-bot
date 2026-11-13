@@ -1,8 +1,7 @@
 import httpx
 import orjson
 from pathlib import Path
-from typing import Optional
-from dataclasses import dataclass
+from typing import Optional, TypedDict
 from datetime import datetime
 
 from nonebot import logger
@@ -18,9 +17,8 @@ BASE_URL = "https://www.diving-fish.com/api/maimaidxprober"
 # {aid: (access_token, expires_at)}
 _ACCESS_CACHE: dict[str, tuple[str, datetime]] = {}
 
-
-@dataclass
-class MusicData:
+    
+class MusicData(TypedDict):
     data: list
     updated: bool
     
