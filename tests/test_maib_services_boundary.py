@@ -43,7 +43,7 @@ PURE_SERVICE_APIS = {
     "refactoring.aime.unlink",
     "refactoring.catalog.apply_cn_metadata",
     "refactoring.catalog.has_song_library",
-    "refactoring.catalog.get_song",
+    "refactoring.catalog.get_maidata",
     "refactoring.catalog.sync_song_library",
 }
 
@@ -316,7 +316,6 @@ KNOWN_IMPURE_USAGE_MAXIMUMS: Counter[tuple[str, str, str]] = Counter(
         ("plugins/maib/matcher/context.py", "check_mu", "calls_orm_service_api"): 1,
         ("plugins/maib/matcher/context.py", "get_mdt.id", "calls_orm_service_api"): 1,
         ("plugins/maib/matcher/context.py", "get_mu_from_tgid", "calls_orm_service_api"): 1,
-        ("plugins/maib/matcher/dxrating_calc.py", "get_mdt.id", "calls_orm_service_api"): 1,
         ("plugins/maib/matcher/info.py", "MaiData", "references_services_orm"): 1,
         ("plugins/maib/matcher/info.py", "check_mu", "calls_orm_service_api"): 1,
         ("plugins/maib/matcher/info.py", "get_mdt.id", "calls_orm_service_api"): 1,

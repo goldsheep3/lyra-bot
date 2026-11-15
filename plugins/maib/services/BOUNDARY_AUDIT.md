@@ -2,7 +2,7 @@
 
 > 生成日期：2026-11-15
 > 审计来源：`tests/test_maib_services_boundary.py`  
-> 当前结果：58 处外部 services 调用，27 个未解决不纯事项；fetch、Aime 与谱面下载闭包已解决原清单中的 15 项。
+> 当前结果：58 处外部 services 调用，26 个未解决不纯事项；fetch、Aime 与曲目查询闭包已解决原清单中的 16 项。
 
 ## 边界判定标准
 
@@ -35,13 +35,13 @@ services 外部不应：
 
 | 类别 | 数量 |
 |---|---:|
-| ORM API | 21 |
+| ORM API | 20 |
 | ORM 引用 | 4 |
 | ORM 导入 | 1 |
 | 内部 API | 1 |
 | Session 越界 | 0 |
-| **未解决合计** | **27** |
-| 已解决（fetch + Aime + 谱面下载） | 15 |
+| **未解决合计** | **26** |
+| 已解决（fetch + Aime + 曲目查询） | 16 |
 
 ## 逐项审查表
 
@@ -59,15 +59,15 @@ services 外部不应：
 | 08 | [x] | [`fetch.py`](../fetch.py) | `refactoring.catalog.has_song_library` | ORM 引用 | `select(MaiData)` 已收回 services。 | `fetch` 仅根据布尔结果决定是否重建。 |
 | 09 | [x] | [`matcher/adx_download.py`](../matcher/adx_download.py) | `refactoring.catalog.get_maidata` | ORM API | 已改用异步曲目查询并返回 `utils.MaiData`。 | 谱面包路径与 Telegram 缓存均由 utils 对象提供。 |
 | 10 | [x] | [`matcher/adx_download.py`](../matcher/adx_download.py) | `utils.MaiData` | ORM 引用 | matcher 已不再引用 services ORM。 | 使用 `utils.MaiData | None` 并处理未找到分支。 |
-| 11 | [ ] | [`matcher/alias.py:52`](../matcher/alias.py#L52) | `get_mdt.id` | ORM API | 别名 matcher 为判断曲目存在而获取 ORM。 | 使用 `get_song()` 或轻量 `song_exists(shortid)`。 |
+| 11 | [ ] | [`matcher/alias.py:52`](../matcher/alias.py#L52) | `get_mdt.id` | ORM API | 别名 matcher 为判断曲目存在而获取 ORM。 | 使用 `get_maidata()` 或轻量 `song_exists(shortid)`。 |
 | 12 | [ ] | [`matcher/alias.py:52`](../matcher/alias.py#L52) | `MaiData` | ORM 引用 | matcher 类型标注依赖 services ORM。 | 改为 `utils.MaiData | None`，或在只判存在时去掉对象。 |
 | 13 | [ ] | [`matcher/context.py:56`](../matcher/context.py#L56) | `check_mu` | ORM API | 平台用户解析返回 ORM `MaiUser`。 | AID 前先改为返回 `utils.MaiUser`；AID 后由 locales 解析身份。 |
 | 14 | [ ] | [`matcher/context.py:58`](../matcher/context.py#L58) | `get_mu_from_tgid` | ORM API | Telegram 账号查找返回 ORM。 | 账号绑定迁移到 locales，services 只接收 AID 并返回 utils 用户。 |
 | 15 | [ ] | [`matcher/context.py:80`](../matcher/context.py#L80) | `get_mdt.id` | ORM API | 上下文加载曲目后在 matcher 调用 `to_utils()`。 | services 根据用户/provider scope 直接返回 `utils.MaiData`。 |
-| 16 | [ ] | [`matcher/dxrating_calc.py:60`](../matcher/dxrating_calc.py#L60) | `get_mdt.id` | ORM API | DX Rating 计算为取谱面定数而获取 ORM。 | 使用 `get_song()` 返回的 utils 曲目。 |
+| 16 | [x] | [`matcher/dxrating_calc.py`](../matcher/dxrating_calc.py) | `refactoring.catalog.get_maidata` | ORM API | 已改为通过纯边界查询 utils 曲目，不再获取 ORM。 | `get_maidata()` 禁载成绩关系，matcher 直接读取谱面定数。 |
 | 17 | [ ] | [`matcher/info.py:57`](../matcher/info.py#L57) | `get_mu_from_tgid` | ORM API | Telegram 解析依赖 maib ORM 账号绑定。 | 改为 locales 解析 AID，必要时再取 `utils.MaiUser`。 |
 | 18 | [ ] | [`matcher/info.py:76`](../matcher/info.py#L76) | `check_mu` | ORM API | info matcher 获取 ORM 用户。 | 改为 `get_or_create_user()` 返回 `utils.MaiUser`。 |
-| 19 | [ ] | [`matcher/info.py:110`](../matcher/info.py#L110) | `get_mdt.id` | ORM API | 单曲信息查询返回 ORM，matcher 自行转 utils。 | `get_song()` 直接返回含成绩范围的 `utils.MaiData`。 |
+| 19 | [ ] | [`matcher/info.py:110`](../matcher/info.py#L110) | `get_mdt.id` | ORM API | 单曲信息查询返回 ORM，matcher 自行转 utils。 | `get_maidata()` 直接返回含成绩范围的 `utils.MaiData`。 |
 | 20 | [ ] | [`matcher/info.py:110`](../matcher/info.py#L110) | `MaiData` | ORM 引用 | info matcher 类型标注依赖 services ORM。 | 改为 `utils.MaiData | None`。 |
 | 21 | [ ] | [`matcher/info.py:150`](../matcher/info.py#L150) | `get_mdt.title` | ORM API | 搜索返回 ORM 列表，matcher 遍历 ORM aliases。 | 返回 `utils.MaiData`，将命中别名放入 `MaiData._matched_alias`。 |
 | 22 | [ ] | [`matcher/info_list.py:84`](../matcher/info_list.py#L84) | `get_mct_list.level` | ORM API | 定数筛选返回 ORM `MaiChart`。 | 返回 `utils.MaiChart`；展示所需曲目信息可使用 `_maidata` 附加。 |
@@ -89,7 +89,7 @@ services 外部不应：
 | 38 | [ ] | [`matcher/temp_link.py:80`](../matcher/temp_link.py#L80) | `get_mu_from_tgid` | ORM API | 临时解绑直接读取 maib ORM 账号绑定。 | 整个临时绑定流程迁移至 locales API。 |
 | 39 | [ ] | [`mcp/__init__.py:36`](../mcp/__init__.py#L36) | `MaiData` | ORM 引用 | MCP 序列化函数直接接收 ORM。 | 改为序列化 `utils.MaiData`。 |
 | 40 | [ ] | [`mcp/__init__.py:81`](../mcp/__init__.py#L81) | `get_mdt.title` | ORM API | MCP 搜索返回 ORM。 | 使用 utils 曲目搜索 API。 |
-| 41 | [ ] | [`mcp/__init__.py:87`](../mcp/__init__.py#L87) | `get_mdt.id` | ORM API | MCP 单曲查询返回 ORM。 | 使用 `get_song()` 返回 `utils.MaiData`。 |
+| 41 | [ ] | [`mcp/__init__.py:87`](../mcp/__init__.py#L87) | `get_mdt.id` | ORM API | MCP 单曲查询返回 ORM。 | 使用 `get_maidata()` 返回 `utils.MaiData`。 |
 | 42 | [ ] | [`mcp/__init__.py:101`](../mcp/__init__.py#L101) | `get_session` | 内部 API | MCP 只读 SQL 工具直接获取 services session。 | 将 SQL 校验和执行整体封装为 services 内部只读用例。 |
 
 ## 建议审查顺序

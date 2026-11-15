@@ -57,16 +57,15 @@ async def ra_calc_handled(event: Event, matcher: Matcher, groups: dict[str, Opti
         shortid = int(match.group("id"))
         difficulty = Difficulties.find_id(match.group("color")) or 5  # MASTER
 
-        mdt = await services.get_mdt.id(shortid)
-        if mdt is None:
+        maidata = await services.refactoring.catalog.get_maidata(shortid)
+        if maidata is None:
             await matcher.finish(await reply("rc.maidata_invalid"))
             return
-        
-        # TODO 这里未来可以考虑获取一下用户的谱面成绩和对应版本地板，来确定能不能上分
-        chart = mdt.to_utils(achs_user_id=None).get_chart(difficulty)
+        chart = maidata.get_chart(difficulty)
         if chart is None:
             await matcher.finish(await reply("rc.maidata_invalid"))
             return
+        # TODO 未来考虑同时输出 cn 和 jp
         level = chart.lv_jp
 
     else:
