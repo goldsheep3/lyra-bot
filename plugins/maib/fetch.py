@@ -173,7 +173,7 @@ async def get_chart(raw_mdt: Mapping[str, str], short_id: int, chart_num: int) -
         shortid=short_id,
         difficulty=chart_num,
         lv_jp=lv,
-        des=str(raw_mdt.get(des_key, "")),
+        designer=str(raw_mdt.get(des_key, "")),
         inote=str(raw_mdt.get(inote_key, "")),
     )
 
@@ -219,7 +219,7 @@ async def parse_maidata(raw_mdt: Mapping[str, str], zip_path: Path | str) -> uti
         artist=artist,
         genre=genre,
         cabinet=cabinet,
-        version=version,
+        version_jp=version,
         version_cn=None,
         converter=converter,
         zip_path=zip_path,

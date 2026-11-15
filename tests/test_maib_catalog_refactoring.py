@@ -21,11 +21,12 @@ class CatalogRefactoringTest(unittest.IsolatedAsyncioTestCase):
         if plugin is None:
             raise RuntimeError("failed to load plugins.maib")
 
-        from plugins.maib import utils
+        from plugins.maib import config, utils
         from plugins.maib.services.models import MaiChart, MaiData, Model
         from plugins.maib.services.refactoring import catalog
 
         cls.catalog = catalog
+        cls.config = config
         cls.utils = utils
         cls.MaiChart = MaiChart
         cls.MaiData = MaiData
@@ -52,7 +53,7 @@ class CatalogRefactoringTest(unittest.IsolatedAsyncioTestCase):
             shortid=1,
             difficulty=5,
             lv_jp=13.7,
-            des="Designer",
+            designer="Designer",
         )
         song = self.utils.MaiData(
             shortid=1,
@@ -61,10 +62,13 @@ class CatalogRefactoringTest(unittest.IsolatedAsyncioTestCase):
             artist="Artist",
             genre=1,
             cabinet="DX",
-            version=25,
+            version_jp=25,
             version_cn=None,
             converter="provider-a",
             img_path=Path("covers/song.png"),
+            zip_path=Path("charts/song.zip"),
+            _tg_adx_id_cache="adx-file-id",
+            _tg_zip_id_cache="zip-file-id",
         )
         song.set_chart(chart)
         return song
@@ -87,6 +91,23 @@ class CatalogRefactoringTest(unittest.IsolatedAsyncioTestCase):
         assert chart is not None
         self.assertEqual(song.provider, "provider-a")
         self.assertEqual(chart.designer, "Designer")
+
+    async def test_get_song_returns_utils_data_and_resolves_pack_path(self) -> None:
+        self.assertIsNone(await self.catalog.get_maidata(999))
+        await self.catalog.sync_song_library([self._song()])
+
+        song = await self.catalog.get_maidata(1)
+
+        assert song is not None
+        self.assertIsInstance(song, self.utils.MaiData)
+        self.assertEqual(song.zip_path, Path("charts/song.zip"))
+        self.assertEqual(song.get_telegram_cache("adx"), "adx-file-id")
+        self.assertEqual(song.get_telegram_cache("zip"), "zip-file-id")
+        with patch.object(self.config, "CHART_DATA_DIR", "D:/maib-data"):
+            self.assertEqual(
+                song.get_zip_path(),
+                Path("D:/maib-data/charts/song.zip"),
+            )
 
     async def test_apply_cn_metadata_updates_song_and_chart(self) -> None:
         await self.catalog.sync_song_library([self._song()])

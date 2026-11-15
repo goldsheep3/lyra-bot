@@ -5,12 +5,13 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from ... import utils
 from ...utils.enums import Server, SLevelSource
 from .. import get_session
 from ..fetch import set_mct_level_batch, set_mdt_version_batch, sync_mdt_list
-from ..models import MaiData
+from ..models import MaiChart, MaiData
 from ..refresh import rfs_dxra_batch
 
 
@@ -18,6 +19,7 @@ __all__ = [
     "sync_song_library",
     "apply_cn_metadata",
     "has_song_library",
+    "get_maidata",
 ]
 
 
@@ -77,3 +79,18 @@ async def has_song_library() -> bool:
     async with get_session() as session:
         shortid = await session.scalar(select(MaiData.shortid).limit(1))
         return shortid is not None
+
+
+async def get_maidata(shortid: int) -> utils.MaiData | None:
+    """按 shortid 返回 utils 曲目，不向调用方暴露 ORM。"""
+    async with get_session() as session:
+        statement = (
+            select(MaiData)
+            .options(
+                selectinload(MaiData.charts).noload(MaiChart.achs),
+                selectinload(MaiData.aliases),
+            )
+            .where(MaiData.shortid == shortid)
+        )
+        song = (await session.execute(statement)).scalar_one_or_none()
+        return song.to_utils() if song is not None else None

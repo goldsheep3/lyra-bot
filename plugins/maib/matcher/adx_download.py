@@ -21,10 +21,8 @@ from nonebot.adapters.onebot.v11.exception import NetworkError
 from nonebot.adapters.telegram import Bot as TGBot, Event as TGEvent
 from nonebot.adapters.telegram.event import MessageEvent as TGMessageEvent
 
-from nonebot_plugin_localstore import get_plugin_data_dir
-
 from . import rule_is_group, rule_is_self
-from .. import services
+from .. import services, utils
 from ..utils import file_api
 from . import Reply, reply
 
@@ -265,16 +263,13 @@ async def adx_download_handled(
         await matcher.finish(await reply("ad.bad_id"))
         return
 
-    # 获取 MaiData
-    mdt: Optional[services.MaiData] = await services.get_mdt.id(target_short_id)
-    if not mdt:
+    maidata: Optional[utils.MaiData] = await services.refactoring.catalog.get_maidata(target_short_id)
+    if maidata is None:
         await matcher.finish(await reply("ad.no_maidata", short_id=target_short_id))
         return
-    if not mdt.zip_path:
-        await matcher.finish(await reply("ad.no_chart_file", short_id=target_short_id))
-        return
-    chart_file_path = get_plugin_data_dir() / mdt.zip_path
-    if not chart_file_path.exists():
+
+    chart_file_path = maidata.get_zip_path()
+    if chart_file_path is None or not chart_file_path.exists():
         await matcher.finish(await reply("ad.no_chart_file", short_id=target_short_id))
         return
 
@@ -283,7 +278,7 @@ async def adx_download_handled(
     
     file_ext = "zip" if "zip" in archive_type else "adx"
     file_name = f"{target_short_id}.{file_ext}"
-    title = mdt.title
+    title = maidata.title
 
     if isinstance(event, OneBotV11MessageEvent) and isinstance(bot, OneBotV11Bot):
         # OneBotV11
@@ -327,7 +322,7 @@ async def adx_download_handled(
         session_id = event.get_session_id()
         chat_id = int(session_id.split("_")[-1])
 
-        document = mdt._tg_adx_id_cache if file_ext == "adx" else mdt._tg_zip_id_cache
+        document = maidata.get_telegram_cache(file_ext)
         if document:
             try:
                 # 缓存命中，尝试直接发送文件

@@ -253,7 +253,7 @@ class MaiChartInfoBoard:
         
         metadata_img = cls._metadata(maidata=maidata, ms=ms, light_alias=light_alias)
         chart_jp_img = cls._charts(
-            charts=list(maidata.charts.values()), server=Server.JP, version=maidata.version, cabinet=maidata.cabinet,
+            charts=list(maidata.charts.values()), server=Server.JP, version=maidata.version_jp, cabinet=maidata.cabinet,
             maiuser=maiuser, ms=ms)
         chart_cn_img = cls._charts(
             charts=list(maidata.charts.values()), server=Server.CN, version=maidata.version_cn, cabinet=maidata.cabinet,

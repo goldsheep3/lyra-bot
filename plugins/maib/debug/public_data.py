@@ -22,7 +22,7 @@ def maidata(version: int = 18):
     aliases = ["小梨", "小梨酱", "小梨酱酱", "小梨酱酱酱", "小梨酱酱酱酱", "Lyra", "LyraBot", "DEBUG"]*2
     aliases.sort(key=lambda _: random.random())
     maidata = MaiData(shortid=11451, title="LyraTest", bpm=70, artist="GoldSheeeeeep3",
-                      genre=1, cabinet="DX", version=version, version_cn=None, converter="Debug",
+                      genre=1, cabinet="DX", version_jp=version, version_cn=None, converter="Debug",
                       img_path=Path(project_root) / "temp" / "debug_cover.png", zip_path=None,
                       aliases=[MaiAlias(shortid=11451, alias=a, create_at=datetime_now, create_qq=-1) for a in aliases])
     for i in range(2, 7):

@@ -34,7 +34,7 @@ class MaibBaselineTest(unittest.TestCase):
             lv_jp=13.7,
             lv_cn=13.6,
             lv_fit=13.65,
-            des="Designer",
+            designer="Designer",
         )
         maidata = self.utils.MaiData(
             shortid=1,
@@ -43,7 +43,7 @@ class MaibBaselineTest(unittest.TestCase):
             artist="Artist",
             genre=1,
             cabinet="DX",
-            version=25,
+            version_jp=25,
             version_cn=2025,
             converter="provider-a",
             img_path=Path(img_path),
@@ -94,7 +94,7 @@ class MaibBaselineTest(unittest.TestCase):
                     title="Updated Song",
                     img_path="covers/updated.png",
                 )
-                updated_data.version = 26
+                updated_data.version_jp = 26
                 updated_data.converter = "provider-b"
                 updated_chart = updated_data.get_chart(5)
                 assert updated_chart is not None

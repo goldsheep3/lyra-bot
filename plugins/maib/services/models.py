@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any, Literal, Optional
 
 from nonebot_plugin_datastore import get_plugin_data
-from nonebot_plugin_localstore import get_plugin_data_dir
 from sqlalchemy import String, Integer, Float, BigInteger, DateTime, ForeignKey, UniqueConstraint, Boolean
 from sqlalchemy.orm import Mapped as M, mapped_column as col, relationship, validates
 
@@ -279,7 +278,7 @@ class MaiChart(Model):
             lv_jp=self.lv_jp,
             lv_cn=self.lv_cn,
             lv_fit=self.lv_fit,
-            des=self.designer,
+            designer=self.designer,
             inote=self.inote,
             notes=self.notes,
         )
@@ -352,14 +351,19 @@ class MaiData(Model):
             artist=_get(source, "artist") or "",
             genre=_get(source, "genre"),
             cabinet=_get(source, "cabinet"),
-            version_jp=_get(source, "version"),
+            version_jp=_get(source, "version_jp"),
             version_cn=_get(source, "version_cn"),
             jp_is_plate_required=bool(_get(source, "jp_is_plate_required", True)),
             cn_is_plate_required=bool(_get(source, "cn_is_plate_required", True)),
             provider=_get(source, "converter") or "unknown",
             img_path=str(img_path) if img_path else "",
             zip_path=str(zip_path) if zip_path else None,
-            _tg_adx_id_cache=_get(source, "tg_file_id_cache"),
+            _tg_adx_id_cache=_get(
+                source,
+                "_tg_adx_id_cache",
+                _get(source, "tg_file_id_cache"),
+            ),
+            _tg_zip_id_cache=_get(source, "_tg_zip_id_cache"),
             is_utage=_get(source, "is_utage", False),
             utage_tag=_get(source, "utage_tag", ""),
             buddy=_get(source, "buddy", False),
@@ -381,12 +385,7 @@ class MaiData(Model):
 
     def to_utils(self, achs_user_id: Optional[int] = None) -> utils.MaiData:
         zip_path = Path(self.zip_path) if self.zip_path else None
-        if zip_path is not None and not zip_path.is_absolute():
-            zip_path = get_plugin_data_dir() / zip_path
-
         img_path = Path(self.img_path) if self.img_path else Path("bg.png")
-        if not img_path.is_absolute():
-            img_path = get_plugin_data_dir() / img_path
 
         maidata = utils.MaiData(
             shortid=self.shortid,
@@ -395,14 +394,15 @@ class MaiData(Model):
             artist=self.artist or "",
             genre=self.genre,
             cabinet=self.cabinet,
-            version=self.version_jp,
+            version_jp=self.version_jp,
             version_cn=self.version_cn,
             jp_is_plate_required=self.jp_is_plate_required,
             cn_is_plate_required=self.cn_is_plate_required,
             converter=self.provider or "",
             img_path=img_path,
             zip_path=zip_path,
-            tg_file_id_cache=self._tg_adx_id_cache,
+            _tg_adx_id_cache=self._tg_adx_id_cache,
+            _tg_zip_id_cache=self._tg_zip_id_cache,
             is_utage=self.is_utage,
             utage_tag=self.utage_tag if self.is_utage and isinstance(self.utage_tag, str) else "",
             buddy=bool(self.buddy and self.is_utage),

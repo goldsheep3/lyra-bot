@@ -7,16 +7,20 @@ import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, Literal
-from contextlib import contextmanager, ExitStack, AbstractContextManager
+from contextlib import contextmanager, ExitStack
 from collections.abc import Generator
 from PIL import Image
-from loguru import logger
+
+from nonebot import logger
+from nonebot_plugin_localstore import get_plugin_data_dir
 
 from .calculator import get_dxrating, get_dxscore_max, get_dxscore_star_count, get_level_plus_line
-from ..utils.constants import DEFAULT_DATETIME
-from ..utils.map import ComboID, SyncID, GenreID, DifficultyID, VersionID, Versions
+from .constants import DEFAULT_DATETIME
+from .map import ComboID, SyncID, GenreID, DifficultyID, VersionID, Versions
 from .enums import Server, SLevelSource
 from .type import Achievement
+
+from .. import config
 
 
 __all__ = [
@@ -125,7 +129,7 @@ class MaiChart:
     lv_jp: float
     lv_cn: Optional[float] = None
     lv_fit: Optional[float] = None
-    des: str = ""
+    designer: str = ""
     inote: str = ""
     notes: dict[str, int] = field(
         default_factory=lambda: {"tap": 0, "hold": 0, "slide": 0, "touch": 0, "break": 0}
@@ -133,6 +137,14 @@ class MaiChart:
     _achs: dict[Server, Optional[MaiChartAch]] = field(
         default_factory=lambda: {server: None for server in Server}
     )
+
+    @property
+    def des(self) -> str:
+        return self.designer
+
+    @des.setter
+    def des(self, value: str):
+        self.designer = value
 
     @property
     def note_count(self) -> int:
@@ -216,31 +228,35 @@ class MaiChart:
 @dataclass
 class MaiData:
     """maimai 歌曲元数据"""
-    shortid: int
-    title: str
-    bpm: int
-    artist: str
-    genre: GenreID
-    cabinet: Literal['SD', 'DX']
-    version: int
-    version_cn: Optional[int]
-    converter: str
-    img_path: Path
-    zip_path: Optional[Path] = None
-    _cached_image: Optional[Image.Image] = None
-    tg_file_id_cache: Optional[str] = None
-    is_utage: bool = False
-    utage_tag: str = ""
-    buddy: bool = False
-    jp_is_plate_required: bool = True
-    cn_is_plate_required: bool = True
+    shortid: int        # MaiData 乐曲唯一 ShortID
+    title: str          # 乐曲名
+    bpm: int            # 乐曲 BPM（速度）
+    artist: str         # 乐曲艺术家
+    genre: GenreID      # 乐曲流派 ID
+    cabinet: Literal['SD', 'DX']  # 乐曲谱面类型
+    version_jp: int             # 乐曲在 JP 服务器的版本 ID
+    version_cn: Optional[int]   # 乐曲在 CN 服务器的版本 ID
+    converter: str              # 乐曲数据提供者
+    img_path: Path              # 乐曲封面图片路径（相对）
+    zip_path: Optional[Path] = None  # 乐曲数据压缩包路径（相对）
+
+    is_utage: bool = False      # 是否为 UTAGE 曲目
+    utage_tag: str = " "        # UTAGE 曲目标签
+    buddy: bool = False         # 乐曲是否为 UTAGE/Buddy 曲目
+    jp_is_plate_required: bool = True  # JP 服务器对应版本获取牌子时是否需要该乐曲
+    cn_is_plate_required: bool = True  # CN 服务器对应版本获取牌子时是否需要该乐曲
     _charts: dict[DifficultyID, Optional[MaiChart]] = field(
         default_factory=lambda: {i: None for i in range(1, 8)}
     )
     aliases: list[MaiAlias] = field(default_factory=list)
 
+    # Telegram 文件 ID 缓存
+    _tg_adx_id_cache: Optional[str] = None
+    _tg_zip_id_cache: Optional[str] = None
+
     # 特殊字段
     _matched_alias: Optional[str] = None  # 搜索时触发的别名缓存
+    _cached_image: Optional[Image.Image] = None
 
     @property
     def is_cabinet_dx(self) -> bool:
@@ -258,56 +274,79 @@ class MaiData:
             return self.cn_is_plate_required
         raise KeyError(f"Invalid server: {server}")
 
+    def get_telegram_cache(self, file_type: Literal["adx", "zip"]) -> Optional[str]:
+        """获取 Telegram 文件 ID 缓存"""
+        if file_type == "adx":
+            return self._tg_adx_id_cache
+        elif file_type == "zip":
+            return self._tg_zip_id_cache
+        else:
+            raise ValueError(f"Invalid file type: {file_type}")
+
+    @staticmethod
+    def _resolve_data_path(path: Path) -> Path:
+        if path.is_absolute():
+            return path
+        elif config.CHART_DATA_DIR:
+            return Path(config.CHART_DATA_DIR) / path
+        else:
+            return get_plugin_data_dir() / path
+
+    def get_zip_path(self) -> Optional[Path]:
+        """获取乐曲数据压缩包路径"""
+        if not self.zip_path:
+            return None
+        return self._resolve_data_path(self.zip_path)
+
     @contextmanager
     def image(self) -> Generator[Optional[Image.Image], None, None]:
         """
         上下文管理器：打开图片，使用后自动关闭底层资源。
         """
-        path_str = str(self.img_path)
+        path_str = str(self._resolve_data_path(self.img_path))
         lower = path_str.lower()
         zip_pos = lower.find(".zip")
 
         # 1. 处理 zip 内图片
-        if zip_pos != -1:
+        if zip_pos >= 0:
             zip_end = zip_pos + len(".zip")
             zip_path = Path(path_str[:zip_end])
             inner_path = path_str[zip_end:].lstrip("/\\") or "bg.png"
+            if not zip_path.exists():
+                yield None
+                return
 
-            if zip_path.exists():
-                stack = ExitStack()
-                try:
-                    zf = stack.enter_context(zipfile.ZipFile(zip_path))
-                    raw_data = zf.read(inner_path)
-                    buf = stack.enter_context(io.BytesIO(raw_data))
-                    
-                    img = Image.open(buf)
-                    stack.callback(img.close)
+            stack = ExitStack()
+            try:
+                zf = stack.enter_context(zipfile.ZipFile(zip_path))
+                raw_data = zf.read(inner_path)
+                buf = stack.enter_context(io.BytesIO(raw_data))
 
-                except Exception as exc:
-                    stack.close()
-                    logger.error(f"Failed to open image in zip: {exc}")
-                    yield None
-                    return
+                img = Image.open(buf)
+                stack.callback(img.close)
 
-                with stack:
-                    yield img
+            except Exception as exc:
+                stack.close()
+                logger.error(f"Failed to open image in zip: {exc}")
+                yield None
                 return
 
         # 2. 处理普通文件图片
-        p = Path(path_str)
-        if not (p.exists() and p.is_file()):
-            yield None
-            return
+        else:
+            p = Path(path_str)
+            if not (p.exists() and p.is_file()):
+                yield None
+                return
 
-        stack = ExitStack()
-        try:
-            img = Image.open(p)
-            stack.callback(img.close)
-        except Exception as exc:
-            stack.close()
-            logger.error(f"Failed to open image file: {exc}")
-            yield None
-            return
+            stack = ExitStack()
+            try:
+                img = Image.open(p)
+                stack.callback(img.close)
+            except Exception as exc:
+                stack.close()
+                logger.error(f"Failed to open image file: {exc}")
+                yield None
+                return
 
         with stack:
             yield img
@@ -336,7 +375,7 @@ class MaiData:
 
     def is_b15(self, version: int) -> bool:
         """判断该 MaiData 曲目是否属于对应版本 best15 部分（而不是 best35 部分）"""
-        ver = self.version
+        ver = self.version_jp
         limit = 0
         if version < 0:
             return False

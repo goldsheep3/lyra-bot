@@ -1,8 +1,8 @@
 # maib services 边界审计
 
-> 生成日期：2026-11-13
+> 生成日期：2026-11-15
 > 审计来源：`tests/test_maib_services_boundary.py`  
-> 当前结果：58 处外部 services 调用，29 个未解决不纯事项；fetch 曲库维护闭包与 Aime 闭包已解决原清单中的 13 项。
+> 当前结果：58 处外部 services 调用，27 个未解决不纯事项；fetch、Aime 与谱面下载闭包已解决原清单中的 15 项。
 
 ## 边界判定标准
 
@@ -35,13 +35,13 @@ services 外部不应：
 
 | 类别 | 数量 |
 |---|---:|
-| ORM API | 22 |
-| ORM 引用 | 5 |
+| ORM API | 21 |
+| ORM 引用 | 4 |
 | ORM 导入 | 1 |
 | 内部 API | 1 |
 | Session 越界 | 0 |
-| **未解决合计** | **29** |
-| 已解决（fetch + Aime） | 13 |
+| **未解决合计** | **27** |
+| 已解决（fetch + Aime + 谱面下载） | 15 |
 
 ## 逐项审查表
 
@@ -57,8 +57,8 @@ services 外部不应：
 | 06 | [x] | [`fetch.py`](../fetch.py) | `refactoring.catalog.apply_cn_metadata` | Session 越界 | DX Rating 刷新已收回 services。 | 更新或刷新失败时整体回滚。 |
 | 07 | [x] | [`fetch.py`](../fetch.py) | `refactoring.catalog.has_song_library` | 内部 API | 维护任务已不再直接查询数据库。 | 公开 API 返回 `bool`。 |
 | 08 | [x] | [`fetch.py`](../fetch.py) | `refactoring.catalog.has_song_library` | ORM 引用 | `select(MaiData)` 已收回 services。 | `fetch` 仅根据布尔结果决定是否重建。 |
-| 09 | [ ] | [`matcher/adx_download.py:269`](../matcher/adx_download.py#L269) | `get_mdt.id` | ORM API | 下载 matcher 获取 ORM 曲目。 | 改用返回 `utils.MaiData` 的 `get_song()`；缓存 ID 更新仍走 services。 |
-| 10 | [ ] | [`matcher/adx_download.py:269`](../matcher/adx_download.py#L269) | `MaiData` | ORM 引用 | matcher 类型标注依赖 services ORM。 | 改为 `utils.MaiData | None`。 |
+| 09 | [x] | [`matcher/adx_download.py`](../matcher/adx_download.py) | `refactoring.catalog.get_maidata` | ORM API | 已改用异步曲目查询并返回 `utils.MaiData`。 | 谱面包路径与 Telegram 缓存均由 utils 对象提供。 |
+| 10 | [x] | [`matcher/adx_download.py`](../matcher/adx_download.py) | `utils.MaiData` | ORM 引用 | matcher 已不再引用 services ORM。 | 使用 `utils.MaiData | None` 并处理未找到分支。 |
 | 11 | [ ] | [`matcher/alias.py:52`](../matcher/alias.py#L52) | `get_mdt.id` | ORM API | 别名 matcher 为判断曲目存在而获取 ORM。 | 使用 `get_song()` 或轻量 `song_exists(shortid)`。 |
 | 12 | [ ] | [`matcher/alias.py:52`](../matcher/alias.py#L52) | `MaiData` | ORM 引用 | matcher 类型标注依赖 services ORM。 | 改为 `utils.MaiData | None`，或在只判存在时去掉对象。 |
 | 13 | [ ] | [`matcher/context.py:56`](../matcher/context.py#L56) | `check_mu` | ORM API | 平台用户解析返回 ORM `MaiUser`。 | AID 前先改为返回 `utils.MaiUser`；AID 后由 locales 解析身份。 |

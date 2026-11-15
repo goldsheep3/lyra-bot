@@ -43,6 +43,7 @@ PURE_SERVICE_APIS = {
     "refactoring.aime.unlink",
     "refactoring.catalog.apply_cn_metadata",
     "refactoring.catalog.has_song_library",
+    "refactoring.catalog.get_song",
     "refactoring.catalog.sync_song_library",
 }
 
@@ -310,8 +311,6 @@ def scan_external_services_usage() -> tuple[list[ServiceCall], list[BoundaryViol
 # repeated calls in the same file visible as new boundary debt.
 KNOWN_IMPURE_USAGE_MAXIMUMS: Counter[tuple[str, str, str]] = Counter(
     {
-        ("plugins/maib/matcher/adx_download.py", "MaiData", "references_services_orm"): 1,
-        ("plugins/maib/matcher/adx_download.py", "get_mdt.id", "calls_orm_service_api"): 1,
         ("plugins/maib/matcher/alias.py", "MaiData", "references_services_orm"): 1,
         ("plugins/maib/matcher/alias.py", "get_mdt.id", "calls_orm_service_api"): 1,
         ("plugins/maib/matcher/context.py", "check_mu", "calls_orm_service_api"): 1,
