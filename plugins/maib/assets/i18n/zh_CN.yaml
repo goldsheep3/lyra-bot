@@ -79,8 +79,15 @@ alias:
   add:
     success: "成功为 {shortid} 添加别名【{alias}】！"
     already_exists: "这个别名似乎已经存在了捏~"
+    failed:
+      unknown: "添加别名时遇到了未知问题，请稍后再试~"
   remove:
     deletion_not_supported: "目前还不能自助删除别名喔~"
+    not_found: "没有找到这个别名喔~"
+    not_owner: "这个别名不是你添加的，暂时不能删除喔~"
+    success: "成功为 {shortid} 删除别名【{alias}】！"
+    failed:
+      unknown: "删除别名时遇到了未知问题，请稍后再试~"
 
 # b50
 b50:

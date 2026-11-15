@@ -2,7 +2,7 @@
 
 > 生成日期：2026-11-15
 > 审计来源：`tests/test_maib_services_boundary.py`  
-> 当前结果：58 处外部 services 调用，26 个未解决不纯事项；fetch、Aime 与曲目查询闭包已解决原清单中的 16 项。
+> 当前结果：58 处外部 services 调用，24 个未解决不纯事项；fetch、Aime、曲目查询与别名闭包已解决原清单中的 18 项。
 
 ## 边界判定标准
 
@@ -35,13 +35,13 @@ services 外部不应：
 
 | 类别 | 数量 |
 |---|---:|
-| ORM API | 20 |
-| ORM 引用 | 4 |
+| ORM API | 19 |
+| ORM 引用 | 3 |
 | ORM 导入 | 1 |
 | 内部 API | 1 |
 | Session 越界 | 0 |
-| **未解决合计** | **26** |
-| 已解决（fetch + Aime + 曲目查询） | 16 |
+| **未解决合计** | **24** |
+| 已解决（fetch + Aime + 曲目查询 + 别名） | 18 |
 
 ## 逐项审查表
 
@@ -59,8 +59,8 @@ services 外部不应：
 | 08 | [x] | [`fetch.py`](../fetch.py) | `refactoring.catalog.has_song_library` | ORM 引用 | `select(MaiData)` 已收回 services。 | `fetch` 仅根据布尔结果决定是否重建。 |
 | 09 | [x] | [`matcher/adx_download.py`](../matcher/adx_download.py) | `refactoring.catalog.get_maidata` | ORM API | 已改用异步曲目查询并返回 `utils.MaiData`。 | 谱面包路径与 Telegram 缓存均由 utils 对象提供。 |
 | 10 | [x] | [`matcher/adx_download.py`](../matcher/adx_download.py) | `utils.MaiData` | ORM 引用 | matcher 已不再引用 services ORM。 | 使用 `utils.MaiData | None` 并处理未找到分支。 |
-| 11 | [ ] | [`matcher/alias.py:52`](../matcher/alias.py#L52) | `get_mdt.id` | ORM API | 别名 matcher 为判断曲目存在而获取 ORM。 | 使用 `get_maidata()` 或轻量 `song_exists(shortid)`。 |
-| 12 | [ ] | [`matcher/alias.py:52`](../matcher/alias.py#L52) | `MaiData` | ORM 引用 | matcher 类型标注依赖 services ORM。 | 改为 `utils.MaiData | None`，或在只判存在时去掉对象。 |
+| 11 | [x] | [`matcher/alias.py`](../matcher/alias.py) | `refactoring.alias.add_alias` | ORM API | 曲目校验、重复判断与新增已收回同一 services 事务。 | 公开 API 仅接收标量并返回轻量状态。 |
+| 12 | [x] | [`matcher/alias.py`](../matcher/alias.py) | `refactoring.alias.remove_alias` | ORM 引用 | matcher 已不再引用曲目或别名 ORM。 | 仅允许 `create_qq == qq` 的创建者删除别名。 |
 | 13 | [ ] | [`matcher/context.py:56`](../matcher/context.py#L56) | `check_mu` | ORM API | 平台用户解析返回 ORM `MaiUser`。 | AID 前先改为返回 `utils.MaiUser`；AID 后由 locales 解析身份。 |
 | 14 | [ ] | [`matcher/context.py:58`](../matcher/context.py#L58) | `get_mu_from_tgid` | ORM API | Telegram 账号查找返回 ORM。 | 账号绑定迁移到 locales，services 只接收 AID 并返回 utils 用户。 |
 | 15 | [ ] | [`matcher/context.py:80`](../matcher/context.py#L80) | `get_mdt.id` | ORM API | 上下文加载曲目后在 matcher 调用 `to_utils()`。 | services 根据用户/provider scope 直接返回 `utils.MaiData`。 |

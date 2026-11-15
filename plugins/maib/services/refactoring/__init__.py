@@ -3,6 +3,6 @@
 这些模块稳定后会移动到 :mod:`plugins.maib.services` 顶层。
 """
 
-from . import aime, catalog
+from . import aime, alias, catalog
 
-__all__ = ["aime", "catalog"]
+__all__ = ["aime", "alias", "catalog"]

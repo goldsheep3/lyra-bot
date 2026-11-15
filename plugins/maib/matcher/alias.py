@@ -1,5 +1,5 @@
-from typing import Optional
 import re
+from typing import Literal, Optional
 
 from nonebot import on_regex
 from nonebot.params import RegexGroup
@@ -49,26 +49,42 @@ async def mai_alias_handled(event: Event, matcher: Matcher, groups: tuple = Rege
         return
 
     try:
-        mdt: Optional[services.MaiData] = await services.get_mdt.id(short_id)
-        if not mdt:
-            raise ValueError
-    except (ValueError, TypeError):
-        await matcher.finish(await reply("info.invalid_id"))
-        return
-
-    try:
         maiuser = await get_maiuser(event)
     except ValueError as e:
         await matcher.finish(str(e))
         return
-
-    qq = maiuser.user_id
-    if action == "添加":
-        # 添加别名
-        new_alias = await services.add_ma(short_id, alias, qq)
-        if new_alias:
-            await matcher.finish(await reply("alias.add.success", shortid=str(short_id), alias=alias))
-        else:
-            await matcher.finish(await reply("alias.add.already_exists"))
     else:
-        await matcher.finish(await reply("alias.remove.deletion_not_supported"))
+        qq = maiuser.user_id
+
+    if action in ("添加",):
+        add_status = await services.refactoring.alias.add_alias(short_id, alias, qq=qq)
+        if add_status == "missing":
+            await matcher.finish(await reply("info.invalid_id"))
+            return
+        elif add_status == "exists":
+            await matcher.finish(await reply("alias.add.already_exists"))
+            return
+        elif add_status == "success":
+            await matcher.finish(await reply("alias.add.success", shortid=str(short_id), alias=alias))
+            return
+        else:
+            await matcher.finish(await reply("alias.add.failed.unknown"))
+            return
+
+    elif action in ("删除",):
+        del_status = await services.refactoring.alias.remove_alias(short_id, alias, qq=qq)
+        if del_status == "missing":
+            await matcher.finish(await reply("info.invalid_id"))
+            return
+        elif del_status == "not_exists":
+            await matcher.finish(await reply("alias.remove.not_found"))
+            return
+        elif del_status == "not_owner":
+            await matcher.finish(await reply("alias.remove.not_owner"))
+            return
+        elif del_status == "success":
+            await matcher.finish(await reply("alias.remove.success", shortid=str(short_id), alias=alias))
+            return
+        else:
+            await matcher.finish(await reply("alias.remove.failed.unknown"))
+            return
