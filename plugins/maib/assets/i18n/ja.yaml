@@ -79,8 +79,15 @@ alias:
   add:
     success: "{shortid} に別名【{alias}】を追加しました！"
     already_exists: "この別名はすでに存在するようです～"
+    failed:
+      unknown: "別名の追加中に不明な問題が発生しました。しばらくしてから再度お試しください～"
   remove:
     deletion_not_supported: "現在、別名のセルフ削除はサポートされていません～"
+    not_found: "その別名は見つかりませんでした～"
+    not_owner: "この別名はあなたが追加したものではないため、今は削除できません～"
+    success: "{shortid} から別名【{alias}】を削除しました！"
+    failed:
+      unknown: "別名の削除中に不明な問題が発生しました。しばらくしてから再度お試しください～"
 
 # b50
 b50:

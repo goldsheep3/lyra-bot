@@ -79,8 +79,15 @@ alias:
   add:
     success: "Successfully added alias [{alias}] for {shortid}!"
     already_exists: "This alias seems to already exist~"
+    failed:
+      unknown: "Something went wrong while adding the alias. Please try again later~"
   remove:
     deletion_not_supported: "Self-service alias deletion is not supported yet~"
+    not_found: "Couldn't find that alias~"
+    not_owner: "This alias wasn't added by you, so it can't be deleted for now~"
+    success: "Successfully removed alias [{alias}] from {shortid}!"
+    failed:
+      unknown: "Something went wrong while deleting the alias. Please try again later~"
 
 # b50
 b50:
