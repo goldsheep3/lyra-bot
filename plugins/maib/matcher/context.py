@@ -46,7 +46,7 @@ def get_args(args_text: str) -> tuple[Optional[int], Optional[ServerScope]]:
 async def get_or_create_maiuser(event: Event, target_id: int | None = None) -> utils.MaiUser:
     if isinstance(event, OneBotV11Event):
         qq = target_id if target_id is not None else int(event.get_user_id())
-        return await services.refactoring.user.get_or_create_maiuser_qq(qq)
+        return await services.refactoring.user.get_or_create_maiuser_from_qq(qq)
     elif isinstance(event, TGEvent):
         tg_id = target_id if target_id is not None else int(event.get_user_id())
         return await services.refactoring.user.get_or_create_maiuser_from_tg(tg_id)

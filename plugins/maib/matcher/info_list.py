@@ -118,7 +118,7 @@ async def b50_handled(event: Event, matcher: Matcher, groups: dict = RegexDict()
         except Exception as e:
             logger.warning(f"强制刷新水鱼数据失败: {e}")
 
-    maiuser = await services.refactoring.user.get_or_create_maiuser_qq(target_qq)
+    maiuser = await services.refactoring.user.get_or_create_maiuser_from_qq(target_qq)
 
     # 获取 services 内已完成 provider 过滤和 ORM 转换的 B50 DTO
     if scope == ServerScope.ALL:

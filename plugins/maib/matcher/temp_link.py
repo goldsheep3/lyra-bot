@@ -55,7 +55,7 @@ async def link_handled(event: Event, matcher: Matcher, groups: tuple = RegexGrou
         
         # 存储到缓存中
         user_id = int(event.get_user_id())
-        _ = await services.check_mu(user_id)
+        await services.refactoring.user.get_or_create_maiuser_from_qq(user_id, without_name=True)
         if old_link := link_cache.get(user_id):
             link_hash_index.pop(old_link[0], None)
         link_cache[user_id] = (hash_value, expiration_time)
@@ -77,9 +77,9 @@ async def link_handled(event: Event, matcher: Matcher, groups: tuple = RegexGrou
         elif isinstance(event, TGEvent):
             # TG 端解绑当前账号
             telegram_id = int(event.get_user_id())
-            mu = await services.get_mu_from_tgid(telegram_id)
-            if mu:
-                await services.del_mu_tgid(mu.qq)
+            qq = await services.refactoring.link.get_qq_from_tg(telegram_id)
+            if qq is not None:
+                await services.del_mu_tgid(qq)
             await matcher.finish(await reply("link.unlink_success"))
             return
         await matcher.finish(await reply("link.not_platform"))

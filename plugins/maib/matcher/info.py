@@ -98,7 +98,7 @@ async def mai_info_handled(event: Event, matcher: Matcher, groups: tuple = Regex
         await matcher.finish(await reply("info.maidata_not_found", short_id=shortid))
         return
 
-    maiuser = await services.refactoring.user.get_or_create_maiuser_qq(target_qq) if target_qq is not None else None
+    maiuser = await services.refactoring.user.get_or_create_maiuser_from_qq(target_qq) if target_qq is not None else None
     info_box = image_gen.draw_info_board(maidata, maiuser=maiuser)
     info_box_bytes = image_gen.get_image_bytes(info_box)
     

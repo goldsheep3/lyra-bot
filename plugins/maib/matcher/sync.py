@@ -131,7 +131,7 @@ async def get_sy_and_upload(user_id: int) -> MaiChartAchDiffReport:
 
 async def check_sync_cn(*, qq: int, ignore_cache_expire: bool = False) -> MaiChartAchDiffReport | None:
     # 1. 统一获取 MaiUser 对象
-    maiuser = await services.refactoring.user.get_or_create_maiuser_qq(qq)
+    maiuser = await services.refactoring.user.get_or_create_maiuser_from_qq(qq)
     
     # 2. 缓存有效性检查
     if not ignore_cache_expire:
