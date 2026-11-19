@@ -77,10 +77,19 @@ async def get_maidata_with_ach(
     user_id: int,
 ) -> Optional[tuple[utils.MaiData, Server]]:
     """Load music data with a user's achievement and apply server fallback."""
-    mdt = await services.get_mdt.id(short_id, user_id)
-    if not mdt:
+    maidata = await services.refactoring.catalog.get_maidata(
+        short_id,
+        qq=user_id,
+        # 需要保留目标服缺少定数时回退 JP 的成绩，因此一次加载两服默认 provider。
+        server=ServerScope.ALL,
+    )
+    if maidata is None:
         return None
 
-    maidata = mdt.to_utils(achs_user_id=user_id)
-    actual_server = Server.JP if (getattr(maidata, SLevelSource.server(target_server).lv_field, None) is None) else target_server
+    level_field = SLevelSource.server(target_server).lv_field
+    has_target_level = any(
+        getattr(chart, level_field, None) is not None
+        for chart in maidata.charts.values()
+    )
+    actual_server = target_server if has_target_level else Server.JP
     return maidata, actual_server

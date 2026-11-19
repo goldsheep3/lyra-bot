@@ -277,7 +277,10 @@ async def file_receiver_handled(bot: Bot, event: Event, matcher: Matcher, reply:
             if key in title_type_cache:
                 return title_type_cache[key]
 
-            song_list = await services.get_mdt.title(title, way='title')
+            song_list = await services.refactoring.catalog.search_maidata(
+                title,
+                mode="title",
+            )
             if len(song_list) == 0:
                 logger.warning(f"无法找到曲目: {title}")
                 result = (None, title)

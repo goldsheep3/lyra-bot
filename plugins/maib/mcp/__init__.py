@@ -10,7 +10,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from .. import services
+from .. import services, utils
 from .sql import ReadOnlySqlError, execute_readonly_sql
 
 
@@ -33,7 +33,7 @@ class _BearerTokenMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
-def _serialize_song(song: services.MaiData) -> dict[str, Any]:
+def _serialize_song(song: utils.MaiData) -> dict[str, Any]:
     return {
         "shortid": song.shortid,
         "title": song.title,
@@ -46,10 +46,10 @@ def _serialize_song(song: services.MaiData) -> dict[str, Any]:
         "is_utage": song.is_utage,
         "utage_tag": song.utage_tag,
         "buddy": song.buddy,
-        "aliases": [alias.name for alias in song.aliases],
+        "aliases": [alias.alias for alias in song.aliases],
         "charts": [
             {
-                "id": chart.id,
+                "id": chart._id,
                 "difficulty": chart.difficulty,
                 "lv_jp": chart.lv_jp,
                 "lv_cn": chart.lv_cn,
@@ -59,7 +59,7 @@ def _serialize_song(song: services.MaiData) -> dict[str, Any]:
                 "notes": chart.notes,
                 "dxscore_max": chart.dxscore_max,
             }
-            for chart in sorted(song.charts, key=lambda chart: chart.difficulty)
+            for chart in sorted(song.charts.values(), key=lambda chart: chart.difficulty)
         ],
     }
 
@@ -78,13 +78,13 @@ async def search_song(
     keyword: str,
     mode: Literal["smart", "title", "name", "blur"] = "smart",
 ) -> list[dict[str, Any]]:
-    songs = await services.get_mdt.title(keyword, way=mode)
+    songs = await services.refactoring.catalog.search_maidata(keyword, mode=mode)
     return [_serialize_song(song) for song in songs]
 
 
 @server.tool(description="通过 maib shortid 获取一首 maimai DX 曲目的完整资料和所有谱面。")
 async def get_song(shortid: int) -> dict[str, Any] | None:
-    song = await services.get_mdt.id(shortid)
+    song = await services.refactoring.catalog.get_maidata(shortid)
     return _serialize_song(song) if song is not None else None
 
 

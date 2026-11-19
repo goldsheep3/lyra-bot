@@ -276,6 +276,7 @@ class MaiChart(Model):
             shortid=self.shortid,
             difficulty=self.difficulty,
             lv_jp=self.lv_jp,
+            _id=self.id,
             lv_cn=self.lv_cn,
             lv_fit=self.lv_fit,
             designer=self.designer,

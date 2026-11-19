@@ -46,6 +46,7 @@ PURE_SERVICE_APIS = {
     "refactoring.catalog.apply_cn_metadata",
     "refactoring.catalog.has_song_library",
     "refactoring.catalog.get_maidata",
+    "refactoring.catalog.search_maidata",
     "refactoring.catalog.sync_song_library",
 }
 
@@ -314,12 +315,8 @@ def scan_external_services_usage() -> tuple[list[ServiceCall], list[BoundaryViol
 KNOWN_IMPURE_USAGE_MAXIMUMS: Counter[tuple[str, str, str]] = Counter(
     {
         ("plugins/maib/matcher/context.py", "check_mu", "calls_orm_service_api"): 1,
-        ("plugins/maib/matcher/context.py", "get_mdt.id", "calls_orm_service_api"): 1,
         ("plugins/maib/matcher/context.py", "get_mu_from_tgid", "calls_orm_service_api"): 1,
-        ("plugins/maib/matcher/info.py", "MaiData", "references_services_orm"): 1,
         ("plugins/maib/matcher/info.py", "check_mu", "calls_orm_service_api"): 1,
-        ("plugins/maib/matcher/info.py", "get_mdt.id", "calls_orm_service_api"): 1,
-        ("plugins/maib/matcher/info.py", "get_mdt.title", "calls_orm_service_api"): 1,
         ("plugins/maib/matcher/info.py", "get_mu_from_tgid", "calls_orm_service_api"): 1,
         ("plugins/maib/matcher/info_list.py", "MaiChartAch", "references_services_orm"): 1,
         ("plugins/maib/matcher/info_list.py", "check_mu", "calls_orm_service_api"): 1,
@@ -328,12 +325,8 @@ KNOWN_IMPURE_USAGE_MAXIMUMS: Counter[tuple[str, str, str]] = Counter(
         ("plugins/maib/matcher/info_list.py", "get_mu_from_tgid", "calls_orm_service_api"): 1,
         ("plugins/maib/matcher/sync.py", "MaiUser", "imports_services_orm"): 1,
         ("plugins/maib/matcher/sync.py", "check_mu", "calls_orm_service_api"): 2,
-        ("plugins/maib/matcher/sync.py", "get_mdt.title", "calls_orm_service_api"): 1,
         ("plugins/maib/matcher/temp_link.py", "check_mu", "calls_orm_service_api"): 1,
         ("plugins/maib/matcher/temp_link.py", "get_mu_from_tgid", "calls_orm_service_api"): 1,
-        ("plugins/maib/mcp/__init__.py", "MaiData", "references_services_orm"): 1,
-        ("plugins/maib/mcp/__init__.py", "get_mdt.id", "calls_orm_service_api"): 1,
-        ("plugins/maib/mcp/__init__.py", "get_mdt.title", "calls_orm_service_api"): 1,
         ("plugins/maib/mcp/__init__.py", "get_session", "calls_internal_service_api"): 1,
     }
 )

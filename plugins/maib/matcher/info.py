@@ -107,17 +107,20 @@ async def mai_info_handled(event: Event, matcher: Matcher, groups: tuple = Regex
     target_maiuser = target_mu.to_utils() if target_mu else None
 
     # 查询乐曲信息
-    mdt: Optional[services.MaiData] = await services.get_mdt.id(shortid, target_qq)
-    if mdt is None:
+    maidata = await services.refactoring.catalog.get_maidata(
+        shortid,
+        qq=target_qq,
+        server=scope,
+    )
+    if maidata is None:
         await matcher.finish(await reply("info.maidata_not_found", short_id=shortid))
         return
-    maidata = mdt.to_utils(achs_user_id=target_qq)
 
     info_box = image_gen.draw_info_board(maidata, maiuser=target_maiuser)
     info_box_bytes = image_gen.get_image_bytes(info_box)
     
     payload = [
-        ("text", f"{mdt.shortid}. {mdt.title}"),
+        ("text", f"{maidata.shortid}. {maidata.title}"),
         ("image", info_box_bytes)
     ]
     
@@ -147,7 +150,11 @@ async def mai_what_song_handled(event: Event, matcher: Matcher, groups: tuple = 
 
     try:
         # 搜索歌曲
-        mdt_list = list(await services.get_mdt.title(keyword, achs_user_id=qq, way="blur" if blur_search else "smart"))
+        mdt_list = await services.refactoring.catalog.search_maidata(
+            keyword,
+            qq=qq,
+            mode="blur" if blur_search else "smart",
+        )
     except ValueError as exc:
         await matcher.finish(str(exc))
         return
@@ -158,21 +165,9 @@ async def mai_what_song_handled(event: Event, matcher: Matcher, groups: tuple = 
         await matcher.finish(await reply("info.found_none", keyword=keyword))
         return
 
-    def _inject_matched_alias(mdt, keyword: str) -> str | None:
-        """检查 ORM 对象的别名是否匹配关键词，返回匹配的别名或 None"""
-        kw_lower = keyword.lower()
-        if kw_lower == mdt.title.lower():
-            return None  # 标题本身匹配，不是别名匹配
-        for alias in mdt.aliases:
-            if kw_lower in alias.name.lower() or alias.name.lower() == kw_lower:
-                return alias.name
-        return None
-
-    def generate_single_info_box(mdt, matched_alias: str | None = None) -> bytes:
+    def generate_single_info_box(maidata) -> bytes:
         """生成单首乐曲的 info box 图片字节，返回 (图片字节, 别名匹配提示)"""
-        maidata = mdt.to_utils(achs_user_id=qq)
-        if matched_alias:
-            maidata._matched_alias = matched_alias
+        matched_alias = maidata._matched_alias
         info_box = image_gen.draw_info_board(maidata, maiuser=maiuser, light_alias=matched_alias)
         info_bytes = image_gen.get_image_bytes(info_box)
         return info_bytes
@@ -182,16 +177,14 @@ async def mai_what_song_handled(event: Event, matcher: Matcher, groups: tuple = 
     
     if len(mdt_list) == 1:
         mdt = mdt_list[0]
-        matched_alias = _inject_matched_alias(mdt, keyword)
         payload.append(("text", await reply("info.found_single", shortid=mdt.shortid, title=mdt.title)))
-        img_bytes = generate_single_info_box(mdt, matched_alias)
+        img_bytes = generate_single_info_box(mdt)
         payload.append(("image", img_bytes))
 
     elif len(mdt_list) <= 4:
         payload.append(("text", await reply("info.found_multiple", count=len(mdt_list))))
         for mdt in mdt_list:
-            matched_alias = _inject_matched_alias(mdt, keyword)
-            img_bytes = generate_single_info_box(mdt, matched_alias)
+            img_bytes = generate_single_info_box(mdt)
             payload.append(("image", img_bytes))
 
     elif len(mdt_list) <= 40:
@@ -199,7 +192,7 @@ async def mai_what_song_handled(event: Event, matcher: Matcher, groups: tuple = 
         # TODO 创建独立的列表图生成函数
         lines = []
         for mdt in mdt_list:
-            alias_hint = _inject_matched_alias(mdt, keyword)
+            alias_hint = mdt._matched_alias
             if alias_hint:
                 lines.append(f"{mdt.shortid}.	{mdt.title} (别名: {alias_hint})")
             else:

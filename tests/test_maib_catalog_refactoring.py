@@ -22,15 +22,20 @@ class CatalogRefactoringTest(unittest.IsolatedAsyncioTestCase):
             raise RuntimeError("failed to load plugins.maib")
 
         from plugins.maib import config, utils
-        from plugins.maib.services.models import MaiChart, MaiData, Model
+        from plugins.maib.services.models import MaiAlias, MaiChart, MaiChartAch, MaiData, Model
         from plugins.maib.services.refactoring import catalog
+        from plugins.maib.utils.enums import Server, ServerScope
 
         cls.catalog = catalog
         cls.config = config
         cls.utils = utils
         cls.MaiChart = MaiChart
+        cls.MaiChartAch = MaiChartAch
+        cls.MaiAlias = MaiAlias
         cls.MaiData = MaiData
         cls.Model = Model
+        cls.Server = Server
+        cls.ServerScope = ServerScope
 
     async def asyncSetUp(self) -> None:
         self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
@@ -73,6 +78,67 @@ class CatalogRefactoringTest(unittest.IsolatedAsyncioTestCase):
         song.set_chart(chart)
         return song
 
+    async def _add_achievement_rows(self) -> None:
+        await self.catalog.sync_song_library([self._song()])
+        async with self.sessions() as session:
+            chart = await session.scalar(
+                select(self.MaiChart).where(
+                    self.MaiChart.shortid == 1,
+                    self.MaiChart.difficulty == 5,
+                )
+            )
+            assert chart is not None
+            session.add_all(
+                [
+                    self.MaiChartAch(
+                        chart_id=chart.id,
+                        shortid=1,
+                        difficulty=5,
+                        server=self.Server.CN,
+                        provider="diving-fish",
+                        qq=10001,
+                        achievement=1_000_000,
+                    ),
+                    self.MaiChartAch(
+                        chart_id=chart.id,
+                        shortid=1,
+                        difficulty=5,
+                        server=self.Server.CN,
+                        provider="provider-alt",
+                        qq=10001,
+                        achievement=990_000,
+                    ),
+                    self.MaiChartAch(
+                        chart_id=chart.id,
+                        shortid=1,
+                        difficulty=5,
+                        server=self.Server.JP,
+                        provider="lyrasync-oto",
+                        qq=10001,
+                        achievement=980_000,
+                    ),
+                    self.MaiChartAch(
+                        chart_id=chart.id,
+                        shortid=1,
+                        difficulty=5,
+                        server=self.Server.JP,
+                        provider="provider-alt",
+                        qq=10001,
+                        achievement=970_000,
+                    ),
+                    self.MaiChartAch(
+                        chart_id=chart.id,
+                        shortid=1,
+                        difficulty=5,
+                        server=self.Server.CN,
+                        provider="diving-fish",
+                        qq=10002,
+                        achievement=960_000,
+                    ),
+                ]
+            )
+            await session.commit()
+
     async def test_sync_song_library_accepts_utils_objects(self) -> None:
         self.assertFalse(await self.catalog.has_song_library())
 
@@ -100,6 +166,9 @@ class CatalogRefactoringTest(unittest.IsolatedAsyncioTestCase):
 
         assert song is not None
         self.assertIsInstance(song, self.utils.MaiData)
+        chart = song.get_chart(5)
+        assert chart is not None
+        self.assertIsNotNone(chart._id)
         self.assertEqual(song.zip_path, Path("charts/song.zip"))
         self.assertEqual(song.get_telegram_cache("adx"), "adx-file-id")
         self.assertEqual(song.get_telegram_cache("zip"), "zip-file-id")
@@ -108,6 +177,75 @@ class CatalogRefactoringTest(unittest.IsolatedAsyncioTestCase):
                 song.get_zip_path(),
                 Path("D:/maib-data/charts/song.zip"),
             )
+
+    async def test_get_maidata_filters_achievements_by_scope_and_provider(self) -> None:
+        await self._add_achievement_rows()
+
+        unloaded = await self.catalog.get_maidata(1)
+        cn = await self.catalog.get_maidata(1, qq=10001)
+        jp = await self.catalog.get_maidata(
+            1,
+            qq=10001,
+            server=self.ServerScope.JP,
+        )
+        all_default = await self.catalog.get_maidata(
+            1,
+            qq=10001,
+            server=self.ServerScope.ALL,
+        )
+        cn_override = await self.catalog.get_maidata(
+            1,
+            qq=10001,
+            provider="provider-alt",
+        )
+        all_override = await self.catalog.get_maidata(
+            1,
+            qq=10001,
+            server=self.ServerScope.ALL,
+            provider="provider-alt",
+        )
+
+        assert unloaded is not None
+        assert cn is not None
+        assert jp is not None
+        assert all_default is not None
+        assert cn_override is not None
+        assert all_override is not None
+        self.assertEqual(unloaded.get_chart(5).get_ach(self.Server.CN).achievement, -100)
+        self.assertEqual(cn.get_chart(5).get_ach(self.Server.CN).achievement, 100.0)
+        self.assertEqual(cn.get_chart(5).get_ach(self.Server.JP).achievement, -100)
+        self.assertEqual(jp.get_chart(5).get_ach(self.Server.JP).achievement, 98.0)
+        self.assertEqual(all_default.get_chart(5).get_ach(self.Server.CN).achievement, 100.0)
+        self.assertEqual(all_default.get_chart(5).get_ach(self.Server.JP).achievement, 98.0)
+        self.assertEqual(cn_override.get_chart(5).get_ach(self.Server.CN).achievement, 99.0)
+        self.assertEqual(all_override.get_chart(5).get_ach(self.Server.CN).achievement, 99.0)
+        self.assertEqual(all_override.get_chart(5).get_ach(self.Server.JP).achievement, 97.0)
+
+    async def test_search_maidata_returns_utils_and_matched_alias(self) -> None:
+        await self._add_achievement_rows()
+        async with self.sessions() as session:
+            session.add(self.MaiAlias(shortid=1, name="Test Alias", create_qq=10001))
+            await session.commit()
+
+        songs = await self.catalog.search_maidata(
+            "test alias",
+            qq=10001,
+            server=self.ServerScope.ALL,
+        )
+
+        self.assertEqual(len(songs), 1)
+        self.assertIsInstance(songs[0], self.utils.MaiData)
+        self.assertEqual(songs[0]._matched_alias, "Test Alias")
+        chart = songs[0].get_chart(5)
+        assert chart is not None
+        self.assertEqual(chart.get_ach(self.Server.CN).achievement, 100.0)
+        self.assertEqual(chart.get_ach(self.Server.JP).achievement, 98.0)
+
+    async def test_search_maidata_keeps_blur_result_limit(self) -> None:
+        await self.catalog.sync_song_library([self._song()])
+        with patch.object(self.config, "MAX_BLUR_SEARCH_RESULTS", 0):
+            with self.assertRaises(self.utils.BlurSearchTooManyResultsError):
+                await self.catalog.search_maidata("song", mode="blur")
 
     async def test_apply_cn_metadata_updates_song_and_chart(self) -> None:
         await self.catalog.sync_song_library([self._song()])

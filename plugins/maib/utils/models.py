@@ -127,6 +127,7 @@ class MaiChart:
     shortid: int
     difficulty: DifficultyID
     lv_jp: float
+    _id: Optional[int] = None
     lv_cn: Optional[float] = None
     lv_fit: Optional[float] = None
     designer: str = ""

@@ -1,8 +1,8 @@
 # maib services 边界审计
 
-> 生成日期：2026-11-15
+> 更新日期：2026-11-19
 > 审计来源：`tests/test_maib_services_boundary.py`  
-> 当前结果：58 处外部 services 调用，24 个未解决不纯事项；fetch、Aime、曲目查询与别名闭包已解决原清单中的 18 项。
+> 当前结果：58 处外部 services 调用，16 个未解决不纯事项；fetch、Aime、曲目查询与别名闭包已解决原清单中的 26 项。
 
 ## 边界判定标准
 
@@ -35,13 +35,13 @@ services 外部不应：
 
 | 类别 | 数量 |
 |---|---:|
-| ORM API | 19 |
-| ORM 引用 | 3 |
+| ORM API | 13 |
+| ORM 引用 | 1 |
 | ORM 导入 | 1 |
 | 内部 API | 1 |
 | Session 越界 | 0 |
-| **未解决合计** | **24** |
-| 已解决（fetch + Aime + 曲目查询 + 别名） | 18 |
+| **未解决合计** | **16** |
+| 已解决（fetch + Aime + 曲目查询 + 别名） | 26 |
 
 ## 逐项审查表
 
@@ -63,13 +63,13 @@ services 外部不应：
 | 12 | [x] | [`matcher/alias.py`](../matcher/alias.py) | `refactoring.alias.remove_alias` | ORM 引用 | matcher 已不再引用曲目或别名 ORM。 | 仅允许 `create_qq == qq` 的创建者删除别名。 |
 | 13 | [ ] | [`matcher/context.py:56`](../matcher/context.py#L56) | `check_mu` | ORM API | 平台用户解析返回 ORM `MaiUser`。 | AID 前先改为返回 `utils.MaiUser`；AID 后由 locales 解析身份。 |
 | 14 | [ ] | [`matcher/context.py:58`](../matcher/context.py#L58) | `get_mu_from_tgid` | ORM API | Telegram 账号查找返回 ORM。 | 账号绑定迁移到 locales，services 只接收 AID 并返回 utils 用户。 |
-| 15 | [ ] | [`matcher/context.py:80`](../matcher/context.py#L80) | `get_mdt.id` | ORM API | 上下文加载曲目后在 matcher 调用 `to_utils()`。 | services 根据用户/provider scope 直接返回 `utils.MaiData`。 |
+| 15 | [x] | [`matcher/context.py`](../matcher/context.py) | `refactoring.catalog.get_maidata` | ORM API | 已按 QQ、`ServerScope` 和 provider 加载 utils 成绩。 | 默认 JP 使用 `lyrasync-oto`，CN 使用 `diving-fish`。 |
 | 16 | [x] | [`matcher/dxrating_calc.py`](../matcher/dxrating_calc.py) | `refactoring.catalog.get_maidata` | ORM API | 已改为通过纯边界查询 utils 曲目，不再获取 ORM。 | `get_maidata()` 禁载成绩关系，matcher 直接读取谱面定数。 |
 | 17 | [ ] | [`matcher/info.py:57`](../matcher/info.py#L57) | `get_mu_from_tgid` | ORM API | Telegram 解析依赖 maib ORM 账号绑定。 | 改为 locales 解析 AID，必要时再取 `utils.MaiUser`。 |
 | 18 | [ ] | [`matcher/info.py:76`](../matcher/info.py#L76) | `check_mu` | ORM API | info matcher 获取 ORM 用户。 | 改为 `get_or_create_user()` 返回 `utils.MaiUser`。 |
-| 19 | [ ] | [`matcher/info.py:110`](../matcher/info.py#L110) | `get_mdt.id` | ORM API | 单曲信息查询返回 ORM，matcher 自行转 utils。 | `get_maidata()` 直接返回含成绩范围的 `utils.MaiData`。 |
-| 20 | [ ] | [`matcher/info.py:110`](../matcher/info.py#L110) | `MaiData` | ORM 引用 | info matcher 类型标注依赖 services ORM。 | 改为 `utils.MaiData | None`。 |
-| 21 | [ ] | [`matcher/info.py:150`](../matcher/info.py#L150) | `get_mdt.title` | ORM API | 搜索返回 ORM 列表，matcher 遍历 ORM aliases。 | 返回 `utils.MaiData`，将命中别名放入 `MaiData._matched_alias`。 |
+| 19 | [x] | [`matcher/info.py`](../matcher/info.py) | `refactoring.catalog.get_maidata` | ORM API | 单曲信息查询已直接返回含所选成绩的 utils 曲目。 | matcher 不再负责 ORM 转换。 |
+| 20 | [x] | [`matcher/info.py`](../matcher/info.py) | `utils.MaiData` | ORM 引用 | info matcher 已不再引用 services ORM。 | 类型边界统一为 utils。 |
+| 21 | [x] | [`matcher/info.py`](../matcher/info.py) | `refactoring.catalog.search_maidata` | ORM API | 搜索、别名命中和成绩加载均已收回 services。 | 命中别名通过 `_matched_alias` 提供。 |
 | 22 | [ ] | [`matcher/info_list.py:84`](../matcher/info_list.py#L84) | `get_mct_list.level` | ORM API | 定数筛选返回 ORM `MaiChart`。 | 返回 `utils.MaiChart`；展示所需曲目信息可使用 `_maidata` 附加。 |
 | 23 | [ ] | [`matcher/info_list.py:96`](../matcher/info_list.py#L96) | `get_mct_list.level` | ORM API | 另一定数范围查询返回 ORM。 | 与 22 合并迁移到 utils 谱面查询。 |
 | 24 | [ ] | [`matcher/info_list.py:169`](../matcher/info_list.py#L169) | `get_mu_from_tgid` | ORM API | Telegram 用户查找返回 ORM。 | 由 locales 解析 AID。 |
@@ -84,12 +84,12 @@ services 外部不应：
 | 33 | [ ] | [`matcher/sync.py:21`](../matcher/sync.py#L21) | `MaiUser` | ORM 导入 | matcher 直接从 `services.models` 导入 ORM。 | 改用 `utils.MaiUser`，并删除所有 ORM 判断。 |
 | 34 | [ ] | [`matcher/sync.py:135`](../matcher/sync.py#L135) | `check_mu` | ORM API | 同步入口获取 ORM 用户。 | 返回 `utils.MaiUser`；AID 后参数改为 AID。 |
 | 35 | [ ] | [`matcher/sync.py:156`](../matcher/sync.py#L156) | `check_mu` | ORM API | 同步完成后重新拉取 ORM 用户。 | 返回刷新后的 `utils.MaiUser`，或让同步用例同时返回用户数据。 |
-| 36 | [ ] | [`matcher/sync.py:280`](../matcher/sync.py#L280) | `get_mdt.title` | ORM API | legacy 记录解析为解析 shortid 而获取 ORM。 | 使用返回 utils 的精确标题查询，更好的方向是将整个记录导入收回 services。 |
+| 36 | [x] | [`matcher/sync.py`](../matcher/sync.py) | `refactoring.catalog.search_maidata` | ORM API | legacy 标题解析已使用无成绩 utils 精确查询。 | 保留现有 SD/DX shortid 消歧逻辑。 |
 | 37 | [ ] | [`matcher/temp_link.py:58`](../matcher/temp_link.py#L58) | `check_mu` | ORM API | 临时绑定流程通过 ORM 用户确保记录存在。 | AID 后由 locales 管理账号绑定；maib 仅按 AID 创建 utils 用户。 |
 | 38 | [ ] | [`matcher/temp_link.py:80`](../matcher/temp_link.py#L80) | `get_mu_from_tgid` | ORM API | 临时解绑直接读取 maib ORM 账号绑定。 | 整个临时绑定流程迁移至 locales API。 |
-| 39 | [ ] | [`mcp/__init__.py:36`](../mcp/__init__.py#L36) | `MaiData` | ORM 引用 | MCP 序列化函数直接接收 ORM。 | 改为序列化 `utils.MaiData`。 |
-| 40 | [ ] | [`mcp/__init__.py:81`](../mcp/__init__.py#L81) | `get_mdt.title` | ORM API | MCP 搜索返回 ORM。 | 使用 utils 曲目搜索 API。 |
-| 41 | [ ] | [`mcp/__init__.py:87`](../mcp/__init__.py#L87) | `get_mdt.id` | ORM API | MCP 单曲查询返回 ORM。 | 使用 `get_maidata()` 返回 `utils.MaiData`。 |
+| 39 | [x] | [`mcp/__init__.py`](../mcp/__init__.py) | `utils.MaiData` | ORM 引用 | MCP 序列化函数已改为接收 utils 曲目。 | 通过 `_id` 保留原谱面数据库 ID 输出。 |
+| 40 | [x] | [`mcp/__init__.py`](../mcp/__init__.py) | `refactoring.catalog.search_maidata` | ORM API | MCP 搜索已切换为无成绩 utils 查询。 | 不加载成绩 relationship。 |
+| 41 | [x] | [`mcp/__init__.py`](../mcp/__init__.py) | `refactoring.catalog.get_maidata` | ORM API | MCP 单曲查询已切换为 utils 曲目。 | 不再暴露 ORM。 |
 | 42 | [ ] | [`mcp/__init__.py:101`](../mcp/__init__.py#L101) | `get_session` | 内部 API | MCP 只读 SQL 工具直接获取 services session。 | 将 SQL 校验和执行整体封装为 services 内部只读用例。 |
 
 ## 建议审查顺序
