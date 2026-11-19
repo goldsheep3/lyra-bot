@@ -6,7 +6,7 @@ from datetime import datetime
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Literal
+from typing import Optional, Literal, TypedDict
 from contextlib import contextmanager, ExitStack
 from collections.abc import Generator
 from PIL import Image
@@ -17,7 +17,7 @@ from nonebot_plugin_localstore import get_plugin_data_dir
 from .calculator import get_dxrating, get_dxscore_max, get_dxscore_star_count, get_level_plus_line
 from .constants import DEFAULT_DATETIME
 from .map import ComboID, SyncID, GenreID, DifficultyID, VersionID, Versions
-from .enums import Server, SLevelSource
+from .enums import Server, ServerScope, SLevelSource
 from .type import Achievement
 
 from .. import config
@@ -29,6 +29,8 @@ __all__ = [
     "MaiChart",
     "MaiData",
     "DXRatingData",
+    "AllStr",
+    "B50Data",
     "MaiUser",
 ]
 
@@ -424,6 +426,43 @@ class DXRatingData:
         self.b15 = _StatMetrics(total=b15_total, max=b15_max, min=b15_min)
 
 
+class AllStr(TypedDict):
+    JP: str
+    CN: str
+
+
+def _default_all_provider() -> AllStr:
+    return {"JP": "lyrasync-oto", "CN": "diving-fish"}
+
+
+def _default_all_update_at() -> AllStr:
+    return {"JP": "Not Updated", "CN": "Not Updated"}
+
+
+@dataclass(slots=True)
+class B50Data:
+    dxrating: int
+    current_version: int
+    scope: ServerScope
+    b35: list[tuple[MaiData, int]] = field(default_factory=list)
+    b15: list[tuple[MaiData, int]] = field(default_factory=list)
+    special_tag: Optional[str] = None
+    all_provider: AllStr = field(default_factory=_default_all_provider)
+    all_update_at: AllStr = field(default_factory=_default_all_update_at)
+
+    @property
+    def provider(self) -> str:
+        if self.scope is ServerScope.ALL:
+            raise ValueError("ALL scope has no single provider")
+        return self.all_provider[self.scope.value]
+
+    @property
+    def update_at(self) -> str:
+        if self.scope is ServerScope.ALL:
+            raise ValueError("ALL scope has no single update time")
+        return self.all_update_at[self.scope.value]
+
+
 @dataclass
 class MaiUser:
     user_id: int
@@ -474,7 +513,12 @@ class MaiUser:
     def get_formated_time(self, server: Optional[Server] = None) -> str:
         """获取指定服务器的更新日期（格式化字符串）"""
         dt = self.get_update_time(server=server)
-        if dt <= DEFAULT_DATETIME: return "Not Updated"
+        default_datetime = DEFAULT_DATETIME
+        if dt.tzinfo is None:
+            default_datetime = default_datetime.replace(tzinfo=None)
+        elif default_datetime.tzinfo is None:
+            default_datetime = default_datetime.replace(tzinfo=dt.tzinfo)
+        if dt <= default_datetime: return "Not Updated"
         return f"{dt:%Y.%m.%d %H:%M:%S}"
         
     def get_current_version(self, server: Server) -> int:

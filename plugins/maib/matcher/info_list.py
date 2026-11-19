@@ -10,10 +10,9 @@ from nonebot.adapters.onebot.v11 import (Event as OneBotV11Event,)
 
 from nonebot.adapters.telegram import (Event as TGEvent,)
 
-from .. import config, utils, services, image_gen, network
+from .. import config, services, image_gen, network
 from ..utils.report import build_diff_report
-from ..utils.enums import UICode, ServerScope
-from ..utils.map import Versions
+from ..utils.enums import ServerScope
 from . import Reply, reply, sync
 from .context import get_args
 from .message import build_msg
@@ -132,36 +131,14 @@ async def b50_handled(event: Event, matcher: Matcher, groups: dict = RegexDict()
 
     target_maiuser = target_mu.to_utils()
 
-    # 确定版本并获取 achs 数据
+    # 获取 services 内已完成 provider 过滤和 ORM 转换的 B50 DTO
     if scope == ServerScope.ALL:
         # 目前不兼容 ALL 混合模式
         await matcher.finish(await reply("b50.all_not_supported"))
         return
-    current_version = Versions.latest(scope.to_server())
-    cut_version = Versions.b50_cut_version(current_version)
-    
-    b35_achs, b15_achs = await services.get_b50(target_qq, scope.to_server(), cut_version)
-    dxrating = sum([mca.dxrating_cache for mca in (list(b35_achs) + list(b15_achs))])
+    b50_data = await services.refactoring.b50.get_b50_data(target_qq, scope)
 
-    # 清洗谱面数据，构建绘图数据结构
-    def _build_entries(achs: list[services.MaiChartAch]) -> list[tuple[utils.MaiData, int]]:
-        entries = []
-        for ach in achs:
-            chart = ach.chart
-            if not chart or not chart.maidata:
-                continue
-            maidata = chart.maidata.to_utils()
-            maidata_chart = maidata.get_chart(chart.difficulty)
-            if maidata_chart is None:
-                continue
-            maidata_chart.set_ach(ach.to_utils())
-            entries.append((maidata, chart.difficulty))
-        return entries
-
-    b35_entries = _build_entries(list(b35_achs))
-    b15_entries = _build_entries(list(b15_achs))
-
-    if not (b35_entries or b15_entries):
+    if not (b50_data.b35 or b50_data.b15):
         # 无谱面数据
         if scope == ServerScope.CN:
             await build_msg(matcher, event, [("text", await reply("b50.no_cn_data"))], tag='finish')
@@ -170,17 +147,11 @@ async def b50_handled(event: Event, matcher: Matcher, groups: dict = RegexDict()
         return
 
     # 绘制 b50
-    img = image_gen.draw_b50_board(
-        b35_entries, b15_entries,
-        dxrating_data=target_maiuser.get_dxrating_data(scope.to_server()),
-        current_version=current_version,
-        updated=target_maiuser.get_formated_time(scope.to_server()),
-        server=scope.to_server(),
-        cut_version=cut_version,
+    img = image_gen.draw_b50_data(
+        b50_data,
         username=target_maiuser.username,
         avatar=await network.get_qq_avatar(target_qq, spec=100),
         line_width=4,
-        ui_code=UICode.CN if scope == ServerScope.CN else UICode.JP
     )
     img_bytes = image_gen.get_image_bytes(img)
     

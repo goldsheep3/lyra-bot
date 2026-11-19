@@ -2,7 +2,7 @@
 
 > 更新日期：2026-11-19
 > 审计来源：`tests/test_maib_services_boundary.py`  
-> 当前结果：56 处外部 services 调用，13 个未解决不纯事项；已解决原清单中的 29 项。
+> 当前结果：56 处外部 services 调用，11 个未解决不纯事项；已解决原清单中的 31 项。
 
 ## 边界判定标准
 
@@ -35,13 +35,13 @@ services 外部不应：
 
 | 类别 | 数量 |
 |---|---:|
-| ORM API | 11 |
-| ORM 引用 | 1 |
+| ORM API | 10 |
+| ORM 引用 | 0 |
 | ORM 导入 | 1 |
 | 内部 API | 0 |
 | Session 越界 | 0 |
-| **未解决合计** | **13** |
-| 已解决 | 29 |
+| **未解决合计** | **11** |
+| 已解决 | 31 |
 
 ## 逐项审查表
 
@@ -74,8 +74,8 @@ services 外部不应：
 | 23 | [x] | [`matcher/info_list.py`](../matcher/info_list.py) | `get_mct_list.level` | ORM API | 另一定数范围查询随不可达草案一并删除。 | 不再保留未运行的 ORM 基线。 |
 | 24 | [ ] | [`matcher/info_list.py:75`](../matcher/info_list.py#L75) | `get_mu_from_tgid` | ORM API | Telegram 用户查找返回 ORM。 | 由 locales 解析 AID。 |
 | 25 | [ ] | [`matcher/info_list.py:99`](../matcher/info_list.py#L99) | `check_mu` | ORM API | 列表 matcher 获取 ORM 用户。 | 改为 utils 用户 API。 |
-| 26 | [ ] | [`matcher/info_list.py:143`](../matcher/info_list.py#L143) | `get_b50` | ORM API | B50 返回 ORM 成绩列表，外部组装绘图数据。 | 引入 `B50Data`，services 内部完成 provider 选择和所需数据加载。 |
-| 27 | [ ] | [`matcher/info_list.py:147`](../matcher/info_list.py#L147) | `MaiChartAch` | ORM 引用 | `_build_entries` 显式标注 ORM，并读取 `ach.chart.maidata`。 | 删除该 ORM 组装层，直接消费 `B50Data`。 |
+| 26 | [x] | [`matcher/info_list.py`](../matcher/info_list.py) | `refactoring.b50.get_b50_data` | ORM API | B50 SQL、provider 过滤和 utils 组装已收回 services。 | 返回 `utils.B50Data`。 |
+| 27 | [x] | [`matcher/info_list.py`](../matcher/info_list.py) | `utils.B50Data` | ORM 引用 | matcher 已删除 ORM `_build_entries` 组装层。 | 非 ALL DTO 由 `draw_b50_data()` 解包并复用原绘图函数。 |
 | 28 | [x] | [`matcher/maime.py`](../matcher/maime.py) | `refactoring.aime.link` | ORM API | 已收回绑卡预查询与事务。 | 纯 services 用例；仅接收标量并抛出公开领域异常。 |
 | 29 | [x] | [`matcher/maime.py`](../matcher/maime.py) | `refactoring.aime.unlink` | ORM API | 已收回解绑预查询与所有权判断。 | 纯 services 用例；解绑保留历史记录。 |
 | 30 | [x] | [`matcher/maime.py`](../matcher/maime.py) | `refactoring.aime.find_aime_by_access4` | ORM API | 已收回后四位历史查找与歧义判断。 | 返回轻量 `TypedDict`，不泄漏 ORM。 |
@@ -102,8 +102,8 @@ services 外部不应：
    采用 refactoring 闭包和轻量 `TypedDict`，未引入不必要的 DTO。
 4. **13–18、24–25、33–38：用户与账号绑定**  
    与 locales/AID 迁移一起处理，避免重复改造。
-5. **26–27：B50**  
-   引入 `B50Data`，同时落实默认 provider 选择。
+5. **26–27：B50（已完成）**
+   `utils.B50Data` 已承载聚合结果，services 内完成默认 provider 选择和 ORM 转换。
 6. **42：MCP 只读 SQL（已完成）**
    SQL 校验与执行已收回 `services.refactoring.mcp_sql.sql_query`。
 

@@ -6,10 +6,10 @@ from typing import Literal, Optional, Union
 
 from PIL import Image
 
-from ...utils import DXRatingData
+from ...utils import B50Data, DXRatingData
 from ...utils.map import DifficultyID, VersionID, Versions
 from ...utils.models import MaiData
-from ...utils.enums import UICode, Server
+from ...utils.enums import UICode, Server, ServerScope
 from .. import color as Color
 from ..utils import MS, ImageManager
 from . import CopyrightBadge, B50BoxBadge, UserHeaderBadge
@@ -83,3 +83,48 @@ def draw_b50_board(
     final_img = result_img.convert("RGB")
     result_img.close()
     return final_img
+
+
+def draw_b50_data(
+    data: B50Data,
+    *,
+    username: str = "maimai",
+    avatar: Optional[Union[bytes, Image.Image]] = None,
+    line_width: Literal[4, 5] = 5,
+    ms: MS = MS(),
+    ui_code: UICode | None = None,
+) -> Image.Image:
+    """逐字段解包单服 B50 DTO，并调用现有看板绘制入口。"""
+    if data.scope is ServerScope.ALL:
+        raise ValueError("draw_b50_data currently requires a non-ALL B50Data")
+
+    server = data.scope.to_server()
+    b35_total = sum(
+        maidata.get_chart_dxrating(difficulty, server)
+        for maidata, difficulty in data.b35
+    )
+    b15_total = sum(
+        maidata.get_chart_dxrating(difficulty, server)
+        for maidata, difficulty in data.b15
+    )
+    dxrating_data = DXRatingData(
+        total=data.dxrating,
+        b35_total=b35_total,
+        b15_total=b15_total,
+    )
+    if ui_code is None:
+        ui_code = UICode.CN if server is Server.CN else UICode.JP
+
+    return draw_b50_board(
+        data.b35,
+        data.b15,
+        dxrating_data=dxrating_data,
+        current_version=data.current_version,
+        updated=data.update_at,
+        server=server,
+        username=username,
+        avatar=avatar,
+        line_width=line_width,
+        ms=ms,
+        ui_code=ui_code,
+    )
