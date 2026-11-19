@@ -1,5 +1,4 @@
-import re
-from typing import Optional, Any, Sequence
+from typing import Optional, Any
 
 from nonebot import logger, on_regex
 from nonebot.params import RegexDict
@@ -18,30 +17,6 @@ from ..utils.map import Versions
 from . import Reply, reply, sync
 from .context import get_args
 from .message import build_msg
-from ..services import get_mct_list
-
-
-# --- regex patterns ---
-
-SCORELIST_PATTERN_ARG = re.compile(
-    r"(?:(?:代|极|極|将|神|舞舞))?$",
-    re.VERBOSE
-)
-
-SCORELIST_PATTERN_LEVEL = re.compile(
-    r"^(\d+(?:\.\d+)?\+?)",
-    re.VERBOSE
-)
-
-SCORELIST_PATTERN_VERSION = re.compile(
-    r"^(?:[a-zA-Z]{1,6}(?:\+)?|dx\d{4}[一-龥]{1,2})",
-    re.VERBOSE
-)
-
-SCORELIST_PATTERN_GENRE = re.compile(
-    r"^(.+?)",
-    re.VERBOSE
-)
 
 
 # --- matcher ---
@@ -55,75 +30,6 @@ b50 = on_regex(r'^(?:b50|kkb)\s*(?P<args>.*)', priority=1, block=True)
 async def scorelist_handled(event: Event, matcher: Matcher, groups: dict = RegexDict(), reply: Reply = reply):
     """处理命令: xxx完成表/xxx进度/xxx列表"""
     return  # 暂未实现，暂时忽略
-    i18n_data.set(_i18n)
-    await matcher.finish("该功能尚未实现……比预想中难写很多，果咩纳塞（´・ω・｀）")
-    
-    target = groups.get("target", "").strip()
-    args_text = groups.get("args", "").strip()
-    parsed_uid, target_server = get_args(args_text) if args_text else (None, None)
-    parsed_uid = parsed_uid or int(event.get_user_id())
-    server = target_server if (target_server and target_server != 'ALL') else 'CN'
-    
-    # 解析参数
-    arg_match = SCORELIST_PATTERN_ARG.match(target)
-    arg = arg_match.group(0) if arg_match and arg_match.group(0) else ""
-    content = target[:-len(arg)].strip() if arg else target.strip()
-    
-    parser_status: bool = False
-    mca_list: Sequence = []
-    # 定数筛选
-    level_matched = SCORELIST_PATTERN_LEVEL.match(content)
-    if level_matched and parser_status is False:
-        level = level_matched.group(1)
-        # 13.6+  <- 会被匹配但不合法
-        if level.endswith('+') and '.' in level:
-            pass
-        # 13.6  <- 定数筛选
-        if level.endswith('.'):
-            level_value = float(level[:-1])
-            mca_list = await get_mct_list.level(level_value, server, achs_user_id=parsed_uid)
-            parser_status = True
-        # 13 或 13+  <- 定数范围筛选
-        else:
-            # 这里需要考虑 + 的分界线，当前先不考虑旧版按新版 .6 计算，后续增加判断
-            plus = 6
-            if level.endswith('+'):
-                _l = int(level.rstrip('+'))
-                level_range = (float(_l + plus * 0.1), float(_l + 0.9))
-            else:
-                _l = int(level)
-                level_range = (float(_l), float(_l + (plus-1) * 0.1))
-            mca_list = await get_mct_list.level(level_range, server, achs_user_id=parsed_uid) 
-            parser_status = True
-    
-    # 版本筛选
-    version_matched = SCORELIST_PATTERN_VERSION.match(content)
-    if version_matched and parser_status is False:
-        version = version_matched.group(0)
-        pass
-    
-    # 流派筛选
-    genre_matched = SCORELIST_PATTERN_GENRE.match(content)
-    if genre_matched and parser_status is False:
-        genre = genre_matched.group(1)
-        pass
-    
-    # 解析失败
-    if parser_status is False:
-        await matcher.finish(await reply("scorelist.invalid_format"))
-        return
-    
-    # TODO: 处理 mca_list，生成完成表/进度/列表，并发送消息
-    if not mca_list:
-        await matcher.finish(await reply("scorelist.no_data"))
-        return
-    
-    if config.LOW_MEMORY_MODE:
-        # 低内存模式，渲染 list_lite
-        return
-    
-    # 渲染完整成绩列表网格图片
-    return
 
 
 @b50.handle()

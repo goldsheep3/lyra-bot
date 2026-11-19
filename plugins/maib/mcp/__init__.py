@@ -11,7 +11,6 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from .. import services, utils
-from .sql import ReadOnlySqlError, execute_readonly_sql
 
 
 class _BearerTokenMiddleware(BaseHTTPMiddleware):
@@ -98,9 +97,8 @@ async def get_song(shortid: int) -> dict[str, Any] | None:
 )
 async def query_maib_sql(sql: str) -> dict[str, Any]:
     try:
-        async with services.get_session() as session:
-            return await execute_readonly_sql(session, sql)
-    except ReadOnlySqlError as exc:
+        return await services.refactoring.mcp_sql.sql_query(sql)
+    except services.refactoring.mcp_sql.ReadOnlySqlError as exc:
         return {"error": "invalid_sql", "detail": str(exc)}
 
 

@@ -2,7 +2,7 @@
 
 > 更新日期：2026-11-19
 > 审计来源：`tests/test_maib_services_boundary.py`  
-> 当前结果：58 处外部 services 调用，16 个未解决不纯事项；fetch、Aime、曲目查询与别名闭包已解决原清单中的 26 项。
+> 当前结果：56 处外部 services 调用，13 个未解决不纯事项；已解决原清单中的 29 项。
 
 ## 边界判定标准
 
@@ -35,13 +35,13 @@ services 外部不应：
 
 | 类别 | 数量 |
 |---|---:|
-| ORM API | 13 |
+| ORM API | 11 |
 | ORM 引用 | 1 |
 | ORM 导入 | 1 |
-| 内部 API | 1 |
+| 内部 API | 0 |
 | Session 越界 | 0 |
-| **未解决合计** | **16** |
-| 已解决（fetch + Aime + 曲目查询 + 别名） | 26 |
+| **未解决合计** | **13** |
+| 已解决 | 29 |
 
 ## 逐项审查表
 
@@ -70,12 +70,12 @@ services 外部不应：
 | 19 | [x] | [`matcher/info.py`](../matcher/info.py) | `refactoring.catalog.get_maidata` | ORM API | 单曲信息查询已直接返回含所选成绩的 utils 曲目。 | matcher 不再负责 ORM 转换。 |
 | 20 | [x] | [`matcher/info.py`](../matcher/info.py) | `utils.MaiData` | ORM 引用 | info matcher 已不再引用 services ORM。 | 类型边界统一为 utils。 |
 | 21 | [x] | [`matcher/info.py`](../matcher/info.py) | `refactoring.catalog.search_maidata` | ORM API | 搜索、别名命中和成绩加载均已收回 services。 | 命中别名通过 `_matched_alias` 提供。 |
-| 22 | [ ] | [`matcher/info_list.py:84`](../matcher/info_list.py#L84) | `get_mct_list.level` | ORM API | 定数筛选返回 ORM `MaiChart`。 | 返回 `utils.MaiChart`；展示所需曲目信息可使用 `_maidata` 附加。 |
-| 23 | [ ] | [`matcher/info_list.py:96`](../matcher/info_list.py#L96) | `get_mct_list.level` | ORM API | 另一定数范围查询返回 ORM。 | 与 22 合并迁移到 utils 谱面查询。 |
-| 24 | [ ] | [`matcher/info_list.py:169`](../matcher/info_list.py#L169) | `get_mu_from_tgid` | ORM API | Telegram 用户查找返回 ORM。 | 由 locales 解析 AID。 |
-| 25 | [ ] | [`matcher/info_list.py:193`](../matcher/info_list.py#L193) | `check_mu` | ORM API | 列表 matcher 获取 ORM 用户。 | 改为 utils 用户 API。 |
-| 26 | [ ] | [`matcher/info_list.py:237`](../matcher/info_list.py#L237) | `get_b50` | ORM API | B50 返回 ORM 成绩列表，外部组装绘图数据。 | 引入 `B50Data`，services 内部完成 provider 选择和所需数据加载。 |
-| 27 | [ ] | [`matcher/info_list.py:241`](../matcher/info_list.py#L241) | `MaiChartAch` | ORM 引用 | `_build_entries` 显式标注 ORM，并读取 `ach.chart.maidata`。 | 删除该 ORM 组装层，直接消费 `B50Data`。 |
+| 22 | [x] | [`matcher/info_list.py`](../matcher/info_list.py) | `get_mct_list.level` | ORM API | 未启用完成表入口后的不可达查询草案已删除。 | 将来实现时直接使用 utils 查询边界。 |
+| 23 | [x] | [`matcher/info_list.py`](../matcher/info_list.py) | `get_mct_list.level` | ORM API | 另一定数范围查询随不可达草案一并删除。 | 不再保留未运行的 ORM 基线。 |
+| 24 | [ ] | [`matcher/info_list.py:75`](../matcher/info_list.py#L75) | `get_mu_from_tgid` | ORM API | Telegram 用户查找返回 ORM。 | 由 locales 解析 AID。 |
+| 25 | [ ] | [`matcher/info_list.py:99`](../matcher/info_list.py#L99) | `check_mu` | ORM API | 列表 matcher 获取 ORM 用户。 | 改为 utils 用户 API。 |
+| 26 | [ ] | [`matcher/info_list.py:143`](../matcher/info_list.py#L143) | `get_b50` | ORM API | B50 返回 ORM 成绩列表，外部组装绘图数据。 | 引入 `B50Data`，services 内部完成 provider 选择和所需数据加载。 |
+| 27 | [ ] | [`matcher/info_list.py:147`](../matcher/info_list.py#L147) | `MaiChartAch` | ORM 引用 | `_build_entries` 显式标注 ORM，并读取 `ach.chart.maidata`。 | 删除该 ORM 组装层，直接消费 `B50Data`。 |
 | 28 | [x] | [`matcher/maime.py`](../matcher/maime.py) | `refactoring.aime.link` | ORM API | 已收回绑卡预查询与事务。 | 纯 services 用例；仅接收标量并抛出公开领域异常。 |
 | 29 | [x] | [`matcher/maime.py`](../matcher/maime.py) | `refactoring.aime.unlink` | ORM API | 已收回解绑预查询与所有权判断。 | 纯 services 用例；解绑保留历史记录。 |
 | 30 | [x] | [`matcher/maime.py`](../matcher/maime.py) | `refactoring.aime.find_aime_by_access4` | ORM API | 已收回后四位历史查找与歧义判断。 | 返回轻量 `TypedDict`，不泄漏 ORM。 |
@@ -90,22 +90,22 @@ services 外部不应：
 | 39 | [x] | [`mcp/__init__.py`](../mcp/__init__.py) | `utils.MaiData` | ORM 引用 | MCP 序列化函数已改为接收 utils 曲目。 | 通过 `_id` 保留原谱面数据库 ID 输出。 |
 | 40 | [x] | [`mcp/__init__.py`](../mcp/__init__.py) | `refactoring.catalog.search_maidata` | ORM API | MCP 搜索已切换为无成绩 utils 查询。 | 不加载成绩 relationship。 |
 | 41 | [x] | [`mcp/__init__.py`](../mcp/__init__.py) | `refactoring.catalog.get_maidata` | ORM API | MCP 单曲查询已切换为 utils 曲目。 | 不再暴露 ORM。 |
-| 42 | [ ] | [`mcp/__init__.py:101`](../mcp/__init__.py#L101) | `get_session` | 内部 API | MCP 只读 SQL 工具直接获取 services session。 | 将 SQL 校验和执行整体封装为 services 内部只读用例。 |
+| 42 | [x] | [`mcp/__init__.py`](../mcp/__init__.py) | `refactoring.mcp_sql.sql_query` | 内部 API | SQL 校验、超时、执行和 session 已完整收回 services。 | MCP 仅处理公开 `ReadOnlySqlError`。 |
 
 ## 建议审查顺序
 
 1. **01–08：`fetch.py`（已完成）**
    已收回 ORM 构造、事务和曲库同步数据库操作，共消除 8 项。
-2. **09–23、39–41：曲目及谱面查询**  
-   使曲目查询统一返回 utils 对象，并使用 `_matched_alias` / `_maidata` 等查询附加字段。
+2. **09–23、39–41：曲目及谱面查询（已完成）**
+   曲目查询已统一返回 utils；未启用完成表的不可达 ORM 草案已删除。
 3. **28–32：Aime（已完成）**
    采用 refactoring 闭包和轻量 `TypedDict`，未引入不必要的 DTO。
 4. **13–18、24–25、33–38：用户与账号绑定**  
    与 locales/AID 迁移一起处理，避免重复改造。
 5. **26–27：B50**  
    引入 `B50Data`，同时落实默认 provider 选择。
-6. **42：MCP 只读 SQL**  
-   单独评估该管理工具是否允许特例；若不特例，则收回 services。
+6. **42：MCP 只读 SQL（已完成）**
+   SQL 校验与执行已收回 `services.refactoring.mcp_sql.sql_query`。
 
 ## 与测试基线同步
 

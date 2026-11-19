@@ -48,6 +48,7 @@ PURE_SERVICE_APIS = {
     "refactoring.catalog.get_maidata",
     "refactoring.catalog.search_maidata",
     "refactoring.catalog.sync_song_library",
+    "refactoring.mcp_sql.sql_query",
 }
 
 
@@ -321,13 +322,11 @@ KNOWN_IMPURE_USAGE_MAXIMUMS: Counter[tuple[str, str, str]] = Counter(
         ("plugins/maib/matcher/info_list.py", "MaiChartAch", "references_services_orm"): 1,
         ("plugins/maib/matcher/info_list.py", "check_mu", "calls_orm_service_api"): 1,
         ("plugins/maib/matcher/info_list.py", "get_b50", "calls_orm_service_api"): 1,
-        ("plugins/maib/matcher/info_list.py", "get_mct_list.level", "calls_orm_service_api"): 2,
         ("plugins/maib/matcher/info_list.py", "get_mu_from_tgid", "calls_orm_service_api"): 1,
         ("plugins/maib/matcher/sync.py", "MaiUser", "imports_services_orm"): 1,
         ("plugins/maib/matcher/sync.py", "check_mu", "calls_orm_service_api"): 2,
         ("plugins/maib/matcher/temp_link.py", "check_mu", "calls_orm_service_api"): 1,
         ("plugins/maib/matcher/temp_link.py", "get_mu_from_tgid", "calls_orm_service_api"): 1,
-        ("plugins/maib/mcp/__init__.py", "get_session", "calls_internal_service_api"): 1,
     }
 )
 
