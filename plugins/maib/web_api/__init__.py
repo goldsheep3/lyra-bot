@@ -11,13 +11,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from nonebot import get_app, logger
 
-from . import config, services
+from .. import config, services
 
 try:
     from .mcp import create_mcp_app
 except ImportError:  # 未安装 mcp 依赖时不影响 maib 其余 Web API
     create_mcp_app = None  # type: ignore[assignment]
-from .utils.sync import build_lyra_records_v3, parse_lyra_maisync_data
+from ..utils.sync import build_lyra_records_v3, parse_lyra_maisync_data
 
 
 router = APIRouter(tags=["maib-sync"])
