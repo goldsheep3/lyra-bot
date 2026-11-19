@@ -43,32 +43,15 @@ def get_args(args_text: str) -> tuple[Optional[int], Optional[ServerScope]]:
 
 
 
-async def get_maiuser(event: Event, user_id: int | None = None, reply: Reply = reply) -> utils.MaiUser:
-    """Resolve the current platform user to a maimai user."""
-    if user_id is None:
-        raw_uid = event.get_user_id()
-        try:
-            user_id = int(raw_uid)
-        except ValueError as e:
-            raise ValueError(await reply("error.invalid_user_id", raw_uid=raw_uid)) from e
-
+async def get_or_create_maiuser(event: Event, target_id: int | None = None) -> utils.MaiUser:
     if isinstance(event, OneBotV11Event):
-        mu = await services.check_mu(user_id)
+        qq = target_id if target_id is not None else int(event.get_user_id())
+        return await services.refactoring.user.get_or_create_maiuser_qq(qq)
     elif isinstance(event, TGEvent):
-        mu = await services.get_mu_from_tgid(user_id)
-        if mu is None:
-            raise NoLinkQQError(await reply("error.user_not_found"))
+        tg_id = target_id if target_id is not None else int(event.get_user_id())
+        return await services.refactoring.user.get_or_create_maiuser_from_tg(tg_id)
     else:
-        raise ValueError(await reply("error.unexpected"))
-
-    if not mu.username:
-        qq = mu.qq
-        data = await network.DivingFish.dev_player_records(qq=qq)
-        username = data.get("nickname", "maimai") if isinstance(data, dict) else "maimai"
-        await services.set_mu_username(qq, username)
-        mu.username = username
-
-    return mu.to_utils()
+        raise ValueError("Unsupported event type")
 
 
 async def get_maidata_with_ach(
@@ -86,7 +69,7 @@ async def get_maidata_with_ach(
     if maidata is None:
         return None
 
-    level_field = SLevelSource.server(target_server).lv_field
+    level_field = SLevelSource.from_server(target_server).lv_field
     has_target_level = any(
         getattr(chart, level_field, None) is not None
         for chart in maidata.charts.values()

@@ -68,16 +68,10 @@ async def b50_handled(event: Event, matcher: Matcher, groups: dict = RegexDict()
                 break
 
     elif isinstance(event, TGEvent):
-        async def get_qq_from_tg_uid(tg_uid: int) -> Optional[int]:
-            if tg_uid is None:
-                return None
-            mu = await services.get_mu_from_tgid(tg_uid)
-            return int(mu.qq) if mu else None
-        
         # parsed_qq = await get_qq_from_tg_uid(parsed_uid) if parsed_uid else None
         parsed_qq = None  # Telegram 目前不支持文本参数解析 QQ，预留接口但暂不启用
-        sender_qq = await get_qq_from_tg_uid(sender_user_id)
-        
+        sender_qq = await services.refactoring.link.get_qq_from_tg(sender_user_id)
+
         if from_ := getattr(event, "from_", None):
             sender_username = from_.username or from_.first_name or "maimai"
             
@@ -94,15 +88,10 @@ async def b50_handled(event: Event, matcher: Matcher, groups: dict = RegexDict()
         logger.warning(f"未能解析出目标 QQ，无法继续执行 b50 命令。平台：{type(event)}")
         await matcher.finish(await reply("b50.qq_parsing_failed"))
         return
-    try:
-        target_mu = await services.check_mu(target_qq)
-    except ValueError as e:
-        await matcher.finish(str(e))
-        return
     
     if scope in [ServerScope.CN, ServerScope.ALL]:
         try:
-            target_mu, report = await sync.check_sync_cn(target_mu, ignore_cache_expire=True)
+            report = await sync.check_sync_cn(qq=target_qq, ignore_cache_expire=True)
             if report and report.has_changes:
                 if is_querying_self:
                     # 查询自己：展示详细的同步报告
@@ -129,7 +118,7 @@ async def b50_handled(event: Event, matcher: Matcher, groups: dict = RegexDict()
         except Exception as e:
             logger.warning(f"强制刷新水鱼数据失败: {e}")
 
-    target_maiuser = target_mu.to_utils()
+    maiuser = await services.refactoring.user.get_or_create_maiuser_qq(target_qq)
 
     # 获取 services 内已完成 provider 过滤和 ORM 转换的 B50 DTO
     if scope == ServerScope.ALL:
@@ -149,7 +138,7 @@ async def b50_handled(event: Event, matcher: Matcher, groups: dict = RegexDict()
     # 绘制 b50
     img = image_gen.draw_b50_data(
         b50_data,
-        username=target_maiuser.username,
+        username=maiuser.username,
         avatar=await network.get_qq_avatar(target_qq, spec=100),
         line_width=4,
     )

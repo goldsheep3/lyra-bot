@@ -38,8 +38,11 @@ class ServerScope(StrEnum):
     CN = "CN"
     ALL = "ALL"
 
+    def in_server(self) -> bool:
+        return self is not ServerScope.ALL
+
     def to_server(self) -> Server:
-        if self is ServerScope.ALL:
+        if not self.in_server():
             raise ValueError("ALL cannot convert to Server")
         return Server(self.value)
 
@@ -70,10 +73,11 @@ class SLevelSource(StrEnum):
         }
         return field_map[self]
 
+    def in_server(self) -> bool:
+        return self is not SLevelSource.FIT
+
     def to_server(self) -> Server | None:
-        if self is SLevelSource.FIT:
-            return None
-        return Server(self.value)
+        return Server(self.value) if self.in_server() else None
 
     @classmethod
     def parse(cls, value: str | SLevelSource | Server) -> SLevelSource:
@@ -84,8 +88,7 @@ class SLevelSource(StrEnum):
         return cls(str(value).strip().upper())
 
     @classmethod
-    def server(cls, server: Server) -> SLevelSource:
-        # from server
+    def from_server(cls, server: Server) -> SLevelSource:
         return cls(server.value)
 
 

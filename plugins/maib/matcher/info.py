@@ -1,4 +1,4 @@
-from typing import Optional, Any
+from typing import Any
 
 from nonebot import on_regex, logger
 from nonebot.params import RegexGroup
@@ -9,11 +9,11 @@ from nonebot.adapters.telegram import Event as TGEvent
 
 from .. import services, image_gen
 from ..utils.report import build_diff_report
-from ..utils import NoLinkQQError
 from ..utils.enums import ServerScope
 from . import Reply, reply, sync
-from .context import get_args, get_maiuser
+from .context import get_args, get_or_create_maiuser
 from .message import build_msg
+from ..utils import NoLinkQQError
 
 mai_info = on_regex(r"^(id|info)(\d+)\s*(.*)$", priority=10, block=True)
 
@@ -51,15 +51,9 @@ async def mai_info_handled(event: Event, matcher: Matcher, groups: tuple = Regex
                 break
 
     elif isinstance(event, TGEvent):
-        async def get_qq_from_tg_uid(tg_uid: int) -> Optional[int]:
-            if tg_uid is None:
-                return None
-            mu = await services.get_mu_from_tgid(tg_uid)
-            return int(mu.qq) if mu else None
-        
         parsed_qq = None  # Telegram 目前不支持文本参数解析 QQ，预留接口但暂不启用
-        sender_qq = await get_qq_from_tg_uid(sender_user_id)
-        
+        sender_qq = await services.refactoring.link.get_qq_from_tg(sender_user_id)
+
         if from_ := getattr(event, "from_", None):
             sender_username = from_.username or from_.first_name or "maimai"
             
@@ -68,21 +62,12 @@ async def mai_info_handled(event: Event, matcher: Matcher, groups: tuple = Regex
     # 确定最终被查询人 (优先级：at 目标 > 文本传参 > 发送者自己)
     target_qq = at_qq or parsed_qq or sender_qq
     is_querying_self = (target_qq is not None and target_qq == sender_qq)
-    
-    # 1. 先获取 mu
-    target_mu = None
-    if target_qq is not None:
-        try:
-            target_mu = await services.check_mu(target_qq)
-        except ValueError:
-            # 获取 MaiUser 失败（如未绑定或数据异常），降级为无成绩模式
-            target_mu = None
 
     # 2. 同步水鱼数据 (仅当 target_mu 存在且 scope 为 CN 或 ALL 时)
-    if target_mu and scope in [ServerScope.CN, ServerScope.ALL]:
+    if (target_qq is not None) and (scope in [ServerScope.CN, ServerScope.ALL]):
         try:
             # info：命中缓存则跳过强制同步（b50/sytb 保持强制刷新）
-            target_mu, report = await sync.check_sync_cn(target_mu, ignore_cache_expire=False)
+            report = await sync.check_sync_cn(qq=target_qq, ignore_cache_expire=False)
             # 核心修改：只有当有更新时才发送提醒，否则静默
             if report and report.has_changes:
                 if is_querying_self:
@@ -103,9 +88,6 @@ async def mai_info_handled(event: Event, matcher: Matcher, groups: tuple = Regex
         except Exception as e:
             logger.warning(f"强制刷新水鱼数据失败: {e}")
 
-    # 3. 转化为 maiuser (使用同步后最新的 target_mu)
-    target_maiuser = target_mu.to_utils() if target_mu else None
-
     # 查询乐曲信息
     maidata = await services.refactoring.catalog.get_maidata(
         shortid,
@@ -116,7 +98,8 @@ async def mai_info_handled(event: Event, matcher: Matcher, groups: tuple = Regex
         await matcher.finish(await reply("info.maidata_not_found", short_id=shortid))
         return
 
-    info_box = image_gen.draw_info_board(maidata, maiuser=target_maiuser)
+    maiuser = await services.refactoring.user.get_or_create_maiuser_qq(target_qq) if target_qq is not None else None
+    info_box = image_gen.draw_info_board(maidata, maiuser=maiuser)
     info_box_bytes = image_gen.get_image_bytes(info_box)
     
     payload = [
@@ -125,7 +108,7 @@ async def mai_info_handled(event: Event, matcher: Matcher, groups: tuple = Regex
     ]
     
     # 如果未绑定或获取用户信息失败，提示绑定以获取更多信息
-    if target_qq is None or target_maiuser is None:
+    if target_qq is None:
         payload.append(("text", await reply("link.get_more_info")))
         
     await build_msg(matcher, event, payload, tag='finish')
@@ -138,15 +121,16 @@ async def mai_what_song_handled(event: Event, matcher: Matcher, groups: tuple = 
     keyword = keyword.strip(' ')
 
     try:
-        maiuser = await get_maiuser(event)
-        qq = int(maiuser.user_id)
-    except NoLinkQQError as e:
+        maiuser = await get_or_create_maiuser(event)
+    except NoLinkQQError:
         # 未绑定 QQ
         maiuser = None
         qq = None
     except ValueError as e:
         await matcher.finish(str(e))
         return
+    else:
+        qq = maiuser.user_id
 
     try:
         # 搜索歌曲

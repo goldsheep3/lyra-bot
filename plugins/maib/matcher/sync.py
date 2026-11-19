@@ -18,12 +18,12 @@ from nonebot.adapters.telegram import Bot as TGBot
 from nonebot.adapters.telegram.event import PrivateMessageEvent as TGPrivateMessageEvent
 
 from .. import config, utils, services, image_gen, network
-from ..services.models import MaiUser
+from ..utils import NoLinkQQError
 from ..utils.report import MaiChartAchDiffReport, build_diff_report
 from ..utils.sync import build_legacy_lyra_ach_list, build_lyra_records_v3, parse_lyra_maisync_data
 from . import Reply, reply, rule_is_private
-from .context import get_maiuser
 from .message import build_msg
+from .context import get_or_create_maiuser
 
 sytb = on_regex(r'^sytb$', priority=5, block=True)
 
@@ -129,12 +129,9 @@ async def get_sy_and_upload(user_id: int) -> MaiChartAchDiffReport:
     return report
 
 
-async def check_sync_cn(qq_user: int | MaiUser, ignore_cache_expire: bool = False) -> tuple[MaiUser, MaiChartAchDiffReport | None]:
+async def check_sync_cn(*, qq: int, ignore_cache_expire: bool = False) -> MaiChartAchDiffReport | None:
     # 1. 统一获取 MaiUser 对象
-    if isinstance(qq_user, int):
-        maiuser = await services.check_mu(qq_user)
-    else:
-        maiuser = qq_user
+    maiuser = await services.refactoring.user.get_or_create_maiuser_qq(qq)
     
     # 2. 缓存有效性检查
     if not ignore_cache_expire:
@@ -142,20 +139,16 @@ async def check_sync_cn(qq_user: int | MaiUser, ignore_cache_expire: bool = Fals
         # 兼容 naive/aware 时间戳：cn_update_at 在 PostgreSQL(timestamptz) 下是 aware、
         # 在 SQLite 下是 naive，直接与 datetime.now() 相减会因类型不一致抛 TypeError，
         # 故按 last_update 是否带时区选取同类型的 now。
-        last_update = maiuser.cn_update_at
+        last_update = maiuser.cn_update_time
         now = datetime.now(last_update.tzinfo) if last_update.tzinfo is not None else datetime.now()
         if now - last_update < cache_ttl:
             # 缓存未过期，直接返回
-            return maiuser, None
+            return None
     
     # 3. 执行同步并获取差异报告
-    report = await get_sy_and_upload(maiuser.qq)
+    report = await get_sy_and_upload(qq)
     
-    # 4. 若有变更，重新拉取最新的用户信息
-    if report.has_changes:
-        maiuser = await services.check_mu(maiuser.qq)
-    
-    return maiuser, report
+    return report
 
 
 @sytb.handle()
@@ -163,7 +156,10 @@ async def sytb_handled(event: Event, matcher: Matcher, reply: Reply = reply):
     """处理命令: sytb (水鱼同步)"""
     try:
         user_id = int(event.get_user_id())
-        maiuser: utils.MaiUser = await get_maiuser(event, user_id=user_id)
+        maiuser = await get_or_create_maiuser(event, target_id=user_id)
+    except NoLinkQQError:
+        await matcher.finish(await reply("link.get_more_info"))
+        return
     except Exception as e:
         await matcher.finish(str(e))
         return
@@ -190,7 +186,10 @@ async def sytb_handled(event: Event, matcher: Matcher, reply: Reply = reply):
 @get_sync_code.handle()
 async def get_sync_code_handled(event: Event, matcher: Matcher, reply: Reply = reply):
     try:
-        maiuser = await get_maiuser(event)
+        maiuser = await get_or_create_maiuser(event)
+    except NoLinkQQError:
+        await matcher.finish(await reply("link.get_more_info"))
+        return
     except Exception as e:
         await matcher.finish(str(e))
         return
@@ -254,7 +253,7 @@ async def file_receiver_handled(bot: Bot, event: Event, matcher: Matcher, reply:
     else:
         return  # 静默退出未被捕获的其他情况
 
-    maiuser = await get_maiuser(event)
+    maiuser = await get_or_create_maiuser(event)
     user_id = maiuser.user_id
     file_version = file_version or "v0.2.3"  # dxrating.net 兼容脚本的默认版本号
 

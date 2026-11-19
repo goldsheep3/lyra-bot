@@ -7,14 +7,14 @@ from nonebot.internal.matcher import Matcher
 from nonebot.adapters import Event
 
 # -- platform adapter --
-from nonebot.adapters.onebot.v11 import (Event as OneBotV11Event,
-                                         GroupMessageEvent as OneBotV11GroupMessageEvent,)
+from nonebot.adapters.onebot.v11 import (Event as OneBotV11Event,)
 
 from nonebot.adapters.telegram import (Event as TGEvent,)
 
 from .. import services
 from . import Reply, reply
-from .context import get_maiuser
+from .context import get_or_create_maiuser
+from ..utils import NoLinkQQError
 
 
 # 设置乐曲别名
@@ -49,7 +49,10 @@ async def mai_alias_handled(event: Event, matcher: Matcher, groups: tuple = Rege
         return
 
     try:
-        maiuser = await get_maiuser(event)
+        maiuser = await get_or_create_maiuser(event)
+    except NoLinkQQError:
+        await matcher.finish(await reply("link.get_more_info"))
+        return
     except ValueError as e:
         await matcher.finish(str(e))
         return

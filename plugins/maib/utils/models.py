@@ -199,7 +199,7 @@ class MaiChart:
             combo = ach_obj.combo
         else:
             combo = combo if combo is not None else 0
-        level: float = getattr(self, SLevelSource.server(server).lv_field, -1)
+        level: float = getattr(self, SLevelSource.from_server(server).lv_field, -1)
         if level < 0:
             level = self.lv_jp  # fallback
         return get_dxrating(achievement=achievement, level=level, ap_bonus=ap_bonus, combo=combo)
@@ -216,7 +216,7 @@ class MaiChart:
                    plus: Optional[int] = None) -> bool:
         """判断谱面定数是否为加号定数"""
         if isinstance(source, Server):
-            source = SLevelSource.server(source)
+            source = SLevelSource.from_server(source)
         if plus is None:
             if version is None:
                 server = source.to_server() or Server.CN

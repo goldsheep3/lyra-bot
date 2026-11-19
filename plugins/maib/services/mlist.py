@@ -83,7 +83,7 @@ class get_mct_list:
                 min_lv, max_lv = min(lv), max(lv)
             else:
                 min_lv, max_lv = lv, lv
-            level_field = getattr(MaiChart, SLevelSource.server(server).lv_field, MaiChart.lv_jp)
+            level_field = getattr(MaiChart, SLevelSource.from_server(server).lv_field, MaiChart.lv_jp)
 
             stmt = (
                 select(MaiChart)

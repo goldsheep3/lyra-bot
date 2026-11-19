@@ -5,8 +5,8 @@ from nonebot.params import RegexDict
 
 from .. import services
 from . import Reply, reply
-from .context import get_maiuser
-
+from .context import get_or_create_maiuser
+from ..utils import NoLinkQQError
 
 maime_link = on_regex(
     r"^/?(?:绑定|link|bind)\s*(?:aime|卡号|卡片)\s*(?P<access>\d{4}(?:[\s-]?\d{4}){4})\s*$",
@@ -34,10 +34,15 @@ maime_list = on_regex(
 async def _resolve_qq(event: Event, matcher: Matcher) -> int:
     """在 AID 迁移前沿用现有的跨平台 QQ 解析。"""
     try:
-        return (await get_maiuser(event)).user_id
-    except ValueError as exc:
-        await matcher.finish(str(exc))
-        raise AssertionError("Matcher.finish() unexpectedly returned") from exc
+        maiuser = await get_or_create_maiuser(event)
+    except NoLinkQQError as e:
+        await matcher.finish(await reply("link.get_more_info"))
+    except ValueError as e:
+        await matcher.finish(str(e))
+    else:
+        qq = maiuser.user_id
+
+    return qq
 
 
 @maime_link.handle()
