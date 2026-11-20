@@ -1,4 +1,4 @@
-from . import achievement, aime, alias, archive, b50, catalog, mcp_sql, query, record, user, websync
+from . import achievement, aime, alias, archive, catalog, mcp_sql, query, record, user, websync
 from . import maintenance
 
 __all__ = [
@@ -7,7 +7,6 @@ __all__ = [
     "alias",
     "achievement",
     "record",
-    "b50",
     "user",
     "aime",
     "websync",
