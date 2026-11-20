@@ -92,7 +92,7 @@ async def mai_info_handled(event: Event, matcher: Matcher, groups: tuple = Regex
     maidata = await services.catalog.get_maidata(
         shortid,
         qq=target_qq,
-        server=scope,
+        scope=scope,
     )
     if maidata is None:
         await matcher.finish(await reply("info.maidata_not_found", short_id=shortid))

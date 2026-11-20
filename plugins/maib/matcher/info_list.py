@@ -125,7 +125,7 @@ async def b50_handled(event: Event, matcher: Matcher, groups: dict = RegexDict()
         # 目前不兼容 ALL 混合模式
         await matcher.finish(await reply("b50.all_not_supported"))
         return
-    b50_data = await services.b50.get_b50_data(target_qq, scope)
+    b50_data = await services.query.get_b50_data(target_qq, scope)
 
     if not (b50_data.b35 or b50_data.b15):
         # 无谱面数据

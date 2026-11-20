@@ -1,11 +1,122 @@
 from typing import Literal, Optional, Sequence
 
-from ..utils.enums import ServerScope
+from sqlalchemy import and_, func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+from nonebot_plugin_datastore import create_session as get_session
+
+from ..utils.enums import Server, ServerScope
 from ..utils.models import MaiData
 from ._refactoring import catalog as _catalog
+from . import _models as db
 
 
-async def get_maidata(shortid: int, *, qq: Optional[int] = None, server: ServerScope = ServerScope.CN, provider: Optional[str] = None) -> Optional[MaiData]:
+LEGACY_DEFAULT_PROVIDER_BY_SERVER = {
+    Server.JP: "lyrasync-oto",
+    Server.CN: "diving-fish",
+}
+
+
+def _single_server_filter(*, qq: int, server: Server, provider: Optional[str]):
+    """构建单服务器过滤条件"""
+    if provider is None:
+        selected_provider = LEGACY_DEFAULT_PROVIDER_BY_SERVER[server]
+    else:
+        selected_provider = provider
+    return and_(
+        db.MaiChartAch.qq == qq,
+        db.MaiChartAch.server == server,
+        db.MaiChartAch.provider == selected_provider,
+    )
+
+def _multi_server_filter(*, qq: int):
+    """构建 ALL 服务器过滤条件"""
+    return and_(
+        db.MaiChartAch.qq == qq,
+        or_(
+            and_(
+                db.MaiChartAch.server == Server.JP,
+                db.MaiChartAch.provider == LEGACY_DEFAULT_PROVIDER_BY_SERVER[Server.JP],
+            ),
+            and_(
+                db.MaiChartAch.server == Server.CN,
+                db.MaiChartAch.provider == LEGACY_DEFAULT_PROVIDER_BY_SERVER[Server.CN],
+            ),
+        ),
+    )
+
+def _song_load_options(
+    *,
+    qq: int | None,
+    scope: ServerScope,
+    provider: Optional[str],
+) -> tuple:
+    """根据是否提供 qq 号来决定加载成绩或不加载成绩"""
+    chart_loader = selectinload(db.MaiData.charts)
+    if qq is None:
+        return (
+            chart_loader.noload(db.MaiChart.achs),
+            selectinload(db.MaiData.aliases),
+        )
+
+    if scope == ServerScope.ALL:
+        return (
+            chart_loader.selectinload(
+                db.MaiChart.achs.and_(_multi_server_filter(qq=qq))
+            ),
+            selectinload(db.MaiData.aliases),
+        )
+    else:
+        return (
+            chart_loader.selectinload(
+                db.MaiChart.achs.and_(_single_server_filter(qq=qq, server=scope.to_server(), provider=provider))
+            ),
+            selectinload(db.MaiData.aliases),
+        )
+
+def _song_to_utils(
+    song: db.MaiData,
+    *,
+    qq: int | None,
+    keyword: Optional[str] = None,
+) -> MaiData:
+    """转换 db 对象为 utils 对象，如有则尝试加载成绩或匹配别名"""
+    maidata = song.to_utils(achs_user_id=qq)
+    if keyword is None or song.title.lower() == keyword.lower():
+        return maidata
+
+    normalized = keyword.lower()
+    for alias in maidata.aliases:
+        if normalized in alias.alias.lower():
+            maidata._matched_alias = alias.alias
+            break
+    return maidata
+
+async def _get_maidata(
+    shortid: int,
+    *,
+    qq: int | None,
+    scope: ServerScope,
+    provider: Optional[str],
+    session: AsyncSession,
+) -> Optional[MaiData]:
+    """根据 shortid 获取乐曲信息，可选择加载成绩和别名"""
+    statement = (
+        select(db.MaiData)
+        .options(*_song_load_options(qq=qq, scope=scope, provider=provider))
+        .where(db.MaiData.shortid == shortid)
+    )
+    db_song = (await session.execute(statement)).scalar_one_or_none()
+    return _song_to_utils(db_song, qq=qq) if db_song is not None else None
+
+
+async def get_maidata(
+    shortid: int,
+    *,
+    qq: Optional[int] = None,
+    scope: ServerScope = ServerScope.CN,
+    provider: Optional[str] = None
+) -> Optional[MaiData]:
     """获取乐曲信息。
 
     Args:
@@ -14,10 +125,25 @@ async def get_maidata(shortid: int, *, qq: Optional[int] = None, server: ServerS
         server: 加载成绩时使用的服务器范围。
         provider: 可选的成绩数据提供方。
     """
-    return await _catalog.get_maidata(shortid, qq=qq, server=server, provider=provider)
+    async with get_session() as session:
+        song = await _get_maidata(
+            shortid,
+            qq=qq,
+            scope=scope,
+            provider=provider,
+            session=session
+        )
+    return song
 
 
-async def search_maidata(keyword: str, *, qq: Optional[int] = None, server: ServerScope = ServerScope.CN, provider: Optional[str] = None, mode: Literal["smart", "title", "name", "blur"] = "smart") -> Sequence[MaiData]:
+async def search_maidata(
+    keyword: str,
+    *,
+    qq: Optional[int] = None,
+    scope: ServerScope = ServerScope.CN,
+    provider: Optional[str] = None,
+    mode: Literal["smart", "title", "name", "blur"] = "smart"
+) -> Sequence[MaiData]:
     """搜索乐曲信息。
 
     Args:
@@ -27,4 +153,7 @@ async def search_maidata(keyword: str, *, qq: Optional[int] = None, server: Serv
         provider: 可选的成绩数据提供方。
         mode: 搜索模式，可为智能、曲名、别名或模糊搜索。
     """
-    return await _catalog.search_maidata(keyword, qq=qq, server=server, provider=provider, mode=mode)
+    # async with get_session() as session:
+    if True:
+        songs = await _catalog.search_maidata(keyword, qq=qq, server=scope, provider=provider, mode=mode)
+    return songs

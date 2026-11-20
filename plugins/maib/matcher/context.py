@@ -64,7 +64,7 @@ async def get_maidata_with_ach(
         short_id,
         qq=user_id,
         # 需要保留目标服缺少定数时回退 JP 的成绩，因此一次加载两服默认 provider。
-        server=ServerScope.ALL,
+        scope=ServerScope.ALL,
     )
     if maidata is None:
         return None
