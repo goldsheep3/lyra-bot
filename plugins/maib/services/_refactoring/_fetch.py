@@ -6,8 +6,8 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ._tool import execute_func
-from ._models import MaiData, MaiChart
-from ..utils.enums import Server, SLevelSource
+from .._models import MaiData, MaiChart
+from ...utils.enums import Server, SLevelSource
 
 
 __all__ = [

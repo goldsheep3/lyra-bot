@@ -5,9 +5,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from ..utils.enums import Server, SLevelSource
+from ...utils.enums import Server, SLevelSource
 from ._tool import execute_func
-from ._models import MaiData, MaiChart, MaiChartAch
+from .._models import MaiData, MaiChart, MaiChartAch
 
 
 __all__ = [

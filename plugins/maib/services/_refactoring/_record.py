@@ -6,11 +6,11 @@ from typing import Optional, Sequence
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .. import utils
-from ..utils.enums import Server
+from ... import utils
+from ...utils.enums import Server
 from ._tool import execute_func
 from ._minfo import get_mdt
-from ._models import MaiData, MaiRecord
+from .._models import MaiData, MaiRecord
 
 
 __all__ = [

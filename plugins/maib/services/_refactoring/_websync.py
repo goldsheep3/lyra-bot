@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ._tool import execute_func
-from ._models import MaiSync
+from .._models import MaiSync
 from ._user import check_mu
 
 

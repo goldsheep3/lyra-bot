@@ -9,7 +9,7 @@ from nonebot import logger
 from sqlalchemy import text
 from sqlglot import exp, parse
 
-from .._tool import get_session
+from ._tool import get_session
 
 
 DEFAULT_LIMIT = 50

@@ -1,6 +1,6 @@
 from ... import network
 from ...utils import MaiUser, NoLinkQQError
-from .._user import check_mu, set_mu_username
+from ._user import check_mu, set_mu_username
 from .link import get_qq_from_tg
 
 

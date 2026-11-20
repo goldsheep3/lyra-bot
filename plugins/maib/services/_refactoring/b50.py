@@ -12,7 +12,7 @@ from sqlalchemy.orm import selectinload
 from ... import utils
 from ...utils.enums import Server, ServerScope
 from ...utils.map import Versions
-from .._tool import get_session
+from ._tool import get_session
 from .._models import MaiChart, MaiChartAch, MaiData, MaiUser
 from .catalog import LEGACY_DEFAULT_PROVIDER_BY_SERVER
 

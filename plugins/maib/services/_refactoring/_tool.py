@@ -3,7 +3,6 @@ from typing import Protocol, TypeVar, Awaitable, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from nonebot_plugin_datastore import create_session as get_session
 
-
 _T_co = TypeVar("_T_co", covariant=True)
 
 

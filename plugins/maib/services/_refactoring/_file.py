@@ -5,7 +5,7 @@ from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ._tool import execute_func
-from ._models import MaiData
+from .._models import MaiData
 
 
 __all__ = [

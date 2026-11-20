@@ -7,20 +7,19 @@ from ..utils.report import MaiChartAchDiffReport
 from ..utils.sync import LyraRecordV3
 
 from ._refactoring import catalog as _catalog  # catalog
-from . import _mlist as _query  # query
+from ._refactoring import _mlist as _query  # query
 from ._refactoring import alias as _alias  # alias
-from . import _sync as _sync  # achievement
+from ._refactoring import _sync as _sync  # achievement
 from ._refactoring import b50 as _b50  # b50
 from ._refactoring import user as _user  # user
 from ._refactoring import link as _link
 from ._refactoring import aime as _aime  # aime
-from . import _websync as _websync  # websync
-from . import _file as _file  # archive
+from ._refactoring import _websync as _websync  # websync
+from ._refactoring import _file as _file  # archive
 from ._refactoring import mcp_sql as _mcp_sql  # mcp_sql
-from . import _id_remapper as _idmap  # id_mapping
-from . import _record as _record  # record
-from . import _fetch as _fetch  # maintenance.catalog
-from . import _alias as _alias2  # maintenance.alias
+from ._refactoring import _id_remapper as _idmap  # id_mapping
+from ._refactoring import _record as _record  # record
+from ._refactoring import _fetch as _fetch  # maintenance.catalog
 
 
 class catalog:
@@ -267,7 +266,7 @@ class maintenance:
         @staticmethod
         async def sync_aliases(data: list[tuple[int, str]], *, create_qq: int) -> None:
             """同步别名库数据"""
-            return await _alias2.add_ma_batch(data=data, create_qq=create_qq)
+            return await _alias.add_ma_batch(data=data, create_qq=create_qq)
 
     class id_mapping:
         @staticmethod

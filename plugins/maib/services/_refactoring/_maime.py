@@ -6,7 +6,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ._tool import execute_func
-from ._models import Maime
+from .._models import Maime
 
 
 __all__ = [

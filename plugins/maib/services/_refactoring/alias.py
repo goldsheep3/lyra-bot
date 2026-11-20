@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from typing import Literal, TypeAlias
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .._tool import get_session
+from ._tool import get_session, execute_func
 from .._models import MaiAlias, MaiData
 
 
@@ -82,6 +83,57 @@ async def remove_alias(shortid: int, alias: str, *, qq: int) -> AliasRemoveStatu
         await session.delete(existing)
         await session.commit()
         return "success"
+
+
+async def add_ma_batch(data: list[tuple[int, str]], create_qq: int) -> None:
+    """
+    批量添加别名 (完美兼容 SQLite 与 PostgreSQL)
+    :param data: 格式为 `[(shortid, alias), ...]`
+    """
+    if not data:
+        return
+
+    async def _sqlite_postgresql_action(native_insert, session: AsyncSession):
+        chunk_size = 512
+        for i in range(0, len(data), chunk_size):
+            chunk = data[i:i + chunk_size]
+            create_time = datetime.now()
+            
+            existing_ids = set(
+                (await session.execute(
+                    select(MaiData.shortid).where(MaiData.shortid.in_({s for s, _ in chunk}))
+                )).scalars().all()
+            )
+            if not existing_ids:
+                continue
+
+            full_data = [
+                {"shortid": sid, "name": alias, "create_qq": create_qq,
+                 "create_at": create_time}
+                for sid, alias in chunk if sid in existing_ids
+            ]
+            if not full_data:
+                continue
+
+            stmt = native_insert(MaiAlias).values(full_data)
+            stmt = stmt.on_conflict_do_nothing(index_elements=["shortid", "name"])
+            
+            await session.execute(stmt)
+
+    async def _action(session: AsyncSession):
+        bind_engine = session.get_bind()
+        dialect_name = bind_engine.dialect.name
+        
+        if dialect_name == "sqlite":
+            from sqlalchemy.dialects.sqlite import insert as native_insert
+            await _sqlite_postgresql_action(native_insert, session)
+        elif dialect_name == "postgresql":
+            from sqlalchemy.dialects.postgresql import insert as native_insert
+            await _sqlite_postgresql_action(native_insert, session)
+        else:
+            raise NotImplementedError(f"当前方案暂不支持数据库: {dialect_name}")
+
+    await execute_func.action(_action, session=None)
 
 
 __all__ = [

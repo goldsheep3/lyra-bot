@@ -5,11 +5,11 @@ from sqlalchemy import select, or_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from ..utils.exceptions import BlurSearchTooManyResultsError
-from ..utils.enums import Server
-from .. import config
+from ...utils.exceptions import BlurSearchTooManyResultsError
+from ...utils.enums import Server
+from ... import config
 from ._tool import execute_func
-from ._models import MaiData, MaiChart, MaiChartAch, MaiAlias
+from .._models import MaiData, MaiChart, MaiChartAch, MaiAlias
 
 
 __all__ = [

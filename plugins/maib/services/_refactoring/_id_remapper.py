@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ._tool import execute_func
-from ._models import MaiData, MaiChart, MaiChartAch, MaiAlias, MaiIDMap
+from .._models import MaiData, MaiChart, MaiChartAch, MaiAlias, MaiIDMap
 
 
 __all__ = [

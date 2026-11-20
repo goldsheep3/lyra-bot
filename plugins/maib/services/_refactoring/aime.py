@@ -8,7 +8,7 @@ from typing import TypedDict
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 
-from .._tool import get_session
+from ._tool import get_session
 from .._models import Maime, MaiUser
 
 

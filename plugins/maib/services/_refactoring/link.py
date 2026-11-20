@@ -3,7 +3,7 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .._tool import execute_func
+from ._tool import execute_func
 from .._models import MaiUser
 
 
