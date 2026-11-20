@@ -1,12 +1,12 @@
 from dataclasses import dataclass
 
 
-GenreID = int
+int = int
 
 
 @dataclass(frozen=True)
 class GenreInfo:
-    id: GenreID
+    id: int
     jp: str
     intl: str
     cn: str
@@ -21,7 +21,7 @@ class GenreInfo:
 
 _gi = GenreInfo
 
-raw_genres: dict[GenreID, GenreInfo] = {
+raw_genres: dict[int, GenreInfo] = {
     0: _gi(0, jp="POPS＆アニメ", intl="POPS&ANIME", cn="流行&动漫"),
     1: _gi(1, jp="niconico＆\nボーカロイド", intl="niconico&\nVOCALOID™", cn="niconico&\nVOCALOID™"),
     2: _gi(2, jp="東方Project", intl="東方Project", cn="东方Project"),

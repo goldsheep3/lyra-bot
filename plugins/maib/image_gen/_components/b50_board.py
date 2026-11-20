@@ -7,7 +7,7 @@ from typing import Literal, Optional, Union
 from PIL import Image
 
 from ...utils import MaiB50Data, DXRatingData
-from ...utils.map import DifficultyID, VersionID, Versions
+from ...utils.map import Versions
 from ...utils.models import MaiData
 from ...utils.enums import UICode, Server, ServerScope
 from .. import color as Color
@@ -17,10 +17,10 @@ from ..tools import image_grid_board
 
 
 def draw_b50_board(
-    b35_entries: list[tuple[MaiData, DifficultyID]], b15_entries: list[tuple[MaiData, DifficultyID]],
+    b35_entries: list[tuple[MaiData, int]], b15_entries: list[tuple[MaiData, int]],
     *,
-    dxrating_data: DXRatingData, current_version: VersionID, updated: str,
-    server: Server, cut_version: Optional[VersionID] = None,
+    dxrating_data: DXRatingData, current_version: int, updated: str,
+    server: Server, cut_version: Optional[int] = None,
     username: str = 'maimai', avatar: Optional[Union[bytes, Image.Image]] = None,
     line_width: Literal[4, 5] = 5, ms: MS = MS(), ui_code: UICode = UICode.JP
 ) -> Image.Image:
@@ -36,7 +36,7 @@ def draw_b50_board(
     
     if cut_version is None:
         cut_version = Versions.b50_cut_version(current_version)
-    def generator(entries: list[tuple[MaiData, DifficultyID]], is_b15: bool):
+    def generator(entries: list[tuple[MaiData, int]], is_b15: bool):
         if line_width == 4:
             ra = dxrating_data.b15.total if is_b15 else dxrating_data.b35.total
             ver = current_version if is_b15 else (cut_version - 1)

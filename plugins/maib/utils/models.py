@@ -16,7 +16,7 @@ from nonebot_plugin_localstore import get_plugin_data_dir
 
 from .calculator import get_dxrating, get_dxscore_max, get_dxscore_star_count, get_level_plus_line
 from .constants import DEFAULT_DATETIME
-from .map import ComboID, SyncID, GenreID, DifficultyID, VersionID, Versions
+from .map import Versions
 from .enums import Server, ServerScope, SLevelSource
 from .type import Achievement
 
@@ -48,13 +48,13 @@ class MaiAlias:
 class MaiChartAch:
     """maimai 谱面成就信息"""
     shortid: int
-    difficulty: DifficultyID
+    difficulty: int
     server: Server
     achievement: float  # TODO
     dxscore: int = 0
     dxscore_max: int = 0
-    combo: ComboID = 0
-    sync: SyncID = 0
+    combo: int = 0
+    sync: int = 0
     update_at: datetime = DEFAULT_DATETIME
     user_id: int = -1
 
@@ -127,7 +127,7 @@ class MaiChartAch:
 class MaiChart:
     """maimai 谱面信息"""
     shortid: int
-    difficulty: DifficultyID
+    difficulty: int
     lv_jp: float
     _id: Optional[int] = None
     lv_cn: Optional[float] = None
@@ -191,7 +191,7 @@ class MaiChart:
         current.update(ach)
 
     def get_dxrating(self, server: Server = Server.JP, ap_bonus: int = 0,
-                     *, achievement: Optional[Achievement] = None, combo: Optional[ComboID] = None) -> int:
+                     *, achievement: Optional[Achievement] = None, combo: Optional[int] = None) -> int:
         """根据成就率和定数计算 DX Rating"""
         if achievement is None:
             ach_obj = self.get_ach(server)
@@ -212,7 +212,7 @@ class MaiChart:
         self.notes["touch"] = touch
         self.notes["break"] = break_note
 
-    def lv_is_plus(self, source: SLevelSource | Server = SLevelSource.JP, version: Optional[VersionID] = None,
+    def lv_is_plus(self, source: SLevelSource | Server = SLevelSource.JP, version: Optional[int] = None,
                    plus: Optional[int] = None) -> bool:
         """判断谱面定数是否为加号定数"""
         if isinstance(source, Server):
@@ -235,7 +235,7 @@ class MaiData:
     title: str          # 乐曲名
     bpm: int            # 乐曲 BPM（速度）
     artist: str         # 乐曲艺术家
-    genre: GenreID      # 乐曲流派 ID
+    genre: int          # 乐曲流派 ID
     cabinet: Literal['SD', 'DX']  # 乐曲谱面类型
     version_jp: int             # 乐曲在 JP 服务器的版本 ID
     version_cn: Optional[int]   # 乐曲在 CN 服务器的版本 ID
@@ -248,7 +248,7 @@ class MaiData:
     buddy: bool = False         # 乐曲是否为 UTAGE/Buddy 曲目
     jp_is_plate_required: bool = True  # JP 服务器对应版本获取牌子时是否需要该乐曲
     cn_is_plate_required: bool = True  # CN 服务器对应版本获取牌子时是否需要该乐曲
-    _charts: dict[DifficultyID, Optional[MaiChart]] = field(
+    _charts: dict[int, Optional[MaiChart]] = field(
         default_factory=lambda: {i: None for i in range(1, 8)}
     )
     aliases: list[MaiAlias] = field(default_factory=list)
@@ -355,10 +355,10 @@ class MaiData:
             yield img
 
     @property
-    def charts(self) -> dict[DifficultyID, MaiChart]:
+    def charts(self) -> dict[int, MaiChart]:
         return {c.difficulty: c for c in self._charts.values() if c}
 
-    def get_chart(self, diff: DifficultyID) -> Optional[MaiChart]:
+    def get_chart(self, diff: int) -> Optional[MaiChart]:
         """根据难度获取谱面对象"""
         if not 1 <= diff <= 7:
             raise ValueError("Difficulty must be between 1 and 7")
@@ -390,7 +390,7 @@ class MaiData:
             limit = 1
         return ver >= version - limit
 
-    def get_chart_dxrating(self, diff: DifficultyID, server: Server, ap_bonus: int = 0) -> int:
+    def get_chart_dxrating(self, diff: int, server: Server, ap_bonus: int = 0) -> int:
         """获取指定难度谱面的 DXRating"""
         chart = self.get_chart(diff)
         if chart is None:

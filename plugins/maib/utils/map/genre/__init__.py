@@ -1,13 +1,13 @@
 from typing import Optional, TypeVar
 
-from ._data import GenreID, GenreInfo, raw_genres
+from ._data import int, GenreInfo, raw_genres
 from .._normalize import normalize_basic as normalize
 from ...fuzzy import fuzzy_get
 
 
 __all__ = [
     "Genres",
-    "GenreID",
+    "int",
     "GenreInfo",
 ]
 
@@ -15,8 +15,8 @@ __all__ = [
 E = TypeVar("E")
 
 
-def _index_name_id(raw_genres: dict[GenreID, GenreInfo]) -> dict[str, GenreID]:
-    _dict: dict[str, GenreID] = {}
+def _index_name_id(raw_genres: dict[int, GenreInfo]) -> dict[str, int]:
+    _dict: dict[str, int] = {}
     
     for genre_id, genre_info in raw_genres.items():
         for key in genre_info.keys():
@@ -26,46 +26,46 @@ def _index_name_id(raw_genres: dict[GenreID, GenreInfo]) -> dict[str, GenreID]:
 
 
 class Genres:
-    _raw: dict[GenreID, GenreInfo] = raw_genres
-    _index_name_id: dict[str, GenreID] = _index_name_id(raw_genres)
+    _raw: dict[int, GenreInfo] = raw_genres
+    _index_name_id: dict[str, int] = _index_name_id(raw_genres)
 
     # get: id -> info
 
     @classmethod
-    def get(cls, genre_id: GenreID) -> Optional[GenreInfo]:
-        """根据 `GenreID` 获取 `GenreInfo`"""
+    def get(cls, genre_id: int) -> Optional[GenreInfo]:
+        """根据 `int` 获取 `GenreInfo`"""
         return cls._raw.get(genre_id)
 
     # text: id -> info.text
 
     @classmethod
-    def _text(cls, genre_id: GenreID, index: str, *, default: E = None) -> str | E:
-        """根据 `GenreID` 获取 `GenreInfo` 的指定文本属性"""
+    def _text(cls, genre_id: int, index: str, *, default: E = None) -> str | E:
+        """根据 `int` 获取 `GenreInfo` 的指定文本属性"""
         info = cls.get(genre_id)
         if info is None:
             return default
         return getattr(info, index, default)
 
     @classmethod
-    def text_jp(cls, genre_id: GenreID, *, default: E = None) -> str | E:
-        """根据 `GenreID` 获取 `GenreInfo` 的完整名称"""
+    def text_jp(cls, genre_id: int, *, default: E = None) -> str | E:
+        """根据 `int` 获取 `GenreInfo` 的完整名称"""
         return cls._text(genre_id, index='jp', default=default)
 
     @classmethod
-    def text_intl(cls, genre_id: GenreID, *, default: E = None) -> str | E:
-        """根据 `GenreID` 获取 `GenreInfo` 的国际化名称"""
+    def text_intl(cls, genre_id: int, *, default: E = None) -> str | E:
+        """根据 `int` 获取 `GenreInfo` 的国际化名称"""
         return cls._text(genre_id, index='intl', default=default)
 
     @classmethod
-    def text_cn(cls, genre_id: GenreID, *, default: E = None) -> str | E:
-        """根据 `GenreID` 获取 `GenreInfo` 的汉化文本"""
+    def text_cn(cls, genre_id: int, *, default: E = None) -> str | E:
+        """根据 `int` 获取 `GenreInfo` 的汉化文本"""
         return cls._text(genre_id, index='cn', default=default)
 
     # find: name -> id/info
 
     @classmethod
-    def find_id(cls, name: str, *, allow_fuzzy: bool = False) -> Optional[GenreID]:
-        """根据 流派名/简写 获取 `GenreID`"""
+    def find_id(cls, name: str, *, allow_fuzzy: bool = False) -> Optional[int]:
+        """根据 流派名/简写 获取 `int`"""
         if allow_fuzzy:
             # fuzzy_get 会优先进行一次精确匹配，再尝试模糊查询
             return fuzzy_get(cls._index_name_id, normalize(name))
@@ -81,7 +81,7 @@ class Genres:
     # dict key/value/items
 
     @classmethod
-    def id_list(cls) -> list[GenreID]:
+    def id_list(cls) -> list[int]:
         """获取所有流派 ID 列表"""
         return list(cls._raw.keys())
     
@@ -91,6 +91,6 @@ class Genres:
         return list(cls._raw.values())
     
     @classmethod
-    def data(cls) -> dict[GenreID, GenreInfo]:
+    def data(cls) -> dict[int, GenreInfo]:
         """获取所有流派信息字典"""
         return cls._raw.copy()

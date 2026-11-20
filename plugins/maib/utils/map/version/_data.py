@@ -1,12 +1,12 @@
 from dataclasses import dataclass
 
 
-VersionID = int
+int = int
 
 
 @dataclass(frozen=True)
 class VersionInfo:
-    id: VersionID
+    id: int
     name: str
     code: tuple[str, ...]
     plate: tuple[str, ...] = tuple()
@@ -14,7 +14,7 @@ class VersionInfo:
 
 _vi = VersionInfo
 
-raw_versions: dict[VersionID, VersionInfo] = {
+raw_versions: dict[int, VersionInfo] = {
     # maimai
     0: _vi(0, name="maimai", code=('mai',), plate=('真',)),
     1: _vi(1, name="maimai PLUS", code=('mai+',), plate=('真',)),

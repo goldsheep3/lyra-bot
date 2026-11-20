@@ -1,12 +1,12 @@
 from dataclasses import dataclass
 
 
-DifficultyID = int
+int = int
 
 
 @dataclass(frozen=True)
 class DifficultyInfo:
-    id: DifficultyID
+    id: int
     jp: str
     cn: str
     cn_short: str
@@ -23,7 +23,7 @@ class DifficultyInfo:
 
 _di = DifficultyInfo
 
-raw_difficulties: dict[DifficultyID, DifficultyInfo] = {
+raw_difficulties: dict[int, DifficultyInfo] = {
     0: _di(0, jp="UNKNOWN",   cn="未知",     cn_short="？",),
     1: _di(1, jp="EASY",      cn="简单",     cn_short="蓝",),
     2: _di(2, jp="BASIC",     cn="基础",     cn_short="绿",),

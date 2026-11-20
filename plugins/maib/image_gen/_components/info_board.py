@@ -9,7 +9,7 @@ from PIL import Image
 
 from ...utils.models import MaiData, MaiUser, MaiChart, MaiChartAch
 from ...utils.enums import UICode, Server
-from ...utils.map import Versions, DifficultyID, VersionID
+from ...utils.map import Versions
 from ...utils import get_level_plus_line
 from ..color import TRANSPARENT, WHITE, BLACK, THEME_CYAN, GRAY, HALF_TRANSPARENT
 from ..utils import MS, FontCode, FontManager, ImageManager
@@ -162,7 +162,7 @@ class MaiChartInfoBoard:
     _charts_font_size = 3.5
 
     @classmethod
-    def _charts(cls, charts: list[MaiChart], server: Server, version: Optional[VersionID], cabinet: Literal['SD', 'DX'],
+    def _charts(cls, charts: list[MaiChart], server: Server, version: Optional[int], cabinet: Literal['SD', 'DX'],
                 maiuser: Optional[MaiUser] = None, is_b15: bool = False, ms: MS = MS(), ui_code: UICode = UICode.JP) -> Image.Image:
         width = cls.width / 2
         margin = cls._charts_margin

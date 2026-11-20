@@ -1,8 +1,8 @@
-from ._data import VersionID
+from ._data import int
 from ...enums import Server
 
 
-def mapping_jp_to_cn(version_id: VersionID) -> VersionID:
+def mapping_jp_to_cn(version_id: int) -> int:
     """将 JP 版本号映射为 CN 版本号"""
     
     if version_id >= 2000:
@@ -30,7 +30,7 @@ def mapping_jp_to_cn(version_id: VersionID) -> VersionID:
         return (version_id - 13) // 2 + 2021
 
 
-def b50_cut_version(version_id: VersionID) -> VersionID:
+def b50_cut_version(version_id: int) -> int:
     """获取 B50 分段所需的 cut_version"""
     if version_id < 24:
         return version_id
@@ -40,9 +40,9 @@ def b50_cut_version(version_id: VersionID) -> VersionID:
         return version_id
 
 
-def get_server(version_id: VersionID) -> Server:
+def get_server(version_id: int) -> Server:
     return Server.CN if version_id >= 2000 else Server.JP
 
-def is_finale_frame(version_id: VersionID) -> bool:
+def is_finale_frame(version_id: int) -> bool:
     """判断是否为旧框版本"""
     return version_id <= 12

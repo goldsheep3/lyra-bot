@@ -7,11 +7,11 @@ from ..utils.enums import UICode
 from ..utils.type import Achievement
 from ..utils.calculator import get_dxscore_star_count
 from ..utils.map import (
-    GenreID, GenreInfo, Genres,
-    ComboID, ComboInfo, Combos,
-    SyncID, SyncInfo, Syncs,
+    GenreInfo, Genres,
+    ComboInfo, Combos,
+    SyncInfo, Syncs,
     AchievementRateInfo, AchievementMap,
-    DifficultyID, DifficultyInfo, Difficulties,
+    DifficultyInfo, Difficulties,
 )
 from .color import (
     THEME_CYAN, WHITE, BLACK, TRANSPARENT, HALF_TRANSPARENT,
@@ -21,14 +21,14 @@ from .color import (
 from .models import GenreStyle, EvaluateStyle, RateStyle, RateFrameStyle, DifficultyStyle, CabinetStyle, DXScoreStyle
 
 
-GENRE_TYPE = GenreID | GenreInfo
+GENRE_TYPE = int | GenreInfo
 
 def get_genre_style(genre: GENRE_TYPE, ui_code: UICode) -> GenreStyle:
     """获取流派风格信息"""
     _info = genre if isinstance(genre, GenreInfo) else Genres.get(genre)
     if _info is None:
         return GenreStyle(content="N/A", fill=THEME_CYAN, sub_fill=THEME_CYAN, shadow=TRANSPARENT)
-    gid: GenreID = _info.id
+    gid: int = _info.id
     ginfo: GenreInfo = _info
     
     # content
@@ -56,14 +56,14 @@ def get_genre_style(genre: GENRE_TYPE, ui_code: UICode) -> GenreStyle:
     )
 
 
-COMBO_TYPE = ComboID | ComboInfo
+COMBO_TYPE = int | ComboInfo
 
 def get_combo_style(combo: COMBO_TYPE, short: bool = False, is_cn_all: bool = False) -> EvaluateStyle:
     """获取连击评价风格信息"""
     _info = combo if isinstance(combo, ComboInfo) else Combos.get(combo)
     if _info is None:
         return EvaluateStyle(content="N/A", fill=THEME_CYAN, stroke=TRANSPARENT, shadow=TRANSPARENT)
-    cid: ComboID = _info.id
+    cid: int = _info.id
     cinfo: ComboInfo = _info
 
     # content
@@ -94,14 +94,14 @@ def get_combo_style(combo: COMBO_TYPE, short: bool = False, is_cn_all: bool = Fa
     )
 
 
-SYNC_TYPE = SyncID | SyncInfo
+SYNC_TYPE = int | SyncInfo
 
 def get_sync_style(sync: SYNC_TYPE, short: bool = False, is_cn_all: bool = False) -> EvaluateStyle:
     """获取同步评价风格信息"""
     _info = sync if isinstance(sync, SyncInfo) else Syncs.get(sync)
     if _info is None:
         return EvaluateStyle(content="N/A", fill=THEME_CYAN, stroke=TRANSPARENT, shadow=TRANSPARENT)
-    sid: SyncID = _info.id
+    sid: int = _info.id
     sinfo: SyncInfo = _info
 
     # content
@@ -132,7 +132,7 @@ def get_sync_style(sync: SYNC_TYPE, short: bool = False, is_cn_all: bool = False
     )
 
 
-DIFFICULTY_TYPE = DifficultyID | DifficultyInfo
+DIFFICULTY_TYPE = int | DifficultyInfo
 
 def get_difficulty_style(difficulty: DIFFICULTY_TYPE, is_cn_all: bool = False) -> DifficultyStyle:
     """获取难度风格信息"""
@@ -152,7 +152,7 @@ def get_difficulty_style(difficulty: DIFFICULTY_TYPE, is_cn_all: bool = False) -
             title_bg=DIFFICULTY_STYLE[0].title_bg,
             level_text=DIFFICULTY_STYLE[0].level_text,
         )
-    did: DifficultyID = _info.id
+    did: int = _info.id
     dinfo: DifficultyInfo = _info
     
     colors = DIFFICULTY_STYLE.get(did, DIFFICULTY_STYLE[0])

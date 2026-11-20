@@ -1,12 +1,12 @@
 from dataclasses import dataclass
 
 
-SyncID = int
+int = int
 
 
 @dataclass(frozen=True)
 class SyncInfo:
-    id: SyncID
+    id: int
     full: str
     short: str
     cn: str
@@ -23,7 +23,7 @@ class SyncInfo:
 
 _si = SyncInfo
 
-raw_syncs: dict[SyncID, SyncInfo] = {
+raw_syncs: dict[int, SyncInfo] = {
     0: _si(0, full="SYNC PLAY",     short="SYNC", cn="同步游玩"),
     1: _si(1, full="SYNC PLAY",     short="SYNC", cn="同步游玩"),
     2: _si(2, full="FULL SYNC",     short="FS",   cn="全完同步"),  # SBGA 机台发包原文如此，有意保留

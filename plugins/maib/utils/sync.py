@@ -13,7 +13,7 @@ import orjson
 
 from .models import MaiChartAch, MaiData
 from .enums import Server
-from ..utils.map import Difficulties, ComboID, SyncID, Combos, Syncs
+from ..utils.map import Difficulties, Combos, Syncs
 
 
 __all__ = [
@@ -48,8 +48,8 @@ class LegacyLyraRecord:
     server: Server
     achievement: float
     dxscore: int
-    combo: ComboID
-    sync: SyncID
+    combo: int
+    sync: int
 
 
 @dataclass(slots=True)
@@ -73,8 +73,8 @@ class LyraRecordV3:
     server: Server
     achievement: float
     dxscore: int
-    combo: ComboID
-    sync: SyncID
+    combo: int
+    sync: int
     play_time: datetime
     play_timestamp: int
     record_hash: str

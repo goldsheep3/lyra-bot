@@ -1,12 +1,12 @@
 from dataclasses import dataclass
 
 
-ComboID = int
+int = int
 
 
 @dataclass(frozen=True)
 class ComboInfo:
-    id: ComboID
+    id: int
     full: str
     short: str
     cn: str
@@ -23,7 +23,7 @@ class ComboInfo:
 
 _ci = ComboInfo
 
-raw_combos: dict[ComboID, ComboInfo] = {
+raw_combos: dict[int, ComboInfo] = {
     0: _ci(0, full="FULL COMBO",   short="FC",  cn="全连击"),
     1: _ci(1, full="FULL COMBO",   short="FC",  cn="全连击"),
     2: _ci(2, full="FULL COMBO+",  short="FC+", cn="全连击+"),

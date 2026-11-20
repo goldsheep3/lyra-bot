@@ -2,7 +2,6 @@
 image_gen.color
 绘图颜色表
 """
-from ..utils.map import GenreID, DifficultyID, ComboID, SyncID
 from .models import GenreColors, DifficultyColors, RateColors, EvaluateColors, CabinetColors, TrophyColors
 
 __all__ = [
@@ -46,7 +45,7 @@ HALF_TRANSPARENT = '#FFFFFF88'
 # 流派 / Genre 颜色主题
 # --------------------------------
 
-GENRE_STYLE: dict[GenreID, GenreColors] = {
+GENRE_STYLE: dict[int, GenreColors] = {
     # POPS&ANIME
     0: GenreColors(main='#FF972A'),
     # niconico&VOCALOID™
@@ -68,7 +67,7 @@ GENRE_STYLE: dict[GenreID, GenreColors] = {
 # 难度 / Difficulty 颜色主题
 # --------------------------------
 
-DIFFICULTY_STYLE: dict[DifficultyID, DifficultyColors] = {
+DIFFICULTY_STYLE: dict[int, DifficultyColors] = {
     # 未知 Unknown
     0: DifficultyColors(bg="#9B9B9B", frame="#555555", text=WHITE, deep="#7F7F7F", title_bg="#717171", level_text=WHITE),
     # 简单 Easy (占位，暂时无蓝色色卡且 DX 已经没有 Easy 难度)
@@ -154,8 +153,8 @@ _GD = EvaluateColors(fill=_EVAL_GOLD_FILL, stroke=_EVAL_GOLD_SHADOW, shadow=_EVA
 _BE = EvaluateColors(fill=_EVAL_BLUE_FILL, stroke=_EVAL_BLUE_SHADOW, shadow=_EVAL_BLUE_SHADOW)
 _W = EvaluateColors(fill=_EVAL_WHITE_FILL, stroke=_EVAL_WHITE_SHADOW, shadow=_EVAL_WHITE_SHADOW)
 
-COMBO_STYLE: dict[ComboID, EvaluateColors] = {0: _N, 1: _GN, 2: _GN, 3: _GD, 4: _GD}
-SYNC_STYLE: dict[SyncID, EvaluateColors] = {0: _N, 1: _W, 2: _BE, 3: _BE, 4: _GD, 5: _GD}
+COMBO_STYLE: dict[int, EvaluateColors] = {0: _N, 1: _GN, 2: _GN, 3: _GD, 4: _GD}
+SYNC_STYLE: dict[int, EvaluateColors] = {0: _N, 1: _W, 2: _BE, 3: _BE, 4: _GD, 5: _GD}
 
 
 # --------------------------------

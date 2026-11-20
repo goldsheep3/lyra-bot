@@ -11,8 +11,7 @@ from nonebot import logger
 from nonebot_plugin_localstore import get_plugin_data_dir, get_plugin_cache_dir
 from nonebot_plugin_datastore.db import post_db_init
 from . import config, utils, services, network
-from .utils.enums import Server, SLevelSource
-from .utils.map import VersionID, Versions, Genres
+from .utils.map import Versions, Genres
 from .utils.map.version import mapping_jp_to_cn
 
 
@@ -203,7 +202,7 @@ async def parse_maidata(raw_mdt: Mapping[str, str], zip_path: Path | str) -> uti
     else:
         cabinet = "DX" if any(k in cabinet_raw.lower() for k in ["dx", "でらっくす", "deluxe"]) else "SD"
 
-    version: VersionID | Literal[-1] = Versions.find_id(_raw_get(raw_mdt, "version", default=""), default=-1)
+    version: int | Literal[-1] = Versions.find_id(_raw_get(raw_mdt, "version", default=""), default=-1)
     converter = _raw_get(raw_mdt, "ChartConvertTool", default="")
 
     is_utage = shortid > 100000
@@ -347,7 +346,7 @@ async def _build_cn_update_lists(sy_data: Sequence[Any]) -> tuple[list[tuple[int
 
         basic_info = sy_item.get("basic_info", {})
         raw_version: str = basic_info.get("from", "") if isinstance(basic_info, Mapping) else ""
-        version: VersionID | Literal[-1] = Versions.find_id(raw_version, default=-1)
+        version: int | Literal[-1] = Versions.find_id(raw_version, default=-1)
         if version >= 0:
             cn_version = mapping_jp_to_cn(version)
             if cn_version is not None:

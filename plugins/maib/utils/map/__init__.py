@@ -1,25 +1,25 @@
-from .version import Versions, VersionID, VersionInfo
-from .genre import Genres, GenreID, GenreInfo
+from .version import Versions, VersionInfo
+from .genre import Genres, GenreInfo
 # from .dan import ...
-from .rate import AchievementMap, Achievement, AchievementRateInfo
-from .difficulty import Difficulties, DifficultyID, DifficultyInfo
-from .combo import Combos, ComboID, ComboInfo
-from .sync import Syncs, SyncID, SyncInfo
+from .rate import AchievementMap, AchievementRateInfo
+from .difficulty import Difficulties, DifficultyInfo
+from .combo import Combos, ComboInfo
+from .sync import Syncs,  SyncInfo
 
 
 __all__ = [
     # version
-    "Versions", "VersionID", "VersionInfo",
+    "Versions", "VersionInfo",
     # genre
-    "Genres", "GenreID", "GenreInfo",
+    "Genres", "GenreInfo",
     # dan
     # **WIP**
     # rate
-    "AchievementMap", "Achievement", "AchievementRateInfo",
+    "AchievementMap", "AchievementRateInfo",
     # difficulty
-    "Difficulties", "DifficultyID", "DifficultyInfo",
+    "Difficulties", "DifficultyInfo",
     # combo
-    "Combos", "ComboID", "ComboInfo",
+    "Combos", "ComboInfo",
     # sync
-    "Syncs", "SyncID", "SyncInfo",
+    "Syncs", "SyncInfo",
 ]

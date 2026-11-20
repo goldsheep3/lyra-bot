@@ -8,7 +8,6 @@ from functools import lru_cache
 
 from ...utils import MaiData
 from ...utils.enums import UICode, Server
-from ...utils.map import DifficultyID
 from ..utils import MS, FontManager, FontCode
 from ..color import TRANSPARENT, GRAY
 from ..style import get_difficulty_style, DIFFICULTY_TYPE, get_rate_style
@@ -66,7 +65,7 @@ class MiniBoxBadge:
     evaluate_height = linebar_y + linebar_height + 13
 
     @classmethod
-    def base(cls, maidata: MaiData, difficulty: DifficultyID,
+    def base(cls, maidata: MaiData, difficulty: int,
              ms: MS = MS(), ui_code: UICode = UICode.JP) -> Image.Image:
         style = get_difficulty_style(difficulty, is_cn_all=ui_code.is_cn_all)
         
@@ -98,7 +97,7 @@ class MiniBoxBadge:
         )
 
     @classmethod
-    def box(cls, maidata: MaiData, difficulty: DifficultyID, server: Server,
+    def box(cls, maidata: MaiData, difficulty: int, server: Server,
             ms: MS = MS(), ui_code: UICode = UICode.JP) -> Image.Image:
         chart = maidata.get_chart(difficulty) if maidata else None
         if not chart:

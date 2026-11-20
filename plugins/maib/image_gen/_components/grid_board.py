@@ -6,7 +6,6 @@ from typing import Optional, Union
 
 from PIL import Image
 
-from ...utils.map import DifficultyID
 from ...utils.models import MaiData
 from ...utils.enums import UICode, Server
 from .. import color as Color
@@ -16,7 +15,7 @@ from ..tools import image_grid_board
 
 
 def draw_grid_board(
-    entries: list[tuple[MaiData, DifficultyID]],
+    entries: list[tuple[MaiData, int]],
     *,
     dxrating: int, updated: str, server: Server, 
     username: str = 'maimai', avatar: Optional[Union[bytes, Image.Image]] = None,
@@ -32,7 +31,7 @@ def draw_grid_board(
         display_content=f"Update: [{server.value}] {updated}", dan=None, ms=MS(ms*0.6)
     )
     
-    def generator(entries: list[tuple[MaiData, DifficultyID]]):
+    def generator(entries: list[tuple[MaiData, int]]):
         for maidata, difficulty in entries:
             yield MiniBoxBadge.box(
                 maidata=maidata, difficulty=difficulty, server=server,

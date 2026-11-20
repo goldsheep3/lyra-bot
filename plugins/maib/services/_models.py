@@ -120,9 +120,9 @@ class MaiChartAch(Model):
     achievement: M[int] = col(Integer, default=0)
     # DXScore
     dxscore: M[int] = col(Integer, default=0)
-    # ComboID
+    # int
     combo: M[int] = col(Integer, default=0)
-    # SyncID
+    # int
     sync: M[int] = col(Integer, default=0)
     # 更新时间
     update_at: M[datetime] = col(DateTime(timezone=True),

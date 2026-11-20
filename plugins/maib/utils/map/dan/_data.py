@@ -1,5 +1,5 @@
 from ._rule import DanLevelID
-from ..version._data import VersionID
+from ..version._data import int
 from ...enums import Difficulty
 from ...type import ShortID
 
@@ -13,7 +13,7 @@ D = Difficulty
 
 
 # TODO 尚待获取
-raw_dans: dict[VersionID, DanVersionInfo] = {
+raw_dans: dict[int, DanVersionInfo] = {
     # cir+
     26: {
         # 真七段

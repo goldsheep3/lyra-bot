@@ -5,9 +5,6 @@ image_gen.models
 from dataclasses import dataclass
 from typing import Optional
 
-from ..utils.map import DifficultyID
-
-
 # --------------------------------
 # 颜色模型
 # --------------------------------
@@ -104,7 +101,7 @@ class RateFrameStyle:
 @dataclass(frozen=True)
 class DifficultyStyle:
     """难度"""
-    id: DifficultyID
+    id: int
     title_jp: str
     title_cn: str
     level: str

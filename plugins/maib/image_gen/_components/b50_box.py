@@ -7,7 +7,7 @@ from typing import Optional
 
 from ...utils import MaiData, get_ap_bonus_value
 from ...utils.enums import UICode, Server, SLevelSource
-from ...utils.map import DifficultyID, VersionID, Versions
+from ...utils.map import Versions
 
 from ..color import TRANSPARENT, WHITE
 from ..utils import MS, FontManager, FontCode
@@ -20,7 +20,7 @@ from . import DifficultyBadge, UserHeaderBadge
 class B50BoxBadge(MiniBoxBadge):
 
     @classmethod
-    def b50_box(cls, maidata: MaiData, difficulty: DifficultyID, server: Server,
+    def b50_box(cls, maidata: MaiData, difficulty: int, server: Server,
                 current_version: int, index: int, is_b15: bool = False, *,
                 ms: MS = MS(), ui_code: UICode = UICode.JP) -> Image.Image:
         chart = maidata.charts.get(difficulty)
@@ -51,7 +51,7 @@ class B50BoxBadge(MiniBoxBadge):
         return img
 
     @classmethod
-    def header_box(cls, dxrating: int, latest_version: VersionID, is_b15: bool = False,
+    def header_box(cls, dxrating: int, latest_version: int, is_b15: bool = False,
                    *, cirp_frame: bool = True, ms: MS = MS()) -> Image.Image:
         """绘制 b50 的头部盒子（非歌曲数据）"""
         img = Image.new("RGBA", ms.xy(*cls.size()), TRANSPARENT)

@@ -1,7 +1,7 @@
-from ..version._data import VersionID
+from ..version._data import int
 
 
-def mapping_cn_to_jp(version_id: VersionID) -> VersionID:
+def mapping_cn_to_jp(version_id: int) -> int:
     """将 CN 段位表版本号映射为 JP 段位表版本号"""
     if version_id < 15:
         raise ValueError("DXDan Starts from **Splash PLUS**")

@@ -1,6 +1,6 @@
 from typing import Optional, TypeVar
 
-from ._data import VersionID, VersionInfo, raw_versions
+from ._data import VersionInfo, raw_versions
 from ._func import mapping_jp_to_cn, b50_cut_version, get_server, is_finale_frame
 from .._normalize import normalize_version as normalize
 from ...enums import Server
@@ -8,7 +8,6 @@ from ...enums import Server
 
 __all__ = [
     "Versions",
-    "VersionID",
     "VersionInfo",
 ]
 
@@ -16,8 +15,8 @@ __all__ = [
 E = TypeVar("E")
 
 
-def _index_name_id(raw_versions: dict[VersionID, VersionInfo]) -> dict[str, VersionID]:
-    _dict: dict[str, VersionID] = {}
+def _index_name_id(raw_versions: dict[int, VersionInfo]) -> dict[str, int]:
+    _dict: dict[str, int] = {}
     
     for version_id, version_info in raw_versions.items():
         for key in (version_info.name, *version_info.code):
@@ -26,8 +25,8 @@ def _index_name_id(raw_versions: dict[VersionID, VersionInfo]) -> dict[str, Vers
     return _dict
 
 
-def _index_plate_ids(raw_versions: dict[VersionID, VersionInfo]) -> dict[Server, dict[str, tuple[VersionID, ...]]]:
-    _dict: dict[Server, dict[str, tuple[VersionID, ...]]] = {server: {} for server in Server}
+def _index_plate_ids(raw_versions: dict[int, VersionInfo]) -> dict[Server, dict[str, tuple[int, ...]]]:
+    _dict: dict[Server, dict[str, tuple[int, ...]]] = {server: {} for server in Server}
     
     for version_id, version_info in raw_versions.items():
         for server in (Server.JP, Server.CN):
@@ -45,21 +44,21 @@ def _index_plate_ids(raw_versions: dict[VersionID, VersionInfo]) -> dict[Server,
 
 
 class Versions:
-    _raw: dict[VersionID, VersionInfo] = raw_versions
-    _index_name_id: dict[str, VersionID] = _index_name_id(raw_versions)
-    _index_plate_ids: dict[Server, dict[str, tuple[VersionID, ...]]] = _index_plate_ids(raw_versions)
+    _raw: dict[int, VersionInfo] = raw_versions
+    _index_name_id: dict[str, int] = _index_name_id(raw_versions)
+    _index_plate_ids: dict[Server, dict[str, tuple[int, ...]]] = _index_plate_ids(raw_versions)
 
     # get: id -> info
 
     @classmethod
-    def get(cls, version_id: VersionID) -> Optional[VersionInfo]:
+    def get(cls, version_id: int) -> Optional[VersionInfo]:
         """根据 `VersionID` 获取 `VersionInfo`"""
         return cls._raw.get(version_id)
 
     # text: id -> info.text
 
     @classmethod
-    def _text(cls, version_id: VersionID, index: str, *, default: E = None) -> str | E:
+    def _text(cls, version_id: int, index: str, *, default: E = None) -> str | E:
         """根据 `VersionID` 获取 `VersionInfo` 的指定文本属性"""
         info = cls.get(version_id)
         if info is None:
@@ -67,7 +66,7 @@ class Versions:
         return getattr(info, index, default)
 
     @classmethod
-    def _texts(cls, version_id: VersionID, index: str, *, default: E = None) -> tuple[str, ...] | E:
+    def _texts(cls, version_id: int, index: str, *, default: E = None) -> tuple[str, ...] | E:
         """根据 `VersionID` 获取 `VersionInfo` 的指定文本属性列表"""
         info = cls.get(version_id)
         if info is None:
@@ -75,19 +74,19 @@ class Versions:
         return getattr(info, index, default)
 
     @classmethod
-    def text_name(cls, version_id: VersionID, *, default: E = None) -> str | E:
+    def text_name(cls, version_id: int, *, default: E = None) -> str | E:
         """根据 `VersionID` 获取版本名"""
         return cls._text(version_id, index='name', default=default)
 
     @classmethod
-    def texts_code(cls, version_id: VersionID, *, default: E = None) -> tuple[str, ...] | E:
+    def texts_code(cls, version_id: int, *, default: E = None) -> tuple[str, ...] | E:
         """根据 `VersionID` 获取版本简写列表"""
         return cls._texts(version_id, index='code', default=default)
 
     # find: name -> id/info
 
     @classmethod
-    def find_id(cls, name: str, *, default: E = None) -> VersionID | E:
+    def find_id(cls, name: str, *, default: E = None) -> int | E:
         """根据 版本名/版本简写 获取 `VersionID`"""
         return cls._index_name_id.get(normalize(name), default)
 
@@ -99,7 +98,7 @@ class Versions:
         return None
 
     @classmethod
-    def find_id_with_plate(cls, name: str, server: Server = Server.JP) -> tuple[VersionID, ...]:
+    def find_id_with_plate(cls, name: str, server: Server = Server.JP) -> tuple[int, ...]:
         """根据 牌子名 和 对应版本 获取 `VersionID` 元组"""
         plate_map = cls._index_plate_ids[server]
         result = plate_map.get(normalize(name), ())
@@ -119,7 +118,7 @@ class Versions:
     # dict key/value/items
 
     @classmethod
-    def id_list(cls) -> list[VersionID]:
+    def id_list(cls) -> list[int]:
         """获取所有版本 ID 列表"""
         return list(cls._raw.keys())
 
@@ -129,14 +128,14 @@ class Versions:
         return list(cls._raw.values())
 
     @classmethod
-    def data(cls) -> dict[VersionID, VersionInfo]:
+    def data(cls) -> dict[int, VersionInfo]:
         """获取所有版本信息字典"""
         return cls._raw.copy()
 
     # ====== 功能性方法 ======
     
     @classmethod
-    def latest(cls, server: Server) -> VersionID:
+    def latest(cls, server: Server) -> int:
         """获取最新版本 ID"""
         if server == Server.JP:
             jp_versions = [v for v in cls._raw.keys() if v < 2000]
@@ -148,12 +147,12 @@ class Versions:
             raise KeyError(f"Unknown server: {server}")
 
     @classmethod
-    def b50_cut_version(cls, version_id: VersionID) -> VersionID:
+    def b50_cut_version(cls, version_id: int) -> int:
         """依据特定版本号获取 B50 分段所需的 cut_version"""
         return b50_cut_version(version_id)
 
     @classmethod
-    def b50_cut_version_with_server(cls, server: Server) -> VersionID:
+    def b50_cut_version_with_server(cls, server: Server) -> int:
         """依据特定服务器获取 B50 分段所需的 cut_version"""
         version_id = cls.latest(server)
         return cls.b50_cut_version(version_id)
