@@ -57,10 +57,10 @@ async def aime_link(
     qq = await _resolve_qq(event, matcher)
 
     try:
-        await services.refactoring.aime.link(access, qq=qq)
-    except services.refactoring.aime.AimeAlreadyLinkedSelfError:
+        await services.aime.link(access, qq=qq)
+    except services.aime.AimeAlreadyLinkedSelfError:
         await matcher.finish(await reply("maime.link.error.linked_self"))
-    except services.refactoring.aime.AimeAlreadyLinkedError:
+    except services.aime.AimeAlreadyLinkedError:
         await matcher.finish(await reply("maime.link.error.linked"))
     except Exception:
         logger.exception("Unexpected error when linking Aime")
@@ -81,10 +81,10 @@ async def aime_unlink(
     qq = await _resolve_qq(event, matcher)
 
     try:
-        await services.refactoring.aime.unlink(access, qq=qq)
-    except services.refactoring.aime.AimeNotFoundError:
+        await services.aime.unlink(access, qq=qq)
+    except services.aime.AimeNotFoundError:
         await matcher.finish(await reply("maime.unlink.error.not_found"))
-    except services.refactoring.aime.AimeNotOwnerError:
+    except services.aime.AimeNotOwnerError:
         await matcher.finish(await reply("maime.unlink.error.not_owner"))
     except Exception:
         logger.exception("Unexpected error when unlinking Aime")
@@ -107,14 +107,14 @@ async def aime_lost(
 
     try:
         if len(normalized) == 20:
-            aime = await services.refactoring.aime.find_aime(normalized)
+            aime = await services.aime.find(normalized)
         else:
-            aime = await services.refactoring.aime.find_aime_by_access4(normalized)
-    except services.refactoring.aime.AimeNotFoundError:
+            aime = await services.aime.find_by_access4(normalized)
+    except services.aime.AimeNotFoundError:
         await matcher.finish(await reply("maime.lost.error.not_found"))
-    except services.refactoring.aime.AimeNotLinkedError:
+    except services.aime.AimeNotLinkedError:
         await matcher.finish(await reply("maime.lost.error.not_link"))
-    except services.refactoring.aime.AimeMultipleFoundError:
+    except services.aime.AimeMultipleFoundError:
         await matcher.finish(await reply("maime.lost.error.multiple_found"))
     except Exception:
         logger.exception("Unexpected error when finding Aime")
@@ -136,7 +136,7 @@ async def aime_list(event: Event, matcher: Matcher, groups: dict = RegexDict(), 
     """处理命令: 查看卡片。"""
     full = groups.get("full") is not None
     qq = await _resolve_qq(event, matcher)
-    aime_list = await services.refactoring.aime.get_aimes(qq=qq)
+    aime_list = await services.aime.list_for_user(qq=qq)
 
     if not aime_list:
         await matcher.finish(await reply("maime.list.empty"))

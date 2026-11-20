@@ -54,5 +54,3 @@ from . import info_list as _info_list_handlers
 from . import sync as _sync_handlers
 from . import maime as _maime_handlers
 from . import plugin_help as _plugin_help_handlers
-
-from . import temp_link as _temp_link_handlers

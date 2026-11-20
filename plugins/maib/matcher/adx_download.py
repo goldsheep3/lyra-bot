@@ -23,7 +23,7 @@ from nonebot.adapters.telegram.event import MessageEvent as TGMessageEvent
 
 from . import rule_is_group, rule_is_self
 from .. import services, utils
-from ..utils import file_api
+from ..utils import file_api, MaiData
 from . import Reply, reply
 
 
@@ -222,7 +222,7 @@ async def telegram_upload(
     if tg_msg_obj.document:
         file_id = tg_msg_obj.document.file_id
         endname = "adx" if file_name.endswith(".adx") else "zip"
-        await services.upd_mdt_tg_fileid(shortid, file_id, endname=endname)
+        await services.archive.update_telegram_file_id(shortid, file_id, endname=endname)
     return None
 
 @adx_download.handle()
@@ -263,7 +263,7 @@ async def adx_download_handled(
         await matcher.finish(await reply("ad.bad_id"))
         return
 
-    maidata: Optional[utils.MaiData] = await services.refactoring.catalog.get_maidata(target_short_id)
+    maidata: Optional[MaiData] = await services.catalog.get_maidata(target_short_id)
     if maidata is None:
         await matcher.finish(await reply("ad.no_maidata", short_id=target_short_id))
         return

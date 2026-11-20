@@ -71,7 +71,7 @@ def _extract_bearer_token(authorization: Optional[str]) -> str:
 
 
 def _raise_pair_error(exc: Exception) -> None:
-    if isinstance(exc, services.PairingCodeError):
+    if isinstance(exc, services.websync.PairingCodeError):
         detail = str(exc) if str(exc) else (exc.args[0] if exc.args else "pairing_code_error")
         if detail in {"invalid_code", "expired_code", "used_code", "revoked_code", "empty_code"}:
             raise HTTPException(status_code=401, detail=detail)
@@ -89,18 +89,8 @@ async def _process_uploaded_payload(user_id: int, payload: str) -> None:
             raise ValueError(f"unsupported_version:{file_version}")
 
         parsed_result = build_lyra_records_v3(file_data, user_id=user_id)
-        record_keys, unmatched_items = await services.add_record_batch(user_id, parsed_result.records)
-        ach_list = await services.get_record_achs(user_id, list(record_keys))
-        if ach_list:
-            await services.upd_ach_batch(user_id, ach_list)
-        logger.info(
-            "maib 在线同步后台处理完成: user_id=%s, received=%s, parsed=%s, affected=%s, unmatched=%s",
-            user_id,
-            len(file_data),
-            len(parsed_result.records),
-            len(record_keys),
-            len(unmatched_items),
-        )
+        report = await services.record.ingest_records(parsed_result.records, qq=user_id)
+        logger.info("maib 在线同步后台处理完成: %s", report)
     except Exception:
         logger.exception("maib 在线同步后台处理失败: user_id=%s", user_id)
 
@@ -114,8 +104,8 @@ async def pair_device(payload: PairRequest, request: Request) -> dict[str, str]:
         raise HTTPException(status_code=429, detail="too_many_requests")
 
     try:
-        _user_id, access_token = await services.exchange_pairing_code(
-            payload.code,
+        _, access_token = await services.websync.exchange_pairing_code(
+            code=payload.code,
             device_id=payload.device_id,
             device_name=payload.device_name,
         )
@@ -137,8 +127,8 @@ async def upload_records(
 ) -> dict[str, object]:
     access_token = _extract_bearer_token(authorization)
     try:
-        user_id = await services.authenticate_access_token(access_token)
-    except services.AccessTokenError as exc:
+        user_id = await services.websync.authenticate_access_token(access_token)
+    except services.websync.AccessTokenError as exc:
         raise HTTPException(status_code=401, detail=str(exc) or "invalid_token") from exc
 
     background_tasks.add_task(_process_uploaded_payload, user_id, payload.payload)

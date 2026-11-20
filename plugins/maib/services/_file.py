@@ -4,8 +4,8 @@ from typing import Literal, Optional
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import execute_func
-from .models import MaiData
+from ._tool import execute_func
+from ._models import MaiData
 
 
 __all__ = [

@@ -8,8 +8,8 @@ from typing import TypedDict
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 
-from .. import get_session
-from ..models import Maime, MaiUser
+from .._tool import get_session
+from .._models import Maime, MaiUser
 
 
 _DEFAULT_HINT = "Target QQ: {qq}"

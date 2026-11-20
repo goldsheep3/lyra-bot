@@ -5,8 +5,8 @@ from sqlalchemy import Table, select, update, bindparam
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import execute_func
-from .models import MaiData, MaiChart
+from ._tool import execute_func
+from ._models import MaiData, MaiChart
 from ..utils.enums import Server, SLevelSource
 
 

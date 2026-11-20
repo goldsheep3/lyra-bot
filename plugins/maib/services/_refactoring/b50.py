@@ -12,8 +12,8 @@ from sqlalchemy.orm import selectinload
 from ... import utils
 from ...utils.enums import Server, ServerScope
 from ...utils.map import Versions
-from .. import get_session
-from ..models import MaiChart, MaiChartAch, MaiData, MaiUser
+from .._tool import get_session
+from .._models import MaiChart, MaiChartAch, MaiData, MaiUser
 from .catalog import LEGACY_DEFAULT_PROVIDER_BY_SERVER
 
 
@@ -96,7 +96,7 @@ async def get_b50_data(
     provider: str | None = None,
     current_version: int | None = None,
     special_tag: str | None = None,
-) -> utils.B50Data:
+) -> utils.MaiB50Data:
     """返回单服 B50 DTO；ALL 聚合保留给后续专用实现。"""
     if scope is ServerScope.ALL:
         raise ValueError("get_b50_data currently requires a non-ALL scope")
@@ -139,7 +139,7 @@ async def get_b50_data(
             "JP": _format_update_at(user, Server.JP),
             "CN": _format_update_at(user, Server.CN),
         }
-        return utils.B50Data(
+        return utils.MaiB50Data(
             dxrating=b35_dxrating + b15_dxrating,
             current_version=resolved_version,
             scope=scope,

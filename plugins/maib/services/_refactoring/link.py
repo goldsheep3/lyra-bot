@@ -3,8 +3,8 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .. import execute_func
-from ..models import MaiUser
+from .._tool import execute_func
+from .._models import MaiUser
 
 
 __all__ = ["get_qq_from_tg"]

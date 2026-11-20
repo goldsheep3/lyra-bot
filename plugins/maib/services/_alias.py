@@ -5,8 +5,8 @@ from typing import Optional
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import execute_func
-from .models import MaiAlias, MaiData
+from ._tool import execute_func
+from ._models import MaiAlias, MaiData
 
 
 __all__ = [

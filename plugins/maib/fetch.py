@@ -250,7 +250,7 @@ def _read_maidata_text(chart_path: Path) -> str:
 async def _apply_pending_id_mappings() -> bool:
     """[fetch 4/7] 应用待处理的 shortid 映射"""
     try:
-        id_mappings = await services.get_pending_mappings()
+        id_mappings = await services.maintenance.id_mapping.get_pending_mappings()
     except Exception:
         logger.exception("[fetch 4/7] id_check 表异常")
         return False
@@ -262,7 +262,7 @@ async def _apply_pending_id_mappings() -> bool:
     logger.info(f"[fetch 4/7] 处理 {len(id_mappings)} 条 shortid 映射规则")
     for original_id, mapped_id in id_mappings:
         try:
-            await services.resolve_id_mapping(original_id, mapped_id)
+            await services.maintenance.id_mapping.resolve_mapping(original_id, mapped_id)
             logger.info(f"[fetch 4/7] 应用映射 {original_id} -> {mapped_id}")
         except Exception:
             logger.exception(f"[fetch 4/7] 映射 {original_id}->{mapped_id} 失败")
@@ -310,7 +310,7 @@ async def _sync_changed_charts(
         return False
 
     try:
-        await services.refactoring.catalog.sync_song_library(
+        await services.maintenance.catalog.sync_song_library(
             list(maidata_dict.values())
         )
     except Exception:
@@ -385,7 +385,7 @@ async def _sync_cn_metadata(data_dir: Path, *, force: bool) -> None:
         return
 
     try:
-        await services.refactoring.catalog.apply_cn_metadata(
+        await services.maintenance.catalog.apply_cn_metadata(
             version_update_list,
             level_update_list,
         )
@@ -429,7 +429,7 @@ async def _sync_synh_levels() -> None:
         return
 
     try:
-        await services.set_mct_level_batch(synh_list, source=SLevelSource.FIT)
+        await services.maintenance.catalog.apply_fit_levels(synh_list)
         logger.info(f"[fetch 6/7] 已同步 {len(synh_list)} 条水鱼拟合定数")
     except Exception:
         logger.exception(f"[fetch 6/7] 更新水鱼拟合定数数据失败")
@@ -488,11 +488,11 @@ def _collect_lxns_aliases(data: Mapping[str, Any] | None) -> list[tuple[int, str
 async def _sync_aliases() -> None:
     """[fetch 7/7] 同步别名库数据"""
     yuzuchan_aliases = _collect_yuzuchan_aliases(await network.YuzuChaN.yuzuchan_alias_list())
-    await services.add_ma_batch(yuzuchan_aliases, -101)
+    await services.maintenance.alias.sync_aliases(yuzuchan_aliases, create_qq=-101)
     logger.info(f"[fetch 7/7] 同步 yuzuchan 别名数据完成 ({len(yuzuchan_aliases)} 条)")
 
     lxns_aliases = _collect_lxns_aliases(await network.Lxns.lx_alias_list())
-    await services.add_ma_batch(lxns_aliases, -102)
+    await services.maintenance.alias.sync_aliases(lxns_aliases, create_qq=-102)
     logger.info(f"[fetch 7/7] 同步 lxns 别名数据完成 ({len(lxns_aliases)} 条)")
 
 
@@ -526,7 +526,7 @@ async def maintenance_task():
     change_files.update(results["New"])
     if not change_files:
         # 数据库被清空或首次迁移后，不能把旧 stat 缓存误当成曲库已入库。
-        is_empty_library = not await services.refactoring.catalog.has_song_library()
+        is_empty_library = not (await services.maintenance.catalog.has_song_library())
         if is_empty_library:
             logger.warning("[fetch 2/7] 谱面库为空，强制重建谱面库")
             change_files = {str(path.relative_to(data_dir)): get_file_stat_identity(path) for path in files}
@@ -548,13 +548,7 @@ async def maintenance_task():
     if (await _apply_pending_id_mappings()) or chart_synced:
         logger.info("[fetch 4/7] 尝试回填成绩记录并刷新缓存")
         try:
-            # ------ refactoring ------   
-            affected_by_user = await services.backfill_record_shortids()
-            for user_id, record_keys in affected_by_user.items():
-                ach_list = await services.get_record_achs(user_id, list(record_keys))
-                if ach_list:
-                    await services.upd_ach_batch(user_id, ach_list)
-            # -------------------------
+            await services.maintenance.record.backfill_and_rebuild_achievements()
         except Exception:
             logger.exception("[fetch 4/7] 回填成绩记录失败")
 

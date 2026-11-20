@@ -30,7 +30,7 @@ __all__ = [
     "MaiData",
     "DXRatingData",
     "AllStr",
-    "B50Data",
+    "MaiB50Data",
     "MaiUser",
 ]
 
@@ -440,7 +440,7 @@ def _default_all_update_at() -> AllStr:
 
 
 @dataclass(slots=True)
-class B50Data:
+class MaiB50Data:
     dxrating: int
     current_version: int
     scope: ServerScope

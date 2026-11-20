@@ -11,9 +11,9 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import execute_func
-from .models import MaiSync
-from .user import check_mu
+from ._tool import execute_func
+from ._models import MaiSync
+from ._user import check_mu
 
 
 __all__ = [

@@ -5,8 +5,8 @@ from typing import Optional, Sequence
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import execute_func
-from .models import Maime
+from ._tool import execute_func
+from ._models import Maime
 
 
 __all__ = [

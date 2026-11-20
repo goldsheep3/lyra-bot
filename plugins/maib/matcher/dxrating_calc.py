@@ -57,7 +57,7 @@ async def ra_calc_handled(event: Event, matcher: Matcher, groups: dict[str, Opti
         shortid = int(match.group("id"))
         difficulty = Difficulties.find_id(match.group("color")) or 5  # MASTER
 
-        maidata = await services.refactoring.catalog.get_maidata(shortid)
+        maidata = await services.catalog.get_maidata(shortid)
         if maidata is None:
             await matcher.finish(await reply("rc.maidata_invalid"))
             return

@@ -2,13 +2,13 @@
 image_gen.components.chart_box
 谱面及成绩盒子组件
 """
-from typing import Literal, Optional, cast
+from typing import Literal, Optional
 from PIL import Image
 from functools import lru_cache
 
 from ...utils import MaiChart
 from ...utils.enums import UICode, Server
-from ...utils.map import DifficultyID, AchievementMap
+from ...utils.map import AchievementMap
 from ...utils.type import Achievement
 from ..utils import MS, FontCode, FontManager
 from ..color import TRANSPARENT, HALF_TRANSPARENT, BLACK, WHITE

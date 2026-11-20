@@ -8,9 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import utils
 from ..utils.enums import Server
-from . import execute_func
-from .minfo import get_mdt
-from .models import MaiData, MaiRecord
+from ._tool import execute_func
+from ._minfo import get_mdt
+from ._models import MaiData, MaiRecord
 
 
 __all__ = [

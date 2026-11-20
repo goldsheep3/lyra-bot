@@ -46,10 +46,10 @@ def get_args(args_text: str) -> tuple[Optional[int], Optional[ServerScope]]:
 async def get_or_create_maiuser(event: Event, target_id: int | None = None) -> utils.MaiUser:
     if isinstance(event, OneBotV11Event):
         qq = target_id if target_id is not None else int(event.get_user_id())
-        return await services.refactoring.user.get_or_create_maiuser_from_qq(qq)
+        return await services.user.get_or_create_from_qq(qq)
     elif isinstance(event, TGEvent):
         tg_id = target_id if target_id is not None else int(event.get_user_id())
-        return await services.refactoring.user.get_or_create_maiuser_from_tg(tg_id)
+        return await services.user.get_or_create_from_telegram(tg_id)
     else:
         raise ValueError("Unsupported event type")
 
@@ -60,7 +60,7 @@ async def get_maidata_with_ach(
     user_id: int,
 ) -> Optional[tuple[utils.MaiData, Server]]:
     """Load music data with a user's achievement and apply server fallback."""
-    maidata = await services.refactoring.catalog.get_maidata(
+    maidata = await services.catalog.get_maidata(
         short_id,
         qq=user_id,
         # 需要保留目标服缺少定数时回退 JP 的成绩，因此一次加载两服默认 provider。

@@ -8,8 +8,8 @@ from sqlalchemy.orm import selectinload
 from ..utils.exceptions import BlurSearchTooManyResultsError
 from ..utils.enums import Server
 from .. import config
-from . import execute_func
-from .models import MaiData, MaiChart, MaiChartAch, MaiAlias
+from ._tool import execute_func
+from ._models import MaiData, MaiChart, MaiChartAch, MaiAlias
 
 
 __all__ = [

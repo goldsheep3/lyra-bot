@@ -6,7 +6,7 @@ from typing import Literal, Optional, Union
 
 from PIL import Image
 
-from ...utils import B50Data, DXRatingData
+from ...utils import MaiB50Data, DXRatingData
 from ...utils.map import DifficultyID, VersionID, Versions
 from ...utils.models import MaiData
 from ...utils.enums import UICode, Server, ServerScope
@@ -86,7 +86,7 @@ def draw_b50_board(
 
 
 def draw_b50_data(
-    data: B50Data,
+    data: MaiB50Data,
     *,
     username: str = "maimai",
     avatar: Optional[Union[bytes, Image.Image]] = None,

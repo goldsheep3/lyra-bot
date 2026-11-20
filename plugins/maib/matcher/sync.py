@@ -114,8 +114,8 @@ async def get_sy_and_upload(user_id: int) -> MaiChartAchDiffReport:
 
     # records 稳定哈希一致时，直接短路跳过上传流程
     sy_hash = await _build_sy_records_hash(records)
-    last_sy_hash = await services.get_last_sy_hash(user_id)
-    if last_sy_hash == sy_hash:
+    is_new = await services.achievement.is_diving_fish_source_current(qq=user_id, hash=sy_hash)
+    if is_new:
         return MaiChartAchDiffReport()
 
     achs = utils.sync.get_sy_records(records) if data else None
@@ -123,15 +123,13 @@ async def get_sy_and_upload(user_id: int) -> MaiChartAchDiffReport:
     if data is None or achs is None:
         return MaiChartAchDiffReport()
 
-    report: MaiChartAchDiffReport = await services.upd_ach_batch(user_id, achs)
+    return await services.achievement.update_achievements(qq=user_id, ach_list=achs, diving_fish_hash=sy_hash)
 
-    await services.set_last_sy_hash(user_id, sy_hash)
-    return report
 
 
 async def check_sync_cn(*, qq: int, ignore_cache_expire: bool = False) -> MaiChartAchDiffReport | None:
     # 1. 统一获取 MaiUser 对象
-    maiuser = await services.refactoring.user.get_or_create_maiuser_from_qq(qq)
+    maiuser = await services.user.get_or_create_from_qq(qq)
     
     # 2. 缓存有效性检查
     if not ignore_cache_expire:
@@ -194,7 +192,7 @@ async def get_sync_code_handled(event: Event, matcher: Matcher, reply: Reply = r
         await matcher.finish(str(e))
         return
 
-    issue = await services.create_pairing_code(maiuser.user_id)
+    issue = await services.websync.create_pairing_code(qq=maiuser.user_id)
     expires_text = issue.expires_at.strftime("%Y-%m-%d %H:%M:%S")
     await matcher.finish(
         "在线同步配对码如下，5 分钟内仅可使用一次。\n"
@@ -276,7 +274,7 @@ async def file_receiver_handled(bot: Bot, event: Event, matcher: Matcher, reply:
             if key in title_type_cache:
                 return title_type_cache[key]
 
-            song_list = await services.refactoring.catalog.search_maidata(
+            song_list = await services.catalog.search_maidata(
                 title,
                 mode="title",
             )
@@ -311,7 +309,7 @@ async def file_receiver_handled(bot: Bot, event: Event, matcher: Matcher, reply:
             report = MaiChartAchDiffReport()
         else:
             try:
-                report = await services.upd_ach_batch(user_id, legacy_result.ach_list)
+                report = await services.achievement.update_achievements(qq=user_id, ach_list=legacy_result.ach_list)
             except Exception as e:
                 logger.error(f"数据库写入崩溃: {e}")
                 await matcher.finish("同步到数据库时出错了……请联系监护人确认情况哦qwq")
@@ -344,16 +342,12 @@ async def file_receiver_handled(bot: Bot, event: Event, matcher: Matcher, reply:
         parsed_result = build_lyra_records_v3(file_data, user_id=user_id)
 
         try:
-            record_keys, unmatched_items = await services.add_record_batch(user_id, parsed_result.records)
-            ach_list = await services.get_record_achs(user_id, list(record_keys))
-            report = await services.upd_ach_batch(user_id, ach_list) if ach_list else MaiChartAchDiffReport()
+            report = await services.record.ingest_records(parsed_result.records, qq=user_id)
         except Exception as e:
             logger.error(f"成绩记录入库失败: {e}")
             await matcher.finish("同步到数据库时出错了……请联系监护人确认情况哦qwq")
             return
 
-        for title, difficulty in unmatched_items:
-            report.no_data_song.append((0, title, difficulty))
         for title_diff in parsed_result.invalid_diff_items:
             report.other_error_song.append({"type": "invalid_diff", "msg": title_diff})
         for title_failed in parsed_result.parse_failed_items:

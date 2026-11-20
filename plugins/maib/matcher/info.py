@@ -52,7 +52,7 @@ async def mai_info_handled(event: Event, matcher: Matcher, groups: tuple = Regex
 
     elif isinstance(event, TGEvent):
         parsed_qq = None  # Telegram 目前不支持文本参数解析 QQ，预留接口但暂不启用
-        sender_qq = await services.refactoring.link.get_qq_from_tg(sender_user_id)
+        sender_qq = await services.user.get_qq_from_telegram(sender_user_id)
 
         if from_ := getattr(event, "from_", None):
             sender_username = from_.username or from_.first_name or "maimai"
@@ -89,7 +89,7 @@ async def mai_info_handled(event: Event, matcher: Matcher, groups: tuple = Regex
             logger.warning(f"强制刷新水鱼数据失败: {e}")
 
     # 查询乐曲信息
-    maidata = await services.refactoring.catalog.get_maidata(
+    maidata = await services.catalog.get_maidata(
         shortid,
         qq=target_qq,
         server=scope,
@@ -98,7 +98,7 @@ async def mai_info_handled(event: Event, matcher: Matcher, groups: tuple = Regex
         await matcher.finish(await reply("info.maidata_not_found", short_id=shortid))
         return
 
-    maiuser = await services.refactoring.user.get_or_create_maiuser_from_qq(target_qq) if target_qq is not None else None
+    maiuser = await services.user.get_or_create_from_qq(target_qq) if target_qq is not None else None
     info_box = image_gen.draw_info_board(maidata, maiuser=maiuser)
     info_box_bytes = image_gen.get_image_bytes(info_box)
     
@@ -134,7 +134,7 @@ async def mai_what_song_handled(event: Event, matcher: Matcher, groups: tuple = 
 
     try:
         # 搜索歌曲
-        mdt_list = await services.refactoring.catalog.search_maidata(
+        mdt_list = await services.catalog.search_maidata(
             keyword,
             qq=qq,
             mode="blur" if blur_search else "smart",

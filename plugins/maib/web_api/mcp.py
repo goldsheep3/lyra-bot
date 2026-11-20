@@ -77,13 +77,13 @@ async def search_song(
     keyword: str,
     mode: Literal["smart", "title", "name", "blur"] = "smart",
 ) -> list[dict[str, Any]]:
-    songs = await services.refactoring.catalog.search_maidata(keyword, mode=mode)
+    songs = await services.catalog.search_maidata(keyword, mode=mode)
     return [_serialize_song(song) for song in songs]
 
 
 @server.tool(description="通过 maib shortid 获取一首 maimai DX 曲目的完整资料和所有谱面。")
 async def get_song(shortid: int) -> dict[str, Any] | None:
-    song = await services.refactoring.catalog.get_maidata(shortid)
+    song = await services.catalog.get_maidata(shortid)
     return _serialize_song(song) if song is not None else None
 
 
@@ -97,8 +97,8 @@ async def get_song(shortid: int) -> dict[str, Any] | None:
 )
 async def query_maib_sql(sql: str) -> dict[str, Any]:
     try:
-        return await services.refactoring.mcp_sql.sql_query(sql)
-    except services.refactoring.mcp_sql.ReadOnlySqlError as exc:
+        return await services.mcp_sql.sql_query(sql)
+    except services.mcp_sql.ReadOnlySqlError as exc:
         return {"error": "invalid_sql", "detail": str(exc)}
 
 

@@ -8,8 +8,8 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .. import get_session
-from ..models import MaiAlias, MaiData
+from .._tool import get_session
+from .._models import MaiAlias, MaiData
 
 
 AliasAddStatus: TypeAlias = Literal["success", "exists", "missing"]

@@ -60,7 +60,7 @@ async def mai_alias_handled(event: Event, matcher: Matcher, groups: tuple = Rege
         qq = maiuser.user_id
 
     if action in ("添加",):
-        add_status = await services.refactoring.alias.add_alias(short_id, alias, qq=qq)
+        add_status = await services.alias.add_alias(short_id, alias, qq=qq)
         if add_status == "missing":
             await matcher.finish(await reply("info.invalid_id"))
             return
@@ -75,7 +75,7 @@ async def mai_alias_handled(event: Event, matcher: Matcher, groups: tuple = Rege
             return
 
     elif action in ("删除",):
-        del_status = await services.refactoring.alias.remove_alias(short_id, alias, qq=qq)
+        del_status = await services.alias.remove_alias(short_id, alias, qq=qq)
         if del_status == "missing":
             await matcher.finish(await reply("info.invalid_id"))
             return

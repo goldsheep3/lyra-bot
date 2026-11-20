@@ -70,7 +70,7 @@ async def b50_handled(event: Event, matcher: Matcher, groups: dict = RegexDict()
     elif isinstance(event, TGEvent):
         # parsed_qq = await get_qq_from_tg_uid(parsed_uid) if parsed_uid else None
         parsed_qq = None  # Telegram 目前不支持文本参数解析 QQ，预留接口但暂不启用
-        sender_qq = await services.refactoring.link.get_qq_from_tg(sender_user_id)
+        sender_qq = await services.user.get_qq_from_telegram(sender_user_id)
 
         if from_ := getattr(event, "from_", None):
             sender_username = from_.username or from_.first_name or "maimai"
@@ -118,14 +118,14 @@ async def b50_handled(event: Event, matcher: Matcher, groups: dict = RegexDict()
         except Exception as e:
             logger.warning(f"强制刷新水鱼数据失败: {e}")
 
-    maiuser = await services.refactoring.user.get_or_create_maiuser_from_qq(target_qq)
+    maiuser = await services.user.get_or_create_from_qq(target_qq)
 
     # 获取 services 内已完成 provider 过滤和 ORM 转换的 B50 DTO
     if scope == ServerScope.ALL:
         # 目前不兼容 ALL 混合模式
         await matcher.finish(await reply("b50.all_not_supported"))
         return
-    b50_data = await services.refactoring.b50.get_b50_data(target_qq, scope)
+    b50_data = await services.b50.get_b50_data(target_qq, scope)
 
     if not (b50_data.b35 or b50_data.b15):
         # 无谱面数据

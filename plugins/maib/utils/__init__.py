@@ -9,7 +9,7 @@ from .calculator import (
 from .exceptions import NoLinkQQError, BlurSearchTooManyResultsError
 from .file_api import OneBotV11FileAPI
 from .git import get_git_head_hash
-from .models import AllStr, B50Data, MaiAlias, MaiChartAch, MaiChart, MaiData, DXRatingData, MaiUser
+from .models import AllStr, MaiB50Data, MaiAlias, MaiChartAch, MaiChart, MaiData, DXRatingData, MaiUser
 from .report import MaiChartAchDiff, MaiChartAchDiffReport, build_diff_report
 from .simai import SimaiNoteCount
 from . import sync
@@ -25,7 +25,7 @@ __all__ = [
     # git
     "get_git_head_hash",
     # models
-    "MaiAlias", "MaiChartAch", "MaiChart", "MaiData", "DXRatingData", "AllStr", "B50Data", "MaiUser",
+    "MaiAlias", "MaiChartAch", "MaiChart", "MaiData", "DXRatingData", "AllStr", "MaiB50Data", "MaiUser",
     # report
     "MaiChartAchDiff", "MaiChartAchDiffReport", "build_diff_report",
     # simai
