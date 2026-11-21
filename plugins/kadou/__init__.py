@@ -16,6 +16,7 @@ from nonebot_plugin_localstore import get_plugin_data_dir
 reply = locales_init(Path(__file__).parent / "assets" / "lang")
 
 # 初始化插件数据目录
+OVERFLOW_THRESHOLD = 100  # 排卡人数达到该值时触发整活彩蛋
 data_dir = get_plugin_data_dir()
 data_dir.mkdir(parents=True, exist_ok=True)
 
@@ -252,6 +253,10 @@ async def _(event: OneBotV11GroupMessageEvent, args: dict = RegexDict(), reply: 
 
         store_info = ctx["store_info"]
         store_name = store_info.get("name", name)
+        if new_num >= OVERFLOW_THRESHOLD:
+            await matcher_update.finish(
+                await reply("update.overflow", store_name=store_name, new_num=new_num)
+            )
         await matcher_update.finish(
             await reply("update.success", store_name=store_name, new_num=new_num)
         )

@@ -10,4 +10,5 @@ errors:
   num_less_than_zero: "人数がマイナスになっちゃうよщ(ﾟдﾟщ)数字間違えてない？"
 update:
   success: "記録を更新しました！{store_name}の人数は{new_num}人です"
+  overflow: "うわ、{store_name}は今{new_num}人もいる（）これでも並ぶの？=͟͟͞͞(꒪ᗜ꒪ ‧̣̥̇)"
   hider_success: "hider記録を更新しました！{store_name}の人数は{new_num}人です"

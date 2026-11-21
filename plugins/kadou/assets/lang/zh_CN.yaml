@@ -10,4 +10,5 @@ errors:
   num_less_than_zero: "人数不能减少到负数吧щ(ﾟдﾟщ)是不是写错数字了"
 update:
   success: "已更新记录！{store_name}人数为{new_num}人"
+  overflow: "哇，什么叫{store_name}现在有 {new_num} 个人（）这你们也要排吗=͟͟͞͞(꒪ᗜ꒪ ‧̣̥̇)"
   hider_success: "已更新hider记录！{store_name}人数为{new_num}人"
