@@ -11,7 +11,7 @@ from sqlalchemy import String, Integer, Float, BigInteger, DateTime, ForeignKey,
 from sqlalchemy.orm import Mapped as M, mapped_column as col, relationship, validates
 
 from .. import utils
-from ..utils.constants import DEFAULT_DATETIME
+from ..utils.constants import DEFAULT_DATETIME, DEFAULT_PROVIDER
 from ..utils.enums import Server
 
 
@@ -143,6 +143,7 @@ class MaiChartAch(Model):
         *,
         chart_id: int,
         dxrating: Optional[int] = None,
+        provider: str = DEFAULT_PROVIDER,
     ) -> "MaiChartAch":
         return cls(
             shortid=_get(ach, "shortid"),
@@ -155,6 +156,7 @@ class MaiChartAch(Model):
             sync=_get(ach, "sync", 0),
             update_at=_as_datetime(_get(ach, "update_at"), default=datetime.now()),
             dxrating_cache=dxrating or 0,
+            provider=provider,
             qq=_get(ach, "user_id", -1),
         )
 

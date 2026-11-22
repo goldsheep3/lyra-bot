@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ... import utils
+from ...utils.constants import DEFAULT_PROVIDER, LEGACY_DEFAULT_PROVIDER_BY_SERVER
 from ...utils.enums import Server
 from ._tool import execute_func
 from .._models import MaiChart, MaiChartAch, MaiUser
@@ -41,6 +42,7 @@ def _normalize_ach(ach: utils.MaiChartAch, user_id: int) -> utils.MaiChartAch:
         sync=ach.sync,
         update_at=ach.update_at,
         user_id=user_id,
+        provider=ach.provider,
     )
 
 
@@ -167,7 +169,12 @@ async def upd_ach_batch(
             existing_mca = existing_map.get((shortid, difficulty, target_server))
             if existing_mca is None:
                 incoming.update_at = datetime.now()
-                session.add(MaiChartAch.from_utils(incoming, chart_id=chart.id))
+                provider = incoming.provider or LEGACY_DEFAULT_PROVIDER_BY_SERVER.get(
+                    target_server, DEFAULT_PROVIDER
+                )
+                session.add(
+                    MaiChartAch.from_utils(incoming, chart_id=chart.id, provider=provider)
+                )
                 report.new_song.append(_build_diff(chart, incoming, None))
                 affected_chart_keys[target_server].add((shortid, difficulty))
                 continue

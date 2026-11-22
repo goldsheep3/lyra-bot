@@ -57,6 +57,8 @@ class MaiChartAch:
     sync: int = 0
     update_at: datetime = DEFAULT_DATETIME
     user_id: int = -1
+    # 成绩数据来源；为空时由 services 层按服务器兜底
+    provider: str = ""
 
     @property
     def dxscore_star_count(self) -> int:
@@ -111,6 +113,7 @@ class MaiChartAch:
             sync=max(self.sync, other.sync),
             update_at=datetime.now(),
             user_id=self.user_id,
+            provider=self.provider or other.provider,
         )
 
     def __gt__(self, other: MaiChartAch) -> bool:

@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 
 from ... import config, utils
 from ...utils.enums import Server, ServerScope, SLevelSource
+from ...utils.constants import LEGACY_DEFAULT_PROVIDER_BY_SERVER
 from ...utils.exceptions import BlurSearchTooManyResultsError
 from ._tool import get_session
 from ._fetch import set_mct_level_batch, set_mdt_version_batch, sync_mdt_list
@@ -30,10 +31,6 @@ __all__ = [
 
 SearchMode = Literal["smart", "title", "name", "blur"]
 
-LEGACY_DEFAULT_PROVIDER_BY_SERVER = {
-    Server.JP: "lyrasync-oto",
-    Server.CN: "diving-fish",
-}
 
 
 async def sync_song_library(songs: Sequence[utils.MaiData]) -> None:
