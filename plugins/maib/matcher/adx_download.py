@@ -38,7 +38,8 @@ adx_download_en = on_regex(r"^download\s*(?:[iI][dD])?\s*(\d*)\s*(.*)$", priorit
 group_upload_notice = on_notice(priority=1, block=False, rule=(rule_is_group and rule_is_self and rule_is_group_upload_notice))
 
 
-GROUP_UPLOAD_NOTICE_TIMEOUT: float = 120.0
+GROUP_UPLOAD_CONFIRM_TIMEOUT: float = 120.0  # 上传 API 超时后，回查确认的最长等待时间
+GROUP_UPLOAD_POLL_INTERVAL: float = 5.0  # 回查轮询间隔
 _GROUP_UPLOAD_WAITERS: dict[tuple[int, str, int], list[asyncio.Future[dict[str, Any]]]] = {}
 FILE_EXPIRE_SECONDS = 72 * 3600  # 72 小时
 ADX_FOLDER_NAME = "maib-adx"
@@ -162,18 +163,27 @@ async def onebot_v11_group_upload(
         )
 
     except NetworkError as e:
-        logger.info(f"群文件上传 API 超时，等待 group_upload notice 确认结果")
-        try:
-            notice_file = await asyncio.wait_for(asyncio.shield(lock_future), timeout=GROUP_UPLOAD_NOTICE_TIMEOUT)
-            result = {"file_id": notice_file.get("id") or notice_file.get("file_id"), "file": notice_file}
-        except asyncio.TimeoutError:
-            # notice 未按时到达，回查群文件确认是否实际上传成功
-            logger.warning(f"等待群文件上传 notice 超时（{GROUP_UPLOAD_NOTICE_TIMEOUT}s），回查群文件确认结果")
+        # API 超时只说明响应没在客户端超时时间内回来，服务端可能仍在上传。
+        # 实测 NapCat 不会对自己上传的文件推送 group_upload notice，因此不再干等 notice，
+        # 改为短间隔轮询回查群文件（notice 若恰好到达则直接采用）。
+        logger.info(f"群文件上传 API 超时，开始轮询回查群文件确认结果（间隔 {GROUP_UPLOAD_POLL_INTERVAL}s，上限 {GROUP_UPLOAD_CONFIRM_TIMEOUT}s）")
+        deadline = time.monotonic() + GROUP_UPLOAD_CONFIRM_TIMEOUT
+        result = None
+        while True:
+            if lock_future.done():
+                notice_file = lock_future.result()
+                logger.info(f"群文件上传 notice 已到达: {file_name}")
+                result = {"file_id": notice_file.get("id") or notice_file.get("file_id"), "file": notice_file}
+                break
             confirmed = await _confirm_group_file_uploaded(bot, qq_group, file_name, file_size, folder)
-            if confirmed is None:
+            if confirmed is not None:
+                logger.info(f"回查确认文件已上传: {file_name} file_id={confirmed.get('file_id')}")
+                result = {"file_id": confirmed.get("file_id"), "file": confirmed}
+                break
+            if time.monotonic() >= deadline:
+                logger.error(f"回查超时（{GROUP_UPLOAD_CONFIRM_TIMEOUT}s）仍未确认上传: {file_name}")
                 return e
-            logger.info(f"回查确认文件已上传: {file_name} file_id={confirmed.get('file_id')}")
-            result = {"file_id": confirmed.get("file_id"), "file": confirmed}
+            await asyncio.sleep(GROUP_UPLOAD_POLL_INTERVAL)
 
     except Exception as e:
         return e
