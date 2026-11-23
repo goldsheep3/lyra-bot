@@ -18,7 +18,6 @@ from nonebot.adapters.telegram import Bot as TGBot
 from nonebot.adapters.telegram.event import PrivateMessageEvent as TGPrivateMessageEvent
 
 from .. import config, utils, services, image_gen, network
-from ..utils import NoLinkQQError
 from ..utils.report import MaiChartAchDiffReport, build_diff_report
 from ..utils.sync import build_legacy_lyra_ach_list, build_lyra_records_v3, parse_lyra_maisync_data
 from . import Reply, reply, rule_is_private
@@ -152,14 +151,10 @@ async def check_sync_cn(*, qq: int, ignore_cache_expire: bool = False) -> MaiCha
 @sytb.handle()
 async def sytb_handled(event: Event, matcher: Matcher, reply: Reply = reply):
     """处理命令: sytb (水鱼同步)"""
-    try:
-        user_id = int(event.get_user_id())
-        maiuser = await get_or_create_maiuser(event, target_id=user_id)
-    except NoLinkQQError:
+    user_id = int(event.get_user_id())
+    maiuser = await get_or_create_maiuser(event, target_id=user_id)
+    if maiuser.user_id is None:
         await matcher.finish(await reply("link.get_more_info"))
-        return
-    except Exception as e:
-        await matcher.finish(str(e))
         return
 
     # 更新水鱼数据并生成差异报告
@@ -183,13 +178,9 @@ async def sytb_handled(event: Event, matcher: Matcher, reply: Reply = reply):
 
 @get_sync_code.handle()
 async def get_sync_code_handled(event: Event, matcher: Matcher, reply: Reply = reply):
-    try:
-        maiuser = await get_or_create_maiuser(event)
-    except NoLinkQQError:
+    maiuser = await get_or_create_maiuser(event)
+    if maiuser.user_id is None:
         await matcher.finish(await reply("link.get_more_info"))
-        return
-    except Exception as e:
-        await matcher.finish(str(e))
         return
 
     issue = await services.websync.create_pairing_code(qq=maiuser.user_id)

@@ -7,7 +7,6 @@ from nonebot.adapters.telegram import Event as TGEvent
 from . import Reply, reply
 from .. import config, network, services, utils
 from ..utils.enums import Server, ServerScope, SLevelSource
-from ..utils import NoLinkQQError
 
 
 def get_args(args_text: str) -> tuple[Optional[int], Optional[ServerScope]]:

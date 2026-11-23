@@ -10,10 +10,10 @@ from nonebot.adapters.telegram import Event as TGEvent
 from .. import services, image_gen
 from ..utils.report import build_diff_report
 from ..utils.enums import ServerScope
+from ..utils.models import MaiData
 from . import Reply, reply, sync
 from .context import get_args, get_or_create_maiuser
 from .message import build_msg
-from ..utils import NoLinkQQError
 
 mai_info = on_regex(r"^(id|info)(\d+)\s*(.*)$", priority=10, block=True)
 
@@ -120,17 +120,8 @@ async def mai_what_song_handled(event: Event, matcher: Matcher, groups: tuple = 
     blur_search = bool(all_tag and all_tag.strip() in ['?', '？'])
     keyword = keyword.strip(' ')
 
-    try:
-        maiuser = await get_or_create_maiuser(event)
-    except NoLinkQQError:
-        # 未绑定 QQ
-        maiuser = None
-        qq = None
-    except ValueError as e:
-        await matcher.finish(str(e))
-        return
-    else:
-        qq = maiuser.user_id
+    maiuser = await get_or_create_maiuser(event)
+    qq = maiuser.user_id
 
     try:
         # 搜索歌曲
@@ -149,7 +140,7 @@ async def mai_what_song_handled(event: Event, matcher: Matcher, groups: tuple = 
         await matcher.finish(await reply("info.found_none", keyword=keyword))
         return
 
-    def generate_single_info_box(maidata) -> bytes:
+    def generate_single_info_box(maidata: MaiData) -> bytes:
         """生成单首乐曲的 info box 图片字节，返回 (图片字节, 别名匹配提示)"""
         matched_alias = maidata._matched_alias
         info_box = image_gen.draw_info_board(maidata, maiuser=maiuser, light_alias=matched_alias)

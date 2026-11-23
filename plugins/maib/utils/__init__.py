@@ -6,7 +6,6 @@ from .calculator import (
     get_dxscore_star_count,
     get_level_plus_line,
 )
-from .exceptions import NoLinkQQError, BlurSearchTooManyResultsError
 from .file_api import OneBotV11FileAPI
 from .git import get_git_head_hash
 from .models import AllStr, MaiB50Data, MaiAlias, MaiChartAch, MaiChart, MaiData, DXRatingData, MaiUser
@@ -18,8 +17,6 @@ from . import sync
 __all__ = [
     # calculator
     "get_ap_bonus_value", "get_dxrating", "get_dxscore_max", "get_dxscore_star_count", "get_level_plus_line",
-    # exceptions
-    "NoLinkQQError", "BlurSearchTooManyResultsError",
     # file_api
     "OneBotV11FileAPI",
     # git

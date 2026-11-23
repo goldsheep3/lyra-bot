@@ -1,13 +1,11 @@
 from ... import network
-from ...utils import MaiUser, NoLinkQQError
+from ...utils import MaiUser
 from ._user import check_mu, set_mu_username
 from .link import get_qq_from_tg
 
 
 async def get_or_create_maiuser_from_qq(qq: int, *, without_name: bool = False) -> MaiUser:
     mu = await check_mu(qq)
-    if mu is None:
-        raise NoLinkQQError
 
     if (not mu.username) and (not without_name):
         data = await network.DivingFish.dev_player_records(qq=qq)
@@ -21,6 +19,6 @@ async def get_or_create_maiuser_from_qq(qq: int, *, without_name: bool = False) 
 async def get_or_create_maiuser_from_tg(tg_id: int, *, without_name: bool = False) -> MaiUser:
     qq = await get_qq_from_tg(tg_id)
     if qq is None:
-        raise NoLinkQQError 
+        raise ValueError("Telegram ID not linked to any QQ account")
     return await get_or_create_maiuser_from_qq(qq, without_name=without_name)
 

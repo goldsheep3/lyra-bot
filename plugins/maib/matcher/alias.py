@@ -14,7 +14,6 @@ from nonebot.adapters.telegram import (Event as TGEvent,)
 from .. import services
 from . import Reply, reply
 from .context import get_or_create_maiuser
-from ..utils import NoLinkQQError
 
 
 # 设置乐曲别名
@@ -48,16 +47,11 @@ async def mai_alias_handled(event: Event, matcher: Matcher, groups: tuple = Rege
         await matcher.finish(await reply("info.invalid_id"))
         return
 
-    try:
-        maiuser = await get_or_create_maiuser(event)
-    except NoLinkQQError:
+    maiuser = await get_or_create_maiuser(event)
+    qq = maiuser.user_id
+    if qq is None:
         await matcher.finish(await reply("link.get_more_info"))
         return
-    except ValueError as e:
-        await matcher.finish(str(e))
-        return
-    else:
-        qq = maiuser.user_id
 
     if action in ("添加",):
         add_status = await services.alias.add_alias(short_id, alias, qq=qq)
