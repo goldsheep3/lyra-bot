@@ -4,36 +4,35 @@ help: "操作説明"
 
 # link の検索とバインド
 link:
-  query_disabled: "現在、クエリ機能は準備中です。今しばらくお待ちください。"
-  only_qq: "本機能は QQ 専用となります。"
-  # WARN: 「5分間有効」有效期提示丢失
-  tip: "他のプラットフォームの LyraBot で、以下のコマンドを実行してください。"
-  invalid_hash: "ハッシュ値が無効、または有効期限切れ。"
-  not_found: "対象データが存在しません。"
-  success: "設定しました。"
-  unlink_success: "解除しました。"
-  not_platform: "対応外のプラットフォームです。"
-  # WARN: 「バインドlink」命令提示丢失
-  not_linked: "QQ番号が未登録です。ご利用の前に連携を済ませてください。"
-  onebot_no_bind: "現在操作中の QQ アカウント同士を連携することはできません。"
-  get_more_info: "QQ 番号が未登録です。連携するとプレイデータを同期できます。"
+  query_disabled: "現在、クエリ機能は開発中です。今しばらくお待ちください！"
+  only_qq: "この操作は QQ でのみ利用できます"
+  tip: "他のプラットフォームの LyraBot で以下のコマンドを入力して連携を完了してください。この情報は5分間有効です。"
+  invalid_hash: "ハッシュ値が無効、または有効期限が切れています"
+  not_found: "一致する連携情報が見つかりませんでした"
+  success: "連携が完了しました！"
+  unlink_success: "連携を解除しました！"
+  not_platform: "不明なプラットフォームです"
+  # NOTE: 「绑定link」は中国語コマンドのみ対応のため翻訳しないこと
+  not_linked: "まだ QQ 番号が連携されていないようです～「绑定link」で連携を試してみてください"
+  onebot_no_bind: "直接操作できる（）QQ アカウント同士は連携できません"
+  get_more_info: "まだ QQ 番号が連携されていません。連携するとプレイデータを同期できますよ！"
 
 # ra_calc
 rc:
   help: |-
     ra <定数> [達成率]
-        DXRating を計算できます
-        定数: 直接入力するか、id11951紫 の形式で譜面定数を取得できます
-        達成率: 直接入力するか、「鳥加」「sss+」などの表現を使用できます。省略した場合は S～SSS+ の段階別 ra を計算します。
-  achievement_invalid: "おいおい、スコアが違うやんけ！ちゃんとした成績を入れんかいqwq"
-  maidata_invalid: "アンタが送ってきた曲データ、解析できへんかったわ…堪忍なTT"
-  level_invalid: "おいおい、定数が変やんけ！正しい数字を入れんかい、計算できへんがな！qwq"
-  level_failed: "送られてきた曲データ、解析できへんかったわ…堪忍なTT"
+        DXRating を計算します
+        定数: 譜面定数を直接入力します
+        達成率: 直接入力するか、「sss+」などのランク表記を使用できます。省略した場合は S～SSS+ の段階別 ra を計算します
+  achievement_invalid: "正しいスコアを入力してくださいねqwq"
+  maidata_invalid: "送られた楽曲情報を解析できませんでしたTT"
+  level_invalid: "正しい定数を入力してくださいねqwq"
+  level_failed: "定数情報をうまく解析できませんでしたTT"
   success:
-    tip: "よっしゃ！計算したったで！"
+    tip: "小梨が計算しました！"
     common: "定数{level}*{achievement}% -> Rating: {ra}"
     blur: "定数{level} {rate} -> Rating: {ra}"
-  excluding_ap_bouns: "※このraはAPのボーナススコアを含みません。"
+  excluding_ap_bouns: "※この ra には AP ボーナスが含まれません！"
 
 # adx_download (ad)
 ad:
@@ -42,130 +41,130 @@ ad:
         現在のデータベースにある Simai 譜面ファイルをダウンロードします
         譜面 ID の数字を含む任意の bot メッセージに返信すると、自動的に ID を取得します
         [ADX|ZIP] で譜面ファイル形式を選択します。デフォルトは AstroDX で直接読み込める .adx です
-  no_maidata: "id{short_id} の譜面データがどっこにも見つからへんわ…変やな"
-  bad_id: "なんやねん！正しい楽曲IDを入れんかいqwq"
-  no_chart_file: "譜面ファイルなんてありゃせんがやい！まだ収録されてへんみたいやな…保護者に連絡しといてくれ！"
-  prepare: "ちょいと待ちな——今、id{target_short_id} の譜面を引っ張ってきとるわ！"
-  error: "おい、譜面ファイルの処理でエラーや！管理者に言うたってくれ！"
+  no_maidata: "id{short_id} の譜面データが見つかりませんでした！まだ収録されていない可能性があります。管理者に確認してくださいねqwq"
+  bad_id: "正しい楽曲 ID を入力してくださいねqwq"
+  no_chart_file: "譜面ファイルが存在しません！まだ収録されていない可能性があります。管理者に確認してくださいねqwq"
+  prepare: "ちょっと待ってね——id{target_short_id} の譜面ファイルを準備するよ！"
+  error: "譜面ファイルの処理中に問題が発生しました。管理者に確認してくださいねqwq"
   warn:
-    # WARN: 「ルートディレクトリは自動清理できない」说明丢失
     no_folder: |-
-      おいおい、{folder_name}フォルダが見つからへんがや…{song_name}はルートディレクトリに置いといたでww管理者に言うたってくれ！
+      {folder_name} フォルダが見つからなかったので、{song_name} をルートディレクトリにアップロードしたよww
+      ルートディレクトリは自動削除できないから、管理者に手動で作ってもらうのがいいよ
   success:
-    qq_private: "ヒャッハー！待たせたな！譜面「{song_name}」を受け取りな！"
-    qq_group: "ワシが「{song_name}」のadx譜面をグループに送っちゃったで〜！"
-    tg: "まいど！「{song_name}」の譜面を送ったがや！"
+    qq_private: "じゃじゃーん～ 譜面「{song_name}」をどうぞ！"
+    qq_group: "小梨が「{song_name}」の adx 譜面をグループに送信したよ！"
+    tg: "わぁ～「{song_name}」の譜面を送信したよ！"
 
 # mai_info
 info:
+  # NOTE: 「是什么歌」は中国語コマンドのみ対応のため翻訳しないこと
   help: |-
     id<id> または info<id>
-        ID で楽曲情報を検索します
+        ID から楽曲情報を検索します
 
     <楽曲名/別名>是什么歌
         楽曲名または別名で楽曲情報を検索します。あいまい検索にも対応しています
-  invalid_id: "なんやねん！正しい楽曲IDを入れんかいqwq"
-  maidata_not_found: "id{short_id} の曲データ、どっこにも見つからへんわ…堪忍なqwq"
+  invalid_id: "正しい楽曲 ID を入力してくださいねqwq"
+  maidata_not_found: "id{short_id} の楽曲データが見つかりませんでしたqwq"
   # what_song
-  found_none: "「{keyword}」を含む曲データなんてありゃせんがや…ごめんねqwq"
-  found_single: "これちゃうか？ {shortid}. {title} ニハハハ"
-  found_multiple: "ニハハハ！{count}曲見つけたったで！お目当てのモン、あるか確認してみいw"
-  # WARN: {count} 丢失
-  found_many: "ワシ、めっちゃ色々見つけてしもた……多すぎて嬉しい悲鳴やなw"
-  found_too_many_abort: "多すぎるやんけ！検索範囲をもうちょい絞ってくれへんか…！"
+  found_none: "「{keyword}」を含む楽曲データが見つかりませんでしたqwq"
+  found_single: "お探しなのはこちらですか：{shortid}. {title}"
+  found_multiple: "{count} 曲見つかりました！お探しの曲があるか確認してみてくださいねw"
+  found_many: "たくさん見つかっちゃった……うわぁ、{count} 曲もあります（）"
+  found_too_many_abort: "多すぎます！もう少し検索範囲を絞ってくださいねqwq"
 
 # mai_alias (alias)
 alias:
+  # NOTE: 「添加别名」は中国語コマンドのみ対応のため翻訳しないこと
   help: |-
     添加别名 id<id> <別名>
-        楽曲に別名を追加します。通常譜面と DX 譜面の別名は共有されませんのでご注意ください。
+        楽曲に別名を追加します。通常譜面と DX 譜面の別名は共有されませんのでご注意ください
   add:
-    success: "{shortid} に別名【{alias}】を登録したったで！"
-    already_exists: "おっと、この別名はもう登録されてるみたいやで。"
+    success: "{shortid} に別名【{alias}】を追加しました！"
+    already_exists: "この別名はすでに登録されているようです～"
     failed:
-      unknown: "別名の追加中になんかエラーが出たわ…管理者に言うたってくれ。"
+      unknown: "別名の追加中に不明なエラーが発生しました。しばらくしてからもう一度お試しください～"
   remove:
-    deletion_not_supported: "現在、別名の削除機能はサポートされていません。"
-    not_found: "その別名、どっこ探しても見つからへんかったわ…"
-    not_owner: "おいおい、この別名はアンタが追加したもんちゃうやろ！"
-    success: "{shortid} から別名【{alias}】を消しといたで"
+    deletion_not_supported: "現在、別名のセルフ削除には対応していません～"
+    not_found: "その別名は見つかりませんでした～"
+    not_owner: "ご自身で追加した別名ではないため、今は削除できません～"
+    success: "{shortid} から別名【{alias}】を削除しました！"
     failed:
-      unknown: "別名を消す時にエラーが出たわ…すまんな。"
+      unknown: "別名の削除中に不明なエラーが発生しました。しばらくしてからもう一度お試しください～"
 
 # b50
 b50:
   help: |-
     b50 [CN|JP] または kkb [CN|JP]
-    b50 の成績画像を生成します。
-    [CN|JP] は、中国版または日本版の成績画像を生成することを示します。
-    日本版の成績画像を生成するには、先に lyra-sync で日本版の成績データをアップロードしてください。
-    中国版の成績画像を生成するには、先に lyra-sync で中国版の成績データをアップロードしてください。
-  all_not_supported: "混合サーバーの成績画像はまだ準備中やで！今はちょっと待っときw"
-  qq_parsing_failed: "おいおい、アンタのデータが見つからへんがや…ちゃんと連携しとるか？管理者に言うたってくれ！"
-  drawing: "ちょいと待ちな、今からb50の画像、描いたるわ。"
-  other_updated: "おっ、アンタのスコアデータが更新されとるで！最新のを取ってきたったわ！"
-  no_jp_data: "日本サーバーのデータなんてありゃせんがや！先に lyra-sync で同期しとき！"
-  no_cn_data: "中国サーバーのデータがないで！先に水魚查分器と同期せんかい！"
+        b50 の成績画像を生成します
+        [CN|JP] で中国版または日本版の成績画像を指定できます
+        日本版の成績画像を生成するには、先に lyra-sync で日本版の成績データをアップロードしてください
+  all_not_supported: "混合成績画像は開発中です。現在ご利用いただけませんqwq"
+  qq_parsing_failed: "適切なクエリ対象が見つかりませんでした……？管理者に確認してください"
+  drawing: "小梨が b50 画像を描画中です。少々お待ちくださいね……"
+  other_updated: "クエリ対象のスコアデータに更新が見つかったので、最新版に更新しました！"
+  no_jp_data: "日本サーバーのデータがありません！lyra-sync で成績をアップロードしてから再試行してください！"
+  no_cn_data: "中国サーバーのデータがありません！水魚（Diving-Fish）に成績をアップロードしてから再試行してください！"
 
 # sync
 sync:
-  # 非中国地区当前版本有意隐藏「获取同步码」
+  # NOTE: 中国本土以外の現行バージョンでは「获取同步码」を意図的に非表示
   help: |-
     sytb
-        現在のユーザーのスコアデータを強制同期します。b50 画像の生成時にも、自動で同期を試みます。
+        現在のユーザーのスコアデータを強制同期します。b50 画像の生成時にも自動で同期を試みます
   help_maisync: |-
     lyra-maisync
     スクリプトのインストールリンク：https://github.com/goldsheep3/lyra-bot/raw/refs/heads/maib/plugins/maib/sync/lyra-maisync.user.js
     スクリプトで設定するリモートアドレス：https://lyra-ciane.icu
   sy:
-    syncing: "おっしゃ！外部スコアサイトから最新の成績データを引っ張ってきとるわ…待っとき！"
-    no_update: "おう、確認したで！アンタの成績データ、もう最新や！"
+    syncing: "外部スコアサイトから最新の成績データを取得しています！"
+    no_update: "確認しました！記録されている成績データはすでに最新です。"
 
 # maime
 maime:
   help: |-
     link aime <ACCESS カード番号全桁>
-        Aime の ACCESS カード番号をアカウントに連携します。
+        Aime の ACCESS カード番号をアカウントに連携します
 
     unlink aime <ACCESS カード番号全桁>
-        Aime の ACCESS カード番号との連携を解除します。
+        アカウントから Aime の ACCESS カード番号の連携を解除します
 
     find aime <ACCESS の下4桁|ACCESS カード番号全桁>
-        ACCESS カード番号から連携情報を検索します。
+        ACCESS カード番号から連携情報を検索し、カードの持ち主を探します
 
     list aime [full]
-        連携済みの Aime カード番号を全表示します。初期設定では上4桁と下4桁のみ表示されます。
+        連携済みの Aime ACCESS カード番号をすべて表示します。デフォルトでは先頭と末尾の4桁のみを表示します
   link:
-    success: "おう、このカード、アンタのアカウントに連携しといたで！"
+    success: "このカードをアカウントに連携しました～"
     error:
-      unknown: "おいおい、カードの連携中に変なエラーが出たがや…保護者に確認しといてくれqwq"
-      linked: "おっと、このカードはもう他のアカウントに連携されとるわ～"
-      linked_self: "おいおい、これアンタのカードやないか！もう連携しとるで！"
+      unknown: "カードの連携中に予期せぬエラーが発生しました。管理者に確認してくださいねqwq"
+      linked: "このカードはすでに他のアカウントに連携されています～"
+      linked_self: "このカードはすでにあなたのアカウントに連携されています～"
   unlink:
-    success: "ほらよ、このカード、アンタのアカウントから解除しといたわ！"
+    success: "このカードの連携を解除しました～"
     error:
-      unknown: "おいおい、カードの解除中に変なエラーが出たがや…保護者に確認しといてくれqwq"
-      not_found: "そのカードの連携情報、どっこにも見つからへんわ～"
-      not_owner: "おいおい、このカードはアンタのアカウントのもんちゃうやろ！"
+      unknown: "カードの連携解除中に予期せぬエラーが発生しました。管理者に確認してくださいねqwq"
+      not_found: "このカードの連携情報が見つかりませんでした～"
+      not_owner: "このカードはご自身のアカウントのものではありません～"
   lost:
-    find: "おっ、カード番号 {card} の記録が見つかったで！この音ゲー中毒者が、こんなメッセージ残しとるわ：{hint}"
+    find: "カード番号 {card} の記録が見つかりました！この音ゲー中毒者は次のメッセージを残しています：{hint}"
     error:
-      unknown: "あれぇ？カードの検索がうまくいかへんわ…変なエラーが出たみたいや。保護者に言うたってくれqwq"
-      self: "ちょっと待てや！このカード、おまん自身のやないかーい！"
-      not_link: "おや？このカード、前に解除されたっきり、今は誰のモンでもないみたいやで～"
-      not_found: "なんや、このカードはまだ誰にも連携されてへんがやな。"
-      multiple_found: "なんやこれ！一枚のカードが複数のアカウントに紐付いとるがや！完全なACCESS番号で検索し直してくれqwq"
+      unknown: "カードの検索中に予期せぬエラーが発生しました。管理者に確認してくださいねqwq"
+      self: "このカード、ご自身のものじゃないですか——"
+      not_link: "このカードは以前連携が解除され、現在は誰にも連携されていませんにゃ（"
+      not_found: "このカードはまだ誰にも連携されていませんにゃ（"
+      multiple_found: "このカードは複数のアカウントに連携されています。完全な ACCESS 番号で再試行してくださいqwq"
 
   list:
-    empty: "あらま、まだ一枚もカードを連携してへんのかい！"
-    header: "連携済みカード一覧："
+    empty: "まだカードを連携していません～"
+    header: "連携済みのカード一覧："
     item: "{access} ({create_at})"
 
 # Exception Tip
 error:
-  low_memory: "メモリ不足で画像が生成できへんわ…ごめんな( ๑ŏ ﹏ ŏ๑ )"
-  invalid_user_id: "エラー: 不正な user_id です。解析できません: {raw_uid}"
-  user_not_found: "対象の QQ アカウントは未連携です。先に link 機能で連携を行ってください。"
-  unexpected: "未対応のプラットフォームです。"
-  common: "あぁん？ワシのほうでなんか変なエラーが出たがや…保護者に言うたってくれqwq"
-  platform_not_supported: "予期せぬエラー（Platform Not Supported）やで…保護者に確認しといてくれqwq"
+  low_memory: "現在低メモリモードのため、この機能の画像生成を一時停止していますにゃ( ๑ŏ ﹏ ŏ๑ )"
+  invalid_user_id: "str 形式の user_id を解析できません: {raw_uid}"
+  user_not_found: "連携済みの QQ アカウントが見つかりません。先に link 機能で QQ 番号を連携してください"
+  unexpected: "未対応のプラットフォームです"
+  common: "予期せぬエラーが発生しました。管理者に確認してくださいねqwq"
+  platform_not_supported: "予期せぬエラー（Platform Not Supported）が発生しました。管理者に確認してくださいねqwq"
