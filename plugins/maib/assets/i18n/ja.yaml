@@ -22,7 +22,7 @@ rc:
     ra <定数> [達成率]
         DXRating を計算できます
         定数: 直接入力するか、id11951紫 の形式で譜面定数を取得できます
-        達成率: "直接入力するか、「鳥加」「sss+」などの表現を使用できます。省略した場合は S～SSS+ の段階別 ra を計算します。"
+        達成率: 直接入力するか、「鳥加」「sss+」などの表現を使用できます。省略した場合は S～SSS+ の段階別 ra を計算します。
   achievement_invalid: "おいおい、スコアが違うやんけ！ちゃんとした成績を入れんかいqwq"
   maidata_invalid: "アンタが送ってきた曲データ、解析できへんかったわ…堪忍なTT"
   level_invalid: "おいおい、定数が変やんけ！正しい数字を入れんかい、計算できへんがな！qwq"
@@ -47,7 +47,7 @@ ad:
   error: "おい、譜面ファイルの処理でエラーや！管理者に言うたってくれ！"
   warn:
     no_folder: |-
-      "おいおい、{folder_name}フォルダが見つからへんがや…{song_name}はルートディレクトリに置いといたでww管理者に言うたってくれ！"
+      おいおい、{folder_name}フォルダが見つからへんがや…{song_name}はルートディレクトリに置いといたでww管理者に言うたってくれ！
   success:
     qq_private: "ヒャッハー！待たせたな！譜面「{song_name}」を受け取りな！"
     qq_group: "ワシが「{song_name}」のadx譜面をグループに送っちゃったで〜！"
@@ -67,6 +67,7 @@ info:
   found_none: "「{keyword}」を含む曲データなんてありゃせんがや…ごめんねqwq"
   found_single: "これちゃうか？ {shortid}. {title} ニハハハ"
   found_multiple: "ニハハハ！{count}曲見つけたったで！お目当てのモン、あるか確認してみいw"
+  # WARN: {count} 丢失
   found_many: "ワシ、めっちゃ色々見つけてしもた……多すぎて嬉しい悲鳴やなw"
   found_too_many_abort: "多すぎるやんけ！検索範囲をもうちょい絞ってくれへんか…！"
 
@@ -91,7 +92,7 @@ alias:
 # b50
 b50:
   help: |-
-        b50 [CN|JP] または kkb [CN|JP]
+    b50 [CN|JP] または kkb [CN|JP]
     b50 の成績画像を生成します。
     [CN|JP] は、中国版または日本版の成績画像を生成することを示します。
     日本版の成績画像を生成するには、先に lyra-sync で日本版の成績データをアップロードしてください。
@@ -122,7 +123,6 @@ maime:
   help: |-
     link aime <ACCESS カード番号全桁>
         Aime の ACCESS カード番号をアカウントに連携します。
-
 
     unlink aime <ACCESS カード番号全桁>
         Aime の ACCESS カード番号との連携を解除します。
