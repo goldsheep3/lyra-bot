@@ -6,12 +6,14 @@ help: "操作説明"
 link:
   query_disabled: "現在、クエリ機能は準備中です。今しばらくお待ちください。"
   only_qq: "本機能は QQ 専用となります。"
+  # WARN: 「5分間有効」有效期提示丢失
   tip: "他のプラットフォームの LyraBot で、以下のコマンドを実行してください。"
   invalid_hash: "ハッシュ値が無効、または有効期限切れ。"
   not_found: "対象データが存在しません。"
   success: "設定しました。"
   unlink_success: "解除しました。"
   not_platform: "対応外のプラットフォームです。"
+  # WARN: 「バインドlink」命令提示丢失
   not_linked: "QQ番号が未登録です。ご利用の前に連携を済ませてください。"
   onebot_no_bind: "現在操作中の QQ アカウント同士を連携することはできません。"
   get_more_info: "QQ 番号が未登録です。連携するとプレイデータを同期できます。"
@@ -46,6 +48,7 @@ ad:
   prepare: "ちょいと待ちな——今、id{target_short_id} の譜面を引っ張ってきとるわ！"
   error: "おい、譜面ファイルの処理でエラーや！管理者に言うたってくれ！"
   warn:
+    # WARN: 「ルートディレクトリは自動清理できない」说明丢失
     no_folder: |-
       おいおい、{folder_name}フォルダが見つからへんがや…{song_name}はルートディレクトリに置いといたでww管理者に言うたってくれ！
   success:
