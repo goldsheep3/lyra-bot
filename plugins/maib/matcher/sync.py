@@ -121,7 +121,7 @@ async def get_sy_and_upload(user_id: int) -> MaiChartAchDiffReport:
     achs = utils.sync.get_sy_records(records) if data else None
     # 批量上传到数据库
     if data is None or achs is None:
-        return MaiChartAchDiffReport()
+        return MaiChartAchDiffReport(server=Server.CN)
 
     return await services.achievement.update_achievements(qq=user_id, ach_list=achs, server=Server.CN, diving_fish_hash=sy_hash)
 

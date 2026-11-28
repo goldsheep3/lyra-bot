@@ -8,11 +8,9 @@ async def backfill_and_rebuild_achievements() -> None:
     for qq, record_keys in affected_by_user.items():
         ach_list = await _record.get_record_achs(qq, list(record_keys))
         if ach_list:
-            for ach in ach_list:
-                if ach.server == Server.JP:
-                    await _sync.set_mca(ach, server=Server.JP)
-                    break
-            for ach in ach_list:
-                if ach.server == Server.CN:
-                    await _sync.set_mca(ach, server=Server.CN)
-                    break
+            jp_list = [ach for ach in ach_list if ach.server == Server.JP]
+            if jp_list:
+                await _sync.upd_ach_batch(qq, jp_list, server=Server.JP)
+            cn_list = [ach for ach in ach_list if ach.server == Server.CN]
+            if cn_list:
+                await _sync.upd_ach_batch(qq, cn_list, server=Server.CN)
