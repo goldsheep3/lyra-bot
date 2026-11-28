@@ -124,11 +124,13 @@ async def _load_existing_ach_map(
 async def set_mca(
     ach: utils.MaiChartAch,
     *, session: Optional[AsyncSession] = None,
+    server: Server,
 ) -> Optional[utils.MaiChartAchDiff]:
     """设置单条成绩，返回该成绩的变更信息。"""
     report = await upd_ach_batch(
         user_id=ach.user_id,
         ach_list=[ach],
+        server=server,
         session=session,
     )
 
@@ -145,13 +147,14 @@ async def set_mca(
 async def upd_ach_batch(
     user_id: int,
     ach_list: Sequence[utils.MaiChartAch],
+    server: Server,
     *, session: Optional[AsyncSession] = None,
 ) -> utils.MaiChartAchDiffReport:
     """批量上传成绩并返回结构化变更报告。"""
     unique_incoming = _deduplicate_achs(user_id, ach_list)
 
     async def _action(session: AsyncSession) -> utils.MaiChartAchDiffReport:
-        report = utils.MaiChartAchDiffReport()
+        report = utils.MaiChartAchDiffReport(server=server)
         if not unique_incoming:
             return report
 

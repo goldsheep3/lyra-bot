@@ -18,6 +18,7 @@ from nonebot.adapters.telegram import Bot as TGBot
 from nonebot.adapters.telegram.event import PrivateMessageEvent as TGPrivateMessageEvent
 
 from .. import config, utils, services, image_gen, network
+from ..utils.models import Server
 from ..utils.report import MaiChartAchDiffReport, build_diff_report
 from ..utils.sync import build_legacy_lyra_ach_list, build_lyra_records_v3, parse_lyra_maisync_data
 from . import Reply, reply, rule_is_private
@@ -122,7 +123,7 @@ async def get_sy_and_upload(user_id: int) -> MaiChartAchDiffReport:
     if data is None or achs is None:
         return MaiChartAchDiffReport()
 
-    return await services.achievement.update_achievements(qq=user_id, ach_list=achs, diving_fish_hash=sy_hash)
+    return await services.achievement.update_achievements(qq=user_id, ach_list=achs, server=Server.CN, diving_fish_hash=sy_hash)
 
 
 
@@ -297,10 +298,10 @@ async def file_receiver_handled(bot: Bot, event: Event, matcher: Matcher, reply:
         )
 
         if not legacy_result.ach_list:
-            report = MaiChartAchDiffReport()
+            report = MaiChartAchDiffReport(server=Server.JP)
         else:
             try:
-                report = await services.achievement.update_achievements(qq=user_id, ach_list=legacy_result.ach_list)
+                report = await services.achievement.update_achievements(qq=user_id, ach_list=legacy_result.ach_list, server=Server.JP)
             except Exception as e:
                 logger.error(f"数据库写入崩溃: {e}")
                 await matcher.finish("同步到数据库时出错了……请联系监护人确认情况哦qwq")
